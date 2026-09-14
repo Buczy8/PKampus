@@ -137,7 +137,7 @@ sequenceDiagram
 
 ## 3. Sekwencja 2: Rezerwacja Pralni z Ochroną Przed Wyścigiem (LAUNDRY & CONCURRENCY)
 
-Proces prezentuje rezerwację slotu czasowego na konkretną pralkę. Zabezpiecza system przed zjawiskiem *Race Condition* za pomocą izolacji transakcji oraz ograniczenia PostgreSQL `EXCLUDE USING gist` na przecięciu przedziałów czasowych.
+Proces prezentuje rezerwację slotu czasowego na konkretną pralkę. Zabezpiecza system przed zjawiskiem *Race Condition* za pomocą ograniczenia integralności PostgreSQL `chk_laundry_no_overlap` (`EXCLUDE USING gist`) na przecięciu przedziałów czasowych `tstzrange(start_time, end_time) WITH &&`, odrzucającego równoległe kolizyjne próby rezerwacji kodem błędu SQLSTATE `23P01` (`exclusion_violation`).
 
 ```mermaid
 sequenceDiagram
@@ -166,21 +166,17 @@ sequenceDiagram
         CTL-->>UI: 400 Bad Request (Limit 2 rezerwacji na tydzień wyczerpany)
         UI-->>M: Wyświetlenie komunikatu o przekroczeniu limitu
     else [Mieszkaniec spełnia limit tygodniowy]
-        SVC->>DB: BEGIN TRANSACTION (SERIALIZABLE / PESSIMISTIC_WRITE)
+        SVC->>DB: INSERT INTO laundry_bookings (machine_id, user_id, start_time, end_time, status='CONFIRMED')
         activate DB
-        SVC->>DB: findConflictingSlot(pralkaId, slotStart, slotEnd)
-        DB-->>SVC: Wynik sprawdzenia dostępności
 
-        alt [Slot jest wolny w wybranym przedziale]
-            SVC->>DB: INSERT INTO laundry_bookings (status=CONFIRMED, ...)
-            DB-->>SVC: Utworzono rezerwację (ID, znacznik czasu)
-            SVC->>DB: COMMIT TRANSACTION
+        alt [Brak kolizji przedziałów czasowych - pomyślna ewaluacja chk_laundry_no_overlap]
+            DB-->>SVC: Zapisano rezerwację (ID, znacznik czasu)
             SVC-->>CTL: BookingDTO (Potwierdzona rezerwacja)
             CTL-->>UI: 201 Created (Rezerwacja potwierdzona)
             UI-->>M: Zielony alert sukcesu + podświetlenie kafelka
-        else [Slot został w tej samej chwili zajęty przez innego mieszkańca]
-            SVC->>DB: ROLLBACK TRANSACTION
-            SVC-->>CTL: throw SlotAlreadyBookedException (Wykryto kolizję)
+        else [Wykryto kolizję nachodzących slotów - naruszenie chk_laundry_no_overlap]
+            DB-->>SVC: Błąd SQLSTATE 23P01 (exclusion_violation)
+            SVC-->>CTL: throw SlotAlreadyBookedException (Wykryto kolizję współbieżną)
             CTL-->>UI: 409 Conflict (Ten slot został przed chwilą zarezerwowany)
             UI-->>M: Odświeżenie siatki i komunikat o kolizji
         end
@@ -610,7 +606,7 @@ sequenceDiagram
 
     alt [Token poprawny i aktywny: used_at IS NULL oraz expires_at > NOW]
         SVC->>SVC: Hash nowego hasła (BCrypt z soleniem)
-        SVC->>DB: BEGIN; UPDATE users SET password_hash=newHash WHERE id=token.userId; UPDATE password_reset_tokens SET used_at=NOW() WHERE id=token.id AND used_at IS NULL; COMMIT
+        SVC->>DB: UPDATE users (hash) oraz UPDATE password_reset_tokens (used_at=NOW)
         activate DB
         DB-->>SVC: Zaktualizowano poświadczenia i unieważniono token (atomowo)
         deactivate DB
