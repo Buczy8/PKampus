@@ -414,13 +414,15 @@ Ewidencja prawomocnych sankcji rejestrowanych przez Administratora Domu Studenck
 | `id` | `UUID` | `PK, DEFAULT gen_random_uuid()` | Identyfikator sankcji |
 | `user_id` | `UUID` | `FK -> users(id), NOT NULL` | Ukarany student |
 | `issued_by_id` | `UUID` | `FK -> users(id), NOT NULL` | Administrator nakładający karę (ADS) |
-| `dormitory_id` | `UUID` | `FK -> dormitories(id), NOT NULL` | Akademik |
+| `dormitory_id` | `UUID` | `FK -> dormitories(id), NOT NULL` | Akademik orzekający (miejsce przewinienia / organ nakładający) |
 | `sanction_type`| `VARCHAR(30)` | `NOT NULL, CHECK (sanction_type IN ('ROOM_BAN'))` | Rodzaj kary (blokada salek) |
 | `reason` | `TEXT` | `NOT NULL` | Uzasadnienie (np. nieporządek, zakłócanie ciszy) |
 | `start_date` | `DATE` | `NOT NULL` | Data początkowa kary |
 | `end_date` | `DATE` | `NOT NULL` | Data końcowa (1–3 mies. od startu) |
 | `is_active` | `BOOLEAN` | `NOT NULL, DEFAULT TRUE` | Status obowiązywania kary |
 | `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu nałożenia |
+
+*Zasięg sankcji i rezerwacji salek:* Sankcja `ROOM_BAN` ma charakter globalny na terenie całego Osiedla Studenckiego PK (§6 ust. 2 Regulaminu) — aktywny rekord dla danego `user_id` wyklucza możliwość dokonania rezerwacji salki w całym systemie (klucz `dormitory_id` ma charakter audytowy). Z kolei samo prawo rezerwacji salek w fazie MVP jest ograniczone do mieszkańców zameldowanych w danym akademiku (`user.dormitory_id == thematic_rooms.dormitory_id`) ze względów logistycznych i operacyjnych portierni.
 
 ---
 
