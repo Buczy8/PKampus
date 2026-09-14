@@ -84,6 +84,7 @@ flowchart LR
         UC_AUTH_03(["UC-AUTH-03: Aktywacja meldunku"]):::ucStyle
         UC_AUTH_04(["UC-AUTH-04: Wyświetlenie karty"]):::ucStyle
         UC_AUTH_05(["UC-AUTH-05: Weryfikacja wizualna karty"]):::ucStyle
+        UC_AUTH_07(["UC-AUTH-07: Reset hasła (link e-mail)"]):::ucStyle
     end
 
     AdminDS["Administrator DS"]:::actorStyle
@@ -93,6 +94,7 @@ flowchart LR
     Student --- UC_AUTH_02
     Student --- UC_AUTH_06
     Student --- UC_AUTH_04
+    Student --- UC_AUTH_07
 
     AdminDS --- UC_AUTH_03
     Portier --- UC_AUTH_05
@@ -153,17 +155,21 @@ flowchart LR
         UC_ROOM_02(["UC-RES-04b: Anulowanie rezerwacji salki"]):::ucStyle
         UC_ROOM_05(["UC-RES-06: Przedłużenie rezerwacji salki"]):::ucStyle
         UC_ROOM_03(["UC-RES-05b: Wydanie i zwrot klucza salki"]):::ucStyle
+        UC_ROOM_06(["UC-SYS-01: Automatyczne zwolnienie slotu (15 min)"]):::ucStyle
         UC_ROOM_04(["UC-ADM-03: Blokada salek (kara 1-3 mies.)"]):::ucStyle
     end
 
     Portier["Recepcjonista"]:::actorStyle
     AdminDS["Administrator DS"]:::actorStyle
+    Sys["System (Scheduler)"]:::actorStyle
 
     Student --- UC_ROOM_01
     Student --- UC_ROOM_02
     Student --- UC_ROOM_05
 
     Portier --- UC_ROOM_03
+    Portier --- UC_ROOM_06
+    Sys --- UC_ROOM_06
     AdminDS --- UC_ROOM_04
 ```
 
@@ -305,6 +311,7 @@ flowchart LR
 | **FR-AUTH-03, FR-AUTH-04** | **UC-AUTH-02** | Logowanie i autoryzacja JWT (RBAC) | Wszyscy |
 | **FR-AUTH-05** | **UC-ADM-04** | Zarządzanie kontami personelu portierni | Admin DS |
 | **FR-AUTH-06** | **UC-AUTH-06** | Edycja profilu i zmiana hasła | Mieszkaniec |
+| **FR-AUTH-07** | **UC-AUTH-07** | Procedura resetowania hasła przez link e-mail | Mieszkaniec, System |
 | **FR-CARD-01 .. FR-CARD-04** | **UC-AUTH-04, UC-AUTH-05** | Karta mieszkańca i weryfikacja wzrokowa (anty-screenshot) | Mieszkaniec, Portier |
 | **FR-LAUND-01** | **UC-ADM-01** | Konfiguracja pralek i parametrów slotów per DS | Admin DS |
 | **FR-LAUND-02 .. FR-LAUND-04** | **UC-RES-01, UC-RES-02, UC-RES-04a** | Harmonogram, rezerwacja pralki i anulowanie slotu | Mieszkaniec |
@@ -312,14 +319,17 @@ flowchart LR
 | **FR-LAUND-06** | **UC-LAUND-06** | Awaryjne wyłączenie pralki, auto-anulowanie slotów i zgłoszenie naprawy | Portier, Admin DS |
 | **FR-ROOM-01, FR-ROOM-02** | **UC-ADM-02** | Katalog i parametryzacja salek per DS (Kujon, Chillout) | Admin DS |
 | **FR-ROOM-03, FR-ROOM-04** | **UC-RES-03** | Rezerwacja salki (formularz organizatora i regulamin) | Mieszkaniec |
-| **FR-ROOM-05** | **UC-RES-04b, UC-RES-05b** | Anulowanie rezerwacji, odbiór i zwrot klucza salki | Mieszkaniec, Portier |
-| **FR-ROOM-06** | **UC-RES-06** | Wniosek o przedłużenie rezerwacji salki | Mieszkaniec |
+| **FR-ROOM-05** | **UC-RES-05b, UC-SYS-01** | Odbiór i zwrot klucza salki, zwalnianie slotu po 15 min | Portier, System |
+| **FR-ROOM-06** | **UC-RES-06** | Wniosek o przedłużenie rezerwacji salki (COULD) | Mieszkaniec |
 | **FR-ROOM-07** | **UC-ADM-03** | Ewidencja kar i czarna lista salek (blokada 1–3 mies.) | Admin DS |
+| **FR-ROOM-08** | **UC-RES-04b** | Anulowanie rezerwacji salki przed startem (SHOULD) | Mieszkaniec |
 | **FR-ISSUE-01 .. FR-ISSUE-05** | **UC-ISSUE-01 .. UC-ISSUE-03, UC-ISSUE-05** | Zgłoszenia awarii ze zdjęciem MinIO, rejestr i obsługa | Mieszkaniec, Portier |
 | **FR-ISSUE-06** | **UC-ISSUE-04** | Generowanie listy zadań dla konserwatora | Portier |
-| **FR-BOARD-01 .. FR-BOARD-05** | **UC-BOARD-01 .. UC-BOARD-03** | Tablica ogłoszeń sąsiedzkich, komentarze i statusy | Mieszkaniec |
-| **FR-BOARD-06** | **UC-BOARD-04** | Moderacja i usuwanie wpisów na tablicy | Admin DS |
-| **FR-EVENT-01, FR-EVENT-02** | **UC-EVT-03** | Publikacja komunikatów dyżurnych i pościeli | Portier, Admin DS |
-| **FR-EVENT-03, FR-EVENT-04** | **UC-EVT-01, UC-EVT-02** | Kalendarz kampusu i wydarzenia mieszkańców | Mieszkaniec |
+| **FR-BOARD-01 .. FR-BOARD-05** | **UC-BOARD-01 .. UC-BOARD-03** | Tablica ogłoszeń (SHOULD / Etap 4) | Mieszkaniec |
+| **FR-BOARD-02** | **UC-BOARD-01** (widok feedu) | Filtrowanie feedu (SHOULD; bez full-text search) | Mieszkaniec |
+| **FR-BOARD-06** | **UC-BOARD-04** | Moderacja i usuwanie wpisów na tablicy (SHOULD) | Admin DS |
+| **FR-EVENT-01, FR-EVENT-02** | **UC-EVT-03, UC-EVT-01** | Publikacja komunikatów + baner przypiętych CRITICAL | Portier, Admin DS, Mieszkaniec |
+| **FR-EVENT-03** | **UC-EVT-01** | Kalendarz oficjalnych terminów kampusu | Mieszkaniec |
+| **FR-EVENT-04** | **UC-EVT-02** | Wydarzenia mieszkańców (COULD) | Mieszkaniec |
 | **FR-PORTAL-01 .. FR-PORTAL-04** | **UC-RES-05a/b, UC-ADM-01 .. UC-ADM-04** | Dashboard recepcji, klucze, konfiguracja i meldunki | Portier, Admin DS |
 | **FR-PORTAL-05** | **UC-ADM-05** | Zarządzanie obiektami akademików osiedla | Superadmin |

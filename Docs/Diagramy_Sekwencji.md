@@ -10,7 +10,7 @@ Zgodnie z zasadami modelowania dynamiki systemów wielowarstwowych (Multi-tier A
    * **Frontend (React PWA):** Warstwa prezentacji SPA/PWA (komponenty React, stan lokalny, obsługa formularzy, żądania HTTP Axios/Fetch).
    * **Kontroler REST (Spring Boot Controller):** Punkt wejściowy API (walidacja DTO `@Valid`, autoryzacja ról `@PreAuthorize`, mapowanie kodów HTTP).
    * **Serwis Biznesowy (Domain / Application Service):** Warstwa logiki biznesowej i zarządzania transakcjami (`@Transactional`, reguły PK, integralność).
-   * **Baza Danych (Spring Data JPA / PostgreSQL):** Warstwa utrwalania danych, blokady transakcyjne, ograniczenia unikalności (`UNIQUE constraints`).
+   * **Baza Danych (Spring Data JPA / PostgreSQL):** Warstwa utrwalania danych, blokady transakcyjne, ograniczenia wykluczające (`EXCLUDE USING gist` / SQLSTATE `23P01`).
    * **Komponenty Zewnętrzne:** Usługi wyspecjalizowane w środowisku kontenerowym Docker Compose:
      * `Mailpit (SMTP)` – asynchroniczna wysyłka powiadomień e-mail,
      * `MinIO (S3)` – magazyn obiektowy na pliki multimedialne (zdjęcia usterek, awatary).
@@ -29,7 +29,7 @@ Zgodnie z zasadami modelowania dynamiki systemów wielowarstwowych (Multi-tier A
 
 ## 2. Sekwencja 1: Dwuetapowa Rejestracja i Aktywacja Meldunku (AUTH & CARD)
 
-Proces obejmuje rejestrację nowego mieszkańca, weryfikację adresu e-mail, przejście konta w stan oczekiwania na potwierdzenie meldunku (`PENDING_APPROVAL`) oraz zatwierdzenie tożsamości przez Administratora DS wraz z utworzeniem meldunku w `room_assignments`.
+Proces obejmuje rejestrację nowego mieszkańca, weryfikację adresu e-mail przez **podpisany, krótkotrwały token w linku** (bez tabeli tokenów aktywacyjnych), przejście konta w stan `PENDING_APPROVAL` oraz zatwierdzenie tożsamości przez Administratora DS wraz z utworzeniem meldunku w `room_assignments`.
 
 ```mermaid
 sequenceDiagram
@@ -39,6 +39,7 @@ sequenceDiagram
     participant CTL as AuthController
     participant SVC as AuthService
     participant DB as PostgreSQL (JPA)
+    participant S3 as MinIO S3 Storage
     participant MAIL as Mailpit (SMTP)
     actor ADS as Administrator DS
 
@@ -55,12 +56,17 @@ sequenceDiagram
     deactivate DB
 
     alt [Adres e-mail jest wolny]
-        SVC->>DB: save(nowy użytkownik: PENDING_EMAIL, hash BCrypt)
+        SVC->>S3: putObject(bucket="pkampus-avatars", objectKey=UUID.jpg, photoStream)
+        activate S3
+        S3-->>SVC: 200 OK (avatarUrl)
+        deactivate S3
+
+        SVC->>DB: save(nowy użytkownik: PENDING_EMAIL, hash BCrypt, avatar_url)
         activate DB
         DB-->>SVC: Encja User z wygenerowanym ID
         deactivate DB
 
-        SVC-)MAIL: sendVerificationEmail(user.email, token)
+        SVC-)MAIL: sendVerificationEmail(user.email, signedToken)
         SVC-->>CTL: Rejestracja powiodła się
         CTL-->>UI: 201 Created (Komunikat: Sprawdź skrzynkę e-mail)
         UI-->>M: Wyświetlenie monitu o kliknięcie w link
@@ -73,13 +79,14 @@ sequenceDiagram
     deactivate CTL
     deactivate UI
 
-    %% Etap 2: Potwierdzenie e-mail
-    M->>UI: Kliknięcie w link z tokenem aktywacyjnym
+    %% Etap 2: Potwierdzenie e-mail (token podpisany, bez persystencji w DB)
+    M->>UI: Kliknięcie w link z podpisanym tokenem aktywacyjnym
     activate UI
     UI->>CTL: GET /api/auth/verify-email?token=xyz
     activate CTL
-    CTL->>SVC: verifyEmailToken(token)
+    CTL->>SVC: verifySignedEmailToken(token)
     activate SVC
+    SVC->>SVC: Walidacja podpisu i TTL tokenu (HMAC/JWT)
     SVC->>DB: update Status = PENDING_APPROVAL
     activate DB
     DB-->>SVC: Zaktualizowano status
@@ -130,7 +137,7 @@ sequenceDiagram
 
 ## 3. Sekwencja 2: Rezerwacja Pralni z Ochroną Przed Wyścigiem (LAUNDRY & CONCURRENCY)
 
-Proces prezentuje rezerwację slotu czasowego na konkretną pralkę. Zabezpiecza system przed zjawiskiem *Race Condition* (równoległą próbą zajęcia tego samego slotu przez dwóch studentów) za pomocą izolacji transakcji i unikalnych ograniczeń bazodanowych.
+Proces prezentuje rezerwację slotu czasowego na konkretną pralkę. Zabezpiecza system przed zjawiskiem *Race Condition* za pomocą izolacji transakcji oraz ograniczenia PostgreSQL `EXCLUDE USING gist` na przecięciu przedziałów czasowych.
 
 ```mermaid
 sequenceDiagram
@@ -273,6 +280,7 @@ sequenceDiagram
     participant SVC as IssueService
     participant S3 as MinIO S3 Storage
     participant DB as PostgreSQL (JPA)
+    participant MAIL as Mailpit (SMTP)
     actor P as Recepcjonista (Portier)
 
     M->>UI: Wybór lokalizacji, opis usterki, załączenie zdjęcia z aparatu
@@ -336,6 +344,10 @@ sequenceDiagram
     activate DB
     DB-->>SVC: Zapisano zmianę statusu
     deactivate DB
+
+    %% Asynchroniczne powiadomienie e-mail do zgłaszającego mieszkańca
+    SVC-)MAIL: sendIssueStatusChangeEmail(student.email, issue.id, newStatus, comment)
+
     SVC-->>CTL: Zaktualizowane dane sprawy
     deactivate SVC
     CTL-->>UI: 200 OK
@@ -408,7 +420,7 @@ sequenceDiagram
 
 ## 7. Sekwencja 6: Publikacja Komunikatu Dyżurnego / Wymiany Pościeli i Odbiór Alertu (BOARD & EVENTS)
 
-Proces obrazuje publikację ważnego komunikatu technicznego lub organizacyjnego (np. cykliczna wymiana pościeli wg §27 pkt 10 Regulaminu OS PK, awaria dostaw ciepłej wody) przez pracownika portierni lub ADS oraz jego natychmiastową prezentację na smartfonie mieszkańca w postaci wyróżnionego banera alertu.
+Proces obrazuje publikację ważnego komunikatu technicznego lub organizacyjnego przez portiernię lub ADS oraz prezentację banera alertu u mieszkańca dla przypiętych komunikatów `CRITICAL` (bez osobnego potwierdzania odczytu per użytkownik — baner znika po odpięciu/wygaśnięciu).
 
 ```mermaid
 sequenceDiagram
@@ -531,12 +543,100 @@ sequenceDiagram
 
 ---
 
-### 9. Podsumowanie Pokrycia Dynamiki
+---
 
-Zaprojektowane diagramy sekwencji pokrywają pełne spektrum zachowań dynamicznych systemu PKampus:
-1. **Asynchroniczność i integracja e-mail:** Zastosowanie kolejki zadań asynchronicznych w Spring Boot dla Mailpit.
-2. **Bezpieczeństwo transakcyjne:** Blokady bazodanowe i unikalne indeksy wykluczające podwójne rezerwacje w pralniach i salkach.
+## 9. Sekwencja 8: Procedura Resetowania Hasła przez Link z Tokenem E-mail (AUTH & MAIL)
+
+Proces przedstawia bezpieczną ścieżkę odzyskiwania dostępu do konta (`FR-AUTH-07`, `UC-AUTH-07`): zgłoszenie żądania przez mieszkańca, wygenerowanie jednorazowego tokenu kryptograficznego zapisanego w `password_reset_tokens` (TTL: 15 minut), asynchroniczną wysyłkę linku e-mail (Mailpit SMTP) oraz weryfikację tokenu wraz z haszowaniem nowego hasła (BCrypt) i unieważnieniem tokenu.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor M as Mieszkaniec
+    participant UI as Frontend (React PWA)
+    participant CTL as AuthController
+    participant SVC as AuthService
+    participant DB as PostgreSQL (JPA)
+    participant MAIL as Mailpit (SMTP)
+
+    %% Krok 1: Żądanie zresetowania hasła
+    M->>UI: Wybór opcji „Zapomniałem hasła” i podanie adresu e-mail
+    activate UI
+    UI->>CTL: POST /api/auth/forgot-password (ForgotPasswordDTO: email)
+    activate CTL
+    CTL->>SVC: initiatePasswordReset(email)
+    activate SVC
+
+    SVC->>DB: findByEmail(email)
+    activate DB
+    DB-->>SVC: Encja User (znaleziono użytkownika)
+    deactivate DB
+
+    alt [Użytkownik istnieje w systemie]
+        SVC->>SVC: Wygenerowanie bezpiecznego tokenu (SecureRandom / UUID)
+        SVC->>DB: INSERT INTO password_reset_tokens (user_id, token_hash, expires_at=NOW()+15min)
+        activate DB
+        DB-->>SVC: Zapisano rekord tokenu
+        deactivate DB
+
+        SVC-)MAIL: sendPasswordResetEmail(user.email, resetToken)
+    end
+
+    SVC-->>CTL: Procedura zainicjowana
+    deactivate SVC
+    CTL-->>UI: 200 OK (Komunikat ogólny: Jeśli e-mail istnieje, wysłano link)
+    deactivate CTL
+    UI-->>M: Informacja: Sprawdź skrzynkę pocztową
+    deactivate UI
+
+    %% Krok 2: Otwarcie linku i zmiana hasła
+    M->>MAIL: Otwarcie wiadomości i kliknięcie linku resetującego (/reset-password?token=XYZ)
+    activate MAIL
+    MAIL-->>UI: Przekierowanie do formularza nowego hasła z tokenem
+    deactivate MAIL
+    activate UI
+
+    M->>UI: Wprowadzenie nowego hasła i zatwierdzenie
+    UI->>CTL: POST /api/auth/reset-password (ResetPasswordDTO: token, newPassword)
+    activate CTL
+    CTL->>SVC: completePasswordReset(dto)
+    activate SVC
+
+    SVC->>SVC: hashToken = SHA-256(dto.token)
+    SVC->>DB: findValidTokenByHash(hashToken, NOW()) WHERE used_at IS NULL
+    activate DB
+    DB-->>SVC: Rekord tokenu (status poprawny) / pusty wynik
+    deactivate DB
+
+    alt [Token poprawny i aktywny: used_at IS NULL oraz expires_at > NOW]
+        SVC->>SVC: Hash nowego hasła (BCrypt z soleniem)
+        SVC->>DB: BEGIN; UPDATE users SET password_hash=newHash WHERE id=token.userId; UPDATE password_reset_tokens SET used_at=NOW() WHERE id=token.id AND used_at IS NULL; COMMIT
+        activate DB
+        DB-->>SVC: Zaktualizowano poświadczenia i unieważniono token (atomowo)
+        deactivate DB
+
+        SVC-->>CTL: Hasło pomyślnie zmienione
+        CTL-->>UI: 200 OK
+        UI-->>M: Wyświetlenie potwierdzenia i przekierowanie do logowania
+    else [Token niepoprawny, wygasły lub już wykorzystany]
+        SVC-->>CTL: 400 Bad Request (Nieprawidłowy lub wygasły token)
+        CTL-->>UI: 400 Bad Request
+        UI-->>M: Komunikat błędu: Link wygasł, wygeneruj nowe żądanie
+    end
+    deactivate SVC
+    deactivate CTL
+    deactivate UI
+```
+
+---
+
+### 10. Podsumowanie Pokrycia Dynamiki
+
+Zaprojektowane diagramy sekwencji pokrywają **kluczowe** zachowania dynamiczne systemu PKampus (ścieżki krytyczne MVP), a nie pełną listę wszystkich FR:
+1. **Asynchroniczność i integracja e-mail:** Zastosowanie kolejki zadań asynchronicznych w Spring Boot dla Mailpit (aktywacja konta, usterki, awarie sprzętu, reset hasła).
+2. **Bezpieczeństwo transakcyjne:** Blokady bazodanowe i ograniczenia `EXCLUDE USING gist` wykluczające nakładające się rezerwacje w pralniach i salkach.
 3. **Automatyzacja procesów w tle:** Dedykowany Spring Scheduler realizujący regułę 15 minut (§2 ust. 5 Regulaminu).
-4. **Zarządzanie mediami:** Bezpośrednia integracja backendu z magazynem obiektowym MinIO (S3) przy obsłudze usterek.
+4. **Zarządzanie mediami:** Bezpośrednia integracja backendu z magazynem obiektowym MinIO (S3) przy obsłudze usterek i zdjęć profilowych.
 5. **Egzekwowanie prawa wewnętrznego PK:** Walidacja czarnej listy kar dyscyplinarnych (§6 ust. 2) przed dopuszczeniem do zasobów.
 6. **Kaskadowa reakcja na awarie zasobów:** Automatyczne wyłączenie sprzętu, anulowanie rezerwacji, dyspozycja naprawy i powiadomienia mieszkańców.
+7. **Bezpieczne zarządzanie tożsamością (IdM):** Dwuetapowa weryfikacja meldunku przez ADS oraz jednorazowe kryptograficzne tokeny resetu hasła (TTL 15 min).

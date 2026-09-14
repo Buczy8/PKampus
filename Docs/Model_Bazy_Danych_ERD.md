@@ -12,7 +12,7 @@
    * Relacja studenta z pokojem jest modelowana za pomocą dedykowanej tabeli meldunkowej **`room_assignments`** z polem `academic_year` (np. `"2025/2026"`), statusem `is_active` oraz datami kwaterunku.
    * Na koniec roku akademickiego następuje masowe zamknięcie aktywnego meldunku (`is_active = FALSE`, data wymeldowania), co uwalnia pokój dla nowego rocznika, zachowując pełną historię zgłoszeń usterek i rezerwacji bez naruszania integralności referencyjnej.
 5. **Ochrona Przed Kolizją Rezerwacji (Anti-Race Condition):**
-   * Rezerwacje slotów pralki i salek zabezpieczone są na poziomie jądra bazy za pomocą **unikalnych indeksów częściowych** (`UNIQUE INDEX ... WHERE status IN ('CONFIRMED', 'KEY_ISSUED')`). Baza fizycznie odrzuca próbę jednoczesnego zapisu kolidującego slotu z kodem błędu SQL `23505 (unique_violation)`.
+   * Rezerwacje slotów pralki i salek zabezpieczone są na poziomie jądra bazy za pomocą **ograniczeń wykluczających** `EXCLUDE USING gist` (rozszerzenie `btree_gist`) na równości identyfikatora zasobu oraz przecięciu przedziałów `tstzrange(start_time, end_time)`. Baza odrzuca nachodzące aktywne rezerwacje (`CONFIRMED`, `KEY_ISSUED`) kodem SQLSTATE **`23P01` (`exclusion_violation`)** — nie `23505`.
 6. **Polityka Usuwania Danych (Soft Delete):**
    * Posty i komentarze na tablicy sąsiedzkiej podlegają mechanizmowi miękkiego usuwania (`is_deleted BOOLEAN`, `deleted_at TIMESTAMPTZ`), co zapewnia ślad audytowy moderacji dla Administratora DS.
 
@@ -38,10 +38,13 @@ flowchart LR
 
     ROOM_ASSIGNMENTS["<b>room_assignments</b><br/>----------------------------------<br/>PK id: UUID<br/>FK user_id: UUID<br/>FK room_id: UUID<br/>academic_year: VARCHAR(9)<br/>is_active: BOOLEAN<br/>check_in_date: DATE<br/>check_out_date: DATE"]:::tableStyle
 
+    PASSWORD_RESET_TOKENS["<b>password_reset_tokens</b><br/>----------------------------------<br/>PK id: UUID<br/>FK user_id: UUID<br/>UK token_hash: VARCHAR(255)<br/>expires_at: TIMESTAMPTZ<br/>used_at: TIMESTAMPTZ NULLABLE"]:::tableStyle
+
     DORMITORIES -->|1 : N| ROOMS
     DORMITORIES -->|1 : N| USERS
     ROOMS -->|1 : N| ROOM_ASSIGNMENTS
     USERS -->|1 : N| ROOM_ASSIGNMENTS
+    USERS -->|1 : N| PASSWORD_RESET_TOKENS
 ```
 
 ---
@@ -260,7 +263,8 @@ Rezerwacje slotów pralki z zabezpieczeniem współbieżności.
 | `key_returned_at` | `TIMESTAMPTZ` | `NULLABLE` | Czas zwrotu klucza na portiernię |
 | `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu złożenia rezerwacji |
 
-*Kluczowy indeks unikalny:* `CREATE UNIQUE INDEX idx_laundry_no_overlap ON laundry_bookings (machine_id, start_time) WHERE status IN ('CONFIRMED', 'KEY_ISSUED');`
+*Kluczowe ograniczenie integralności (Anti-Overlap):*
+`ALTER TABLE laundry_bookings ADD CONSTRAINT chk_laundry_no_overlap EXCLUDE USING gist (machine_id WITH =, tstzrange(start_time, end_time) WITH &&) WHERE (status IN ('CONFIRMED', 'KEY_ISSUED'));` — gwarantuje na poziomie silnika PostgreSQL brak jakichkolwiek nachodzących na siebie przedziałów czasowych rezerwacji dla tej samej pralki.
 
 ---
 
@@ -301,7 +305,10 @@ Rezerwacje salek z oświadczeniem Organizatora (§2 ust. 2 Regulaminu).
 | `key_returned_at` | `TIMESTAMPTZ` | `NULLABLE` | Godzina zwrotu klucza |
 | `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data rezerwacji |
 
-*Kluczowy indeks unikalny:* `CREATE UNIQUE INDEX idx_room_no_overlap ON room_bookings (room_id, start_time) WHERE status IN ('CONFIRMED', 'KEY_ISSUED');`
+*Kluczowe ograniczenie integralności (Anti-Overlap):*
+`ALTER TABLE room_bookings ADD CONSTRAINT chk_room_no_overlap EXCLUDE USING gist (room_id WITH =, tstzrange(start_time, end_time) WITH &&) WHERE (status IN ('CONFIRMED', 'KEY_ISSUED'));` — gwarantuje wykluczenie nakładających się rezerwacji salki w bazie.
+
+*Reguła zwrotu klucza dla salki Chillout (BR-08 / §3 ust. 7):* Dla rezerwacji kończących się w oknie nocnym (do 02:00) portiernia egzekwuje zwrot klucza do 10:00 operacyjnie. System przechowuje `key_issued_at` / `key_returned_at`; automatyczna blokada kolejnych wydań klucza nie jest wymagana w MVP.
 
 ---
 
@@ -319,7 +326,7 @@ Cyfrowy zeszyt napraw na portierni.
 | `urgency` | `VARCHAR(20)` | `NOT NULL, CHECK (urgency IN ('NORMAL', 'URGENT'))` | Stopień pilności |
 | `description` | `TEXT` | `NOT NULL` | Szczegółowy opis usterki |
 | `status` | `VARCHAR(30)` | `NOT NULL, CHECK (status IN ('NEW', 'ASSIGNED_TO_MAINTENANCE', 'IN_PROGRESS', 'RESOLVED', 'REJECTED', 'PARTS_REQUIRED'))` | Status realizacji (w UI: Nowe, Przekazane konserwatorowi, W trakcie naprawy, Naprawione, Odrzucone, Wymaga części) |
-| `staff_notes` | `TEXT` | `NULLABLE` | Notatka portiera / konserwatora dla studenta |
+| `staff_notes` | `TEXT` | `NULLABLE` | Bieżąca (ostatnia) notatka portiera dla studenta — nadpisywana przy kolejnej aktualizacji; brak tabeli historii komentarzy w MVP |
 | `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data zgłoszenia |
 | `updated_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data aktualizacji |
 
@@ -413,13 +420,28 @@ Ewidencja sankcji nakładanych przez Kierownika DS (§6 ust. 2 Regulaminu: 1–3
 
 ---
 
+### 3.15. Tabela `password_reset_tokens` (Tokeny Resetowania Hasła)
+Tymczasowe tokeny kryptograficzne do bezpiecznej procedury odzyskiwania hasła przez e-mail (FR-AUTH-07).
+
+| Kolumna | Typ danych | Ograniczenia | Opis |
+| :--- | :--- | :--- | :--- |
+| `id` | `UUID` | `PK, DEFAULT gen_random_uuid()` | Identyfikator tokenu |
+| `user_id` | `UUID` | `FK -> users(id), NOT NULL` | Użytkownik resetujący hasło |
+| `token_hash` | `VARCHAR(255)` | `NOT NULL, UNIQUE` | Skrót kryptograficzny tokenu wysłanego w linku |
+| `expires_at` | `TIMESTAMPTZ` | `NOT NULL` | Data i czas wygaśnięcia tokenu (15 minut od wygenerowania) |
+| `used_at` | `TIMESTAMPTZ` | `NULLABLE` | Znacznik czasu wykorzystania tokenu (unieważnienie) |
+| `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Czas wygenerowania żądania |
+
+---
+
 ## 4. Skrypt DDL SQL (PostgreSQL 16)
 
 Poniższy skrypt DDL jest w 100% gotowy do uruchomienia przy inicjalizacji kontenera bazy danych PostgreSQL (np. w katalogu `/docker-entrypoint-initdb.d/01_init.sql` lub jako migracja Flyway/Liquibase).
 
 ```sql
--- Włączenie rozszerzenia do generowania UUID
+-- Włączenie rozszerzenia do generowania UUID oraz indeksowania przedziałów czasowych GiST
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "btree_gist";
 
 -- 1. TABELA DOMÓW STUDENCKICH
 CREATE TABLE dormitories (
@@ -501,8 +523,13 @@ CREATE TABLE laundry_bookings (
     CONSTRAINT chk_laundry_time CHECK (end_time > start_time)
 );
 
--- Ochrona przed Race Condition w pralni
-CREATE UNIQUE INDEX idx_laundry_no_overlap ON laundry_bookings (machine_id, start_time) WHERE status IN ('CONFIRMED', 'KEY_ISSUED');
+-- Bezkompromisowa ochrona przed nakładaniem przedziałów czasowych w pralni (PostgreSQL btree_gist)
+ALTER TABLE laundry_bookings 
+    ADD CONSTRAINT chk_laundry_no_overlap 
+    EXCLUDE USING gist (
+        machine_id WITH =, 
+        tstzrange(start_time, end_time) WITH &&
+    ) WHERE (status IN ('CONFIRMED', 'KEY_ISSUED'));
 
 -- 7. TABELA SALEK TEMATYCZNYCH
 CREATE TABLE thematic_rooms (
@@ -536,8 +563,13 @@ CREATE TABLE room_bookings (
     CONSTRAINT chk_room_time CHECK (end_time > start_time)
 );
 
--- Ochrona przed Race Condition w salkach
-CREATE UNIQUE INDEX idx_room_no_overlap ON room_bookings (room_id, start_time) WHERE status IN ('CONFIRMED', 'KEY_ISSUED');
+-- Bezkompromisowa ochrona przed nakładaniem przedziałów czasowych w salkach (PostgreSQL btree_gist)
+ALTER TABLE room_bookings 
+    ADD CONSTRAINT chk_room_no_overlap 
+    EXCLUDE USING gist (
+        room_id WITH =, 
+        tstzrange(start_time, end_time) WITH &&
+    ) WHERE (status IN ('CONFIRMED', 'KEY_ISSUED'));
 
 -- 9. TABELA USTEREK (CYFROWY ZESZYT AWARII)
 CREATE TABLE issues (
@@ -628,4 +660,17 @@ CREATE TABLE sanctions (
 
 -- Indeks przyspieszający sprawdzanie aktywnych sankcji przy rezerwacji
 CREATE INDEX idx_active_sanctions ON sanctions (user_id, end_date) WHERE is_active = TRUE;
+
+-- 15. TABELA TOKENÓW RESETOWANIA HASŁA
+CREATE TABLE password_reset_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(255) NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indeks wyszukiwania aktywnego tokenu
+CREATE INDEX idx_pwd_reset_token ON password_reset_tokens (token_hash) WHERE used_at IS NULL;
 ```

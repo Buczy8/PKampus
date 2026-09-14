@@ -78,8 +78,8 @@ Zgodnie z wymogami inżynierii oprogramowania każdy węzeł i artefakt środowi
 | :--- | :--- | :--- | :--- | :--- |
 | **`pkampus-proxy`** | `nginx:alpine` | Skompilowany pakiet **React PWA** (`manifest.webmanifest`, `sw.js`, HTML/JS/CSS, ikony) + plik `nginx.conf` | **Zewn:** 80 (HTTP), 443 (HTTPS)<br/>**Wewn:** brak | Brama wejściowa serwera (Reverse Proxy). Wymusza HTTPS, serwuje statyczne zasoby PWA (App Shell, cache), terminacja SSL oraz przekazuje zapytania `/api/*` do kontenera backendu. |
 | **`pkampus-backend`** | `eclipse-temurin:alpine` | `pkampus-backend.jar` (Spring Boot Executable JAR) | **Zewn:** brak (izolacja)<br/>**Wewn:** 8080 | Główna warstwa logiki biznesowej, uwierzytelniania JWT, transakcji rezerwacji pralni/salek, walidacji czarnej listy oraz obsługi zgłoszeń usterek. |
-| **`pkampus-db`** | `postgres:alpine` | Instancja silnika PostgreSQL + DDL schematu | **Zewn:** brak (izolacja)<br/>**Wewn:** 5432 | Relacyjny magazyn danych. Przechowuje 14 tabel domenowych, realizuje blokady transakcyjne, egzekwuje unikalne indeksy cząstkowe i integralność referencyjną. |
-| **`pkampus-minio`** | `minio/minio` | Silnik MinIO Object Storage | **Zewn:** brak<br/>**Wewn:** 9000 (S3 API), 9001 (Console) | Magazyn obiektowy kompatybilny z protokołem Amazon S3. Przechowuje pliki zdjęć usterek (`issue_photos`) w dedykowanym buckecie `pkampus-issues`. |
+| **`pkampus-db`** | `postgres:alpine` | Instancja silnika PostgreSQL + DDL schematu | **Zewn:** brak (izolacja)<br/>**Wewn:** 5432 | Relacyjny magazyn danych. Przechowuje 15 tabel domenowych, realizuje blokady transakcyjne, egzekwuje ograniczenia `EXCLUDE USING gist` (anti-overlap) i integralność referencyjną. |
+| **`pkampus-minio`** | `minio/minio` | Silnik MinIO Object Storage | **Zewn:** brak<br/>**Wewn:** 9000 (S3 API), 9001 (Console) | Magazyn obiektowy S3. Buckety: `pkampus-issues` (zdjęcia usterek) oraz `pkampus-avatars` (zdjęcia karty mieszkańca); dostęp tylko przez backend (bez publicznego anonymous download). |
 | **`pkampus-mailpit`** | `axllent/mailpit` | Serwer Mailpit | **Zewn:** 8025 (Web UI - dev only)<br/>**Wewn:** 1025 (SMTP) | Serwer pocztowy w kontenerze. Przechwytuje wiadomości e-mail z linkami aktywacyjnymi meldunku i powiadomieniami o rezerwacjach bez ryzyka wysyłki spamu. |
 
 ---
@@ -128,7 +128,7 @@ Zgodnie z zasadą bezstanowości kontenerów aplikacyjnych (ang. *Stateless Cont
 | Nazwa Wolumenu | Ścieżka docelowa w kontenerze | Typ danych | Polityka kopii zapasowych (Backup Policy) |
 | :--- | :--- | :--- | :--- |
 | **`pg_data`** | `/var/lib/postgresql/data` | Fizyczne pliki relacyjnej bazy danych PostgreSQL (tabele, indeksy, WAL). | Codzienny automatyczny zrzut logiczny poleceniem `pg_dump` do archiwum skompresowanego `*.sql.gz` na wydzieloną przestrzeń backupową. |
-| **`minio_data`** | `/data` | Binarny magazyn obiektowy MinIO (oryginalne pliki zdjęć usterek JPG/PNG). | Kopia lustrzana bucketu `pkampus-issues` z użyciem narzędzia `mc mirror` na zewnętrzny serwer plików PK. |
+| **`minio_data`** | `/data` | Binarny magazyn obiektowy MinIO (zdjęcia usterek w buckecie `pkampus-issues` oraz zdjęcia profilowe legitymacji mieszkańca w buckecie `pkampus-avatars`). | Kopia lustrzana bucketów z użyciem narzędzia `mc mirror` na zewnętrzny serwer plików PK. |
 | **`letsencrypt_certs`**| `/etc/letsencrypt` | Certyfikaty SSL/TLS wygenerowane przez certbot oraz klucze prywatne. | Odtwarzalny zasób; backup kluczy prywatnych i konfiguracji certyfikatu. |
 
 ---
@@ -176,6 +176,12 @@ services:
     depends_on:
       pkampus-backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # -------------------------------------------------------------
   # Warstwa Aplikacyjna i Logika Biznesowa (Spring Boot)
@@ -190,16 +196,17 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - SPRING_DATASOURCE_URL=jdbc:postgresql://pkampus-db:5432/pkampus_db
-      - SPRING_DATASOURCE_USERNAME=${DB_USER:-pkampus_app}
-      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-pkampus_secure_pass_2026}
+      - SPRING_DATASOURCE_USERNAME=${DB_USER:?DB_USER required}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD required}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
       - MINIO_ENDPOINT=http://pkampus-minio:9000
-      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-pkampus_admin}
-      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minio_secure_pass_2026}
-      - MINIO_BUCKET_NAME=pkampus-issues
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:?MINIO_ROOT_USER required}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD required}
+      - MINIO_BUCKET_ISSUES=pkampus-issues
+      - MINIO_BUCKET_AVATARS=pkampus-avatars
       - SPRING_MAIL_HOST=${MAIL_HOST:-pkampus-mailpit}
       - SPRING_MAIL_PORT=${MAIL_PORT:-1025}
-      - JWT_SECRET=${JWT_SECRET:-9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET required}
     networks:
       - pkampus-net
     depends_on:
@@ -223,15 +230,15 @@ services:
     restart: unless-stopped
     environment:
       - POSTGRES_DB=pkampus_db
-      - POSTGRES_USER=${DB_USER:-pkampus_app}
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-pkampus_secure_pass_2026}
+      - POSTGRES_USER=${DB_USER:?DB_USER required}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:?DB_PASSWORD required}
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./backend/src/main/resources/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - pkampus-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-pkampus_app} -d pkampus_db"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d pkampus_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -245,17 +252,37 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-pkampus_admin}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minio_secure_pass_2026}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?MINIO_ROOT_USER required}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD required}
     volumes:
       - minio_data:/data
     networks:
       - pkampus-net
     healthcheck:
-      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
+
+  # Inicjalizacja bucketów MinIO S3 (issues oraz avatars) — job jednorazowy
+  pkampus-minio-init:
+    image: minio/mc:latest
+    container_name: pkampus-minio-init
+    depends_on:
+      pkampus-minio:
+        condition: service_healthy
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?MINIO_ROOT_USER required}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD required}
+    networks:
+      - pkampus-net
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://pkampus-minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
+      /usr/bin/mc mb --ignore-existing myminio/pkampus-issues;
+      /usr/bin/mc mb --ignore-existing myminio/pkampus-avatars;
+      exit 0;
+      "
 
   # -------------------------------------------------------------
   # Usługa Pocztowa Dev/Test (Mailpit)
@@ -268,6 +295,11 @@ services:
       - "127.0.0.1:8025:8025" # Dostęp do panelu WWW wyłącznie z localhost / tunelu SSH
     networks:
       - pkampus-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8025/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 ```
 
 ---
@@ -277,13 +309,15 @@ services:
 | Identyfikator Wymagania | Nazwa Wymagania | Realizacja w Architekturze Wdrożeniowej | Status |
 | :--- | :--- | :--- | :--- |
 | **NFR-DEP-01** | Wdrożenie i konteneryzacja (IaC) | Kompletne środowisko (React PWA, Nginx, Spring Boot, PostgreSQL, MinIO, Mailpit) spakowane i uruchamiane pojedynczym poleceniem `docker compose up -d`, gwarantując 100% spójności między dev/test a VPS PK. | Zgodny |
-| **NFR-SEC-01** | Bezpieczeństwo sesji (JWT) | Bezstanowe uwierzytelnianie tokenami JWT podpisywanymi kryptograficznie w Spring Boot; brak stanu sesji w kontenerze ułatwia horyzontalną skalowalność. | Zgodny |
+| **NFR-SEC-01** | Bezpieczeństwo sesji (JWT Bearer) | JWT w nagłówku `Authorization`; brak sesji cookie — CSRF cookie-based nie dotyczy; klucz `JWT_SECRET` wymagany z env (bez fallbacku w compose). | Zgodny |
 | **NFR-SEC-02** | Ochrona poświadczeń (BCrypt) | Bezpieczne haszowanie haseł algorytmem BCrypt z soleniem po stronie Spring Security przed utrwaleniem w relacyjnej bazie danych PostgreSQL. | Zgodny |
-| **NFR-SEC-03** | Bezpieczeństwo plików (MinIO S3) | Ścisła walidacja MIME-type i limitu 5 MB na poziomie Spring Boot API; pliki binarne zdjęć usterek i awatarów izolowane w buckecie MinIO `pkampus-issues`. | Zgodny |
+| **NFR-SEC-03** | Bezpieczeństwo plików (MinIO S3) | Walidacja MIME/rozmiaru w API; buckety `MINIO_BUCKET_ISSUES` / `MINIO_BUCKET_AVATARS` prywatne; brak anonymous download. | Zgodny |
 | **NFR-SEC-04** | Szyfrowanie transmisji sieciowej (TLS 1.3 / HTTPS) | Nginx Reverse Proxy (`pkampus-proxy`) jako jedyny publiczny punkt styku wymusza protokół HTTPS, szyfrowanie TLS 1.3, nagłówek HSTS oraz polityki CSP i anty-clickjacking. | Zgodny |
 | **NFR-SEC-05** | Izolacja sieciowa bazy danych i magazynu | Baza PostgreSQL oraz MinIO nie publikują portów na interfejsie publicznym serwera; komunikacja backendu z bazą i storage odbywa się wyłącznie wewnątrz izolowanej sieci `pkampus-net`. | Zgodny |
-| **NFR-CONC-01** | Współbieżność i integralność transakcyjna | Mechanizmy transakcyjne Spring Data JPA oraz unikalne indeksy warunkowe PostgreSQL (`idx_laundry_no_overlap`, `idx_room_no_overlap`) wykluczają podwójne rezerwacje w warunkach wielodostępnych. | Zgodny |
+| **NFR-SEC-06** | XSS / SQL Injection | Parametryzowane JPA + CSP/HSTS na Nginx; escapowanie danych w UI. | Zgodny |
+| **NFR-CONC-01** | Współbieżność i integralność transakcyjna | Mechanizmy transakcyjne Spring Data JPA oraz ograniczenia wykluczające PostgreSQL `EXCLUDE USING gist` (`chk_laundry_no_overlap`, `chk_room_no_overlap`) wykluczają nakładanie przedziałów rezerwacji w warunkach współbieżnych. | Zgodny |
 | **NFR-PERF-01** | Czas odpowiedzi interfejsu i backendu | Zasoby PWA buforowane w Service Workerze klienta; Nginx kompresuje assety (Gzip/Brotli); zapytania bazy wsparte indeksami B-drzewa, co gwarantuje czasy odpowiedzi < 200 ms. | Zgodny |
 | **NFR-USAB-01** | Mobilność i instalowalność (PWA) | Architektura Progressive Web App umożliwia instalację ikony na ekranie głównym smartfona bez sklepów z aplikacjami oraz bezpośredni dostęp do systemowego API aparatu fotograficznego. | Zgodny |
-| **NFR-REL-01** | Niezawodność i samonaprawa usług | Wszystkie kontenery posiadają politykę `restart: unless-stopped` oraz zdefiniowane procedury `healthcheck`, gwarantujące sekwencyjny start kontenerów i automatyczny restart w razie awarii procesu. | Zgodny |
+| **NFR-A11Y-01** | Dostępność WCAG 2.1 AA (zakres MVP) | Kontrast, fokus i etykiety na krytycznych widokach; pełny audit AA poza MVP. | Zgodny (SHOULD) |
+| **NFR-REL-01** | Niezawodność i samonaprawa usług | Healthcheck + `restart: unless-stopped` dla usług rdzeniowych (proxy, backend, db, minio, mailpit). Job `pkampus-minio-init` jest kontenerem jednorazowym bez healthcheck. | Zgodny |
 | **NFR-REL-02** | Trwałość danych (Data Persistence) | Baza danych i pliki MinIO utrwalane są w dedykowanych wolumenach Docker (`pg_data`, `minio_data`), co zabezpiecza stan aplikacji przed aktualizacjami i restartami obrazów kontenerowych. | Zgodny |
