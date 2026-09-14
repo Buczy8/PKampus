@@ -56,8 +56,8 @@
 * **Stos technologiczny:**
   * **Frontend:** React / PWA (nowoczesny UI, komponenty funkcyjne, stylizacja Tailwind CSS, responsywność RWD, instalowalność PWA).
   * **Brama wejściowa serwera (Reverse Proxy):** Nginx (terminacja TLS 1.3, nagłówki bezpieczeństwa CSP/HSTS wg NFR-SEC-04, serwowanie skompilowanych zasobów PWA oraz proxy dla ścieżek `/api/*`).
-  * **Backend:** Java + Spring Boot (Spring Web, Spring Security, Spring Data JPA, Hibernate, Maven).
-  * **Baza danych:** PostgreSQL (relacyjny model danych, integralność referencyjna, transakcje ACID, ograniczenia `EXCLUDE USING gist`).
+  * **Backend:** Java 21 (LTS) + Spring Boot (Spring Web, Spring Security, Spring Data JPA, Hibernate, Maven).
+  * **Baza danych:** PostgreSQL 16 (relacyjny model danych, integralność referencyjna, transakcje ACID, ograniczenia `EXCLUDE USING gist`).
   * **Magazyn obiektowy:** MinIO S3 (kompatybilny z AWS S3 API, prywatne buckety zdjęć kart i usterek).
   * **Serwer pocztowy:** Mailpit (lokalny serwer SMTP do powiadomień e-mail i testowania bez ryzyka spamu).
   * **Konteneryzacja i orkiestracja:** Docker & Docker Compose (sieć mostkowa `pkampus-net`, wolumeny trwałe `pg_data` i `minio_data`).
