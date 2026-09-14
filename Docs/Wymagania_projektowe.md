@@ -20,8 +20,8 @@ Dokument specyfikacji wymagań funkcjonalnych, pozafunkcjonalnych i reguł bizne
 
 | Identyfikator | Nazwa wymagania | Priorytet | Opis wymagania |
 | :--- | :--- | :---: | :--- |
-| **FR-AUTH-01** | Rejestracja mieszkańca | MUST | Użytkownik rejestruje się podając: imię, nazwisko, adres e-mail, hasło, numer telefonu, wybiera akademik z listy, podaje numer pokoju oraz załącza zdjęcie twarzy (do karty mieszkańca). |
-| **FR-AUTH-02** | Weryfikacja konta (Workflow akceptacji) | MUST | Nowo zarejestrowane konto studenta otrzymuje status `PENDING_APPROVAL`. Konto musi zostać zatwierdzone przez Portiera lub Administratora Akademika po porównaniu z listą meldunkową. Dopiero po zatwierdzeniu użytkownik uzyskuje dostęp do rezerwacji i funkcji bytowych. |
+| **FR-AUTH-01** | Rejestracja mieszkańca i weryfikacja e-mail | MUST | Użytkownik rejestruje się podając: imię, nazwisko, adres e-mail, hasło, numer telefonu, wybiera akademik z listy, podaje numer pokoju oraz załącza zdjęcie twarzy (do karty mieszkańca). System wysyła link aktywacyjny w celu potwierdzenia adresu e-mail (`PENDING_EMAIL_VERIFICATION`). |
+| **FR-AUTH-02** | Weryfikacja meldunku (Aktywacja przez Administratora DS) | MUST | Po potwierdzeniu adresu e-mail konto otrzymuje status `PENDING_APPROVAL`. Konto jest weryfikowane z listą meldunkową i aktywowane przez Administratora Domu Studenckiego (ADS). Do momentu aktywacji student widzi ekran informacyjny (Onboarding lock) bez dostępu do rezerwacji i karty. |
 | **FR-AUTH-03** | Uwierzytelnianie JWT | MUST | Logowanie za pomocą adresu e-mail i hasła. Po poprawnym uwierzytelnieniu system zwraca token JWT zawierający identyfikator użytkownika, przypisany akademik, numer pokoju oraz role (`RESIDENT`, `RECEPTIONIST`, `DORM_ADMIN`, `SUPER_ADMIN`). |
 | **FR-AUTH-04** | Kontrola dostępu oparta na rolach (RBAC) | MUST | Dostęp do poszczególnych endpointów API oraz widoków frontendowych jest ściśle ograniczony do posiadanych ról. |
 | **FR-AUTH-05** | Zarządzanie personelem portierni | MUST | Administrator Akademika ma możliwość tworzenia, edycji i dezaktywacji kont z rolą `RECEPTIONIST` dla swojego akademika. |
@@ -99,7 +99,7 @@ Dokument specyfikacji wymagań funkcjonalnych, pozafunkcjonalnych i reguł bizne
 
 | Identyfikator | Nazwa wymagania | Priorytet | Opis wymagania |
 | :--- | :--- | :---: | :--- |
-| **FR-EVENT-01** | Publikacja oficjalnych komunikatów administracji | MUST | Kierownictwo ADS/AOS może publikować przypięte ogłoszenia techniczno-organizacyjne (np. awaria sieci internetowej, przerwa w dostawie ciepłej wody, harmonogram cyklicznej wymiany pościeli wg §27 pkt 10 Regulaminu OS PK) z oznaczeniem stopnia ważności (Informacja, Ostrzeżenie, Awaria krytyczna). |
+| **FR-EVENT-01** | Publikacja oficjalnych i dyżurnych komunikatów | MUST | Kierownictwo ADS/AOS oraz Recepcjonista/Portier mogą publikować przypięte ogłoszenia techniczno-organizacyjne (np. harmonogram cyklicznej wymiany pościeli wg §27 pkt 10 Regulaminu OS PK, awaria sieci internetowej, przerwa w dostawie ciepłej wody) z oznaczeniem stopnia ważności (Informacja, Ostrzeżenie, Awaria krytyczna). |
 | **FR-EVENT-02** | Baner ważnych ogłoszeń (Alert banner) | MUST | Krytyczne komunikaty administracji są wyróżnione w górnej części aplikacji na telefonie i pulpicie studenta aż do momentu ich potwierdzenia/odczytania. |
 | **FR-EVENT-03** | Kalendarz życia kampusu | MUST | Interaktywny widok kalendarza (miesiąc / tydzień / dzień) agregujący terminy oficjalne (wymiana pościeli, zebrania KOS, akcje kwaterunkowe) oraz wydarzenia kulturalno-integracyjne. |
 | **FR-EVENT-04** | Inicjatywy i wydarzenia mieszkańców | SHOULD | Zalogowany mieszkaniec może utworzyć otwarte wydarzenie integracyjne (np. wspólne oglądanie meczu w salce TV, turniej tenisa stołowego, sesja planszówek), które po zatwierdzeniu lub bezpośrednio pojawia się w kalendarzu z limitem uczestników. |
