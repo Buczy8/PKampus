@@ -407,7 +407,7 @@ Ogłoszenia techniczno-organizacyjne (wymiana pościeli, przerwa w dostawie wody
 ---
 
 ### 3.14. Tabela `sanctions` (Rejestr Kar Regulaminowych - Czarna Lista)
-Ewidencja sankcji nakładanych przez Kierownika DS (§6 ust. 2 Regulaminu: 1–3 miesiące blokady salek).
+Ewidencja prawomocnych sankcji rejestrowanych przez Administratora Domu Studenckiego (Kierownika DS) po przeprowadzeniu procedury regulaminowej z §6 ust. 2 Regulaminu salek (1–3 miesiące blokady salek). Zgodnie z zakresem MVP wieloosobowy obieg wniosków i uzgodnień (wniosek ADS/KOS, porozumienie z KOS i Koordynatorem ds. bezpieczeństwa) realizowany jest poza systemem w trybie administracyjnym, a pole `reason` przechowuje uzasadnienie oraz znak/numer formalnej decyzji.
 
 | Kolumna | Typ danych | Ograniczenia | Opis |
 | :--- | :--- | :--- | :--- |
