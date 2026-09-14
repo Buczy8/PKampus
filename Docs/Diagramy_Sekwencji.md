@@ -518,6 +518,7 @@ sequenceDiagram
         deactivate DB
 
         %% 4. Automatyczne utworzenie zgłoszenia w module ISSUES
+        Note over SVC, ISS: reporterId pracownika personelu (Portier/ADS) jest utrwalany jako reporter_id w issues (zgodnie z BR-07)
         SVC->>ISS: createAutomatedBreakdownIssue(machine, dto.reason, reporterId)
         activate ISS
         ISS->>DB: INSERT INTO issues (reporter_id, dormitory_id, common_area_name, category='OTHER', urgency='URGENT', description='Awaria pralki...', status='NEW')

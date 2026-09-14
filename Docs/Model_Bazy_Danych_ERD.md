@@ -322,7 +322,7 @@ Cyfrowy zeszyt napraw na portierni.
 | Kolumna | Typ danych | Ograniczenia | Opis |
 | :--- | :--- | :--- | :--- |
 | `id` | `UUID` | `PK, DEFAULT gen_random_uuid()` | Identyfikator zgłoszenia |
-| `reporter_id` | `UUID` | `FK -> users(id), NOT NULL` | Zgłaszający mieszkaniec |
+| `reporter_id` | `UUID` | `FK -> users(id), NOT NULL` | Zgłaszający użytkownik (Mieszkaniec lub pracownik personelu: Portier / ADS; w przypadku auto-awarii pralki wg ADR-06: identyfikator osoby wyłączającej urządzenie) |
 | `dormitory_id` | `UUID` | `FK -> dormitories(id), NOT NULL` | Akademik |
 | `room_id` | `UUID` | `FK -> rooms(id) ON DELETE RESTRICT, NULLABLE` | Pokój (jeśli usterka w pokoju; NULL dla części wspólnych) |
 | `common_area_name`| `VARCHAR(100)` | `NULLABLE` | Część wspólna (kuchnia, pralnia, winda) |

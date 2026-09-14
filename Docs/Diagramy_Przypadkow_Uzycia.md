@@ -61,7 +61,7 @@ flowchart LR
 | Aktor | M1: AUTH & CARD | M2: LAUNDRY & ROOMS | M3: ISSUES | M4: BOARD & EVENTS | M5: ADMIN |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Mieszkaniec (Student)** | Dostęp (Karta, profil) | Dostęp (Rezerwacje) | Dostęp (Zgłoszenia) | Dostęp (Tablica, kalendarz) | Brak dostępu |
-| **Recepcjonista (Portier)** | Dostęp (Weryfikacja karty) | Dostęp (Klucze, blokada awaryjna) | Dostęp (Rejestr napraw) | Dostęp (Komunikaty dyżurne, pościel) | Brak dostępu |
+| **Recepcjonista (Portier)** | Dostęp (Weryfikacja karty) | Dostęp (Klucze, blokada awaryjna) | Rejestr napraw i zgłaszanie awarii | Dostęp (Komunikaty dyżurne, pościel) | Brak dostępu |
 | **Administrator DS (ADS)** | Weryfikacja meldunku | Wyłączenie awaryjne (Nadzór) | Brak operacji | Komunikaty i moderacja | Konfiguracja i kary |
 | **Superadmin (AOS)** | Brak operacji | Brak operacji | Brak operacji | Komunikaty kampusowe i moderacja CAMPUS | Zarządzanie osiedlem |
 
@@ -189,8 +189,8 @@ flowchart LR
 
     subgraph System_Issues ["SYSTEM PKAMPUS: OBSŁUGA USTEREK"]
         direction TB
-        subgraph Strefa_Mieszkanca ["Zgłoszenia Mieszkańca"]
-            UC_ISSUE_01(["UC-ISSUE-01<br/>Zgłoszenie usterki"]):::ucStyle
+        subgraph Strefa_Zgloszen ["Zgłaszanie Usterek (Mieszkaniec / Personel)"]
+            UC_ISSUE_01(["UC-ISSUE-01<br/>Zgłoszenie usterki / auto-awaria"]):::ucStyle
             UC_ISSUE_05(["UC-ISSUE-05<br/>Podgląd własnych spraw"]):::ucStyle
         end
 
@@ -203,11 +203,12 @@ flowchart LR
 
     Portier["Recepcjonista<br/>(Portier)"]:::staffStyle
 
-    %% Relacje mieszkańca po lewej stronie (tylko do strefy zgłoszeń)
+    %% Relacje mieszkańca po lewej stronie
     Student --- UC_ISSUE_01
     Student --- UC_ISSUE_05
 
-    %% Relacje personelu po prawej stronie (tylko do strefy warsztatu)
+    %% Relacje personelu po prawej stronie (warsztat oraz zgłaszanie awarii części wspólnych / auto-zgłoszenie)
+    UC_ISSUE_01 --- Portier
     UC_ISSUE_02 --- Portier
     UC_ISSUE_03 --- Portier
     UC_ISSUE_04 --- Portier
