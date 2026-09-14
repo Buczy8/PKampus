@@ -62,11 +62,11 @@ flowchart LR
 
     LAUNDRY_MACHINES["<b>laundry_machines</b><br/>----------------------------------<br/>PK id: UUID<br/>FK dormitory_id: UUID<br/>machine_identifier: VARCHAR(30)<br/>floor_location: VARCHAR(50)<br/>status: VARCHAR(20)"]:::tableStyle
 
-    LAUNDRY_BOOKINGS["<b>laundry_bookings</b><br/>----------------------------------<br/>PK id: UUID<br/>FK machine_id: UUID<br/>FK user_id: UUID<br/>start_time: TIMESTAMPTZ<br/>end_time: TIMESTAMPTZ<br/>status: VARCHAR(30)<br/>key_issued_at: TIMESTAMPTZ"]:::tableStyle
+    LAUNDRY_BOOKINGS["<b>laundry_bookings</b><br/>----------------------------------<br/>PK id: UUID<br/>FK machine_id: UUID<br/>FK user_id: UUID<br/>start_time: TIMESTAMPTZ<br/>end_time: TIMESTAMPTZ<br/>status: VARCHAR(30)<br/>key_issued_at: TIMESTAMPTZ<br/>key_returned_at: TIMESTAMPTZ"]:::tableStyle
 
     THEMATIC_ROOMS["<b>thematic_rooms</b><br/>----------------------------------<br/>PK id: UUID<br/>FK dormitory_id: UUID<br/>name: VARCHAR(100)<br/>room_type: VARCHAR(30)<br/>max_capacity: INT<br/>opening_time: TIME<br/>closing_time: TIME<br/>spans_midnight: BOOLEAN<br/>max_duration_hours: INT"]:::tableStyle
 
-    ROOM_BOOKINGS["<b>room_bookings</b><br/>----------------------------------<br/>PK id: UUID<br/>FK room_id: UUID<br/>FK user_id: UUID<br/>start_time: TIMESTAMPTZ<br/>end_time: TIMESTAMPTZ<br/>participants_count: INT<br/>status: VARCHAR(30)<br/>terms_accepted: BOOLEAN"]:::tableStyle
+    ROOM_BOOKINGS["<b>room_bookings</b><br/>----------------------------------<br/>PK id: UUID<br/>FK room_id: UUID<br/>FK user_id: UUID<br/>start_time: TIMESTAMPTZ<br/>end_time: TIMESTAMPTZ<br/>participants_count: INT<br/>status: VARCHAR(30)<br/>terms_accepted: BOOLEAN<br/>key_issued_at: TIMESTAMPTZ<br/>key_returned_at: TIMESTAMPTZ"]:::tableStyle
 
     USERS["<b>users</b><br/>----------------------------------<br/>PK id: UUID<br/>first_name: VARCHAR(50)<br/>last_name: VARCHAR(80)<br/>email: VARCHAR(150)"]:::tableStyle
 
@@ -259,7 +259,7 @@ Rezerwacje slotów pralki z zabezpieczeniem współbieżności.
 | `user_id` | `UUID` | `FK -> users(id), NOT NULL` | Rezerwujący mieszkaniec |
 | `start_time` | `TIMESTAMPTZ` | `NOT NULL` | Czas rozpoczęcia slotu |
 | `end_time` | `TIMESTAMPTZ` | `NOT NULL` | Czas zakończenia slotu |
-| `status` | `VARCHAR(35)` | `NOT NULL, CHECK (status IN ('CONFIRMED', 'KEY_ISSUED', 'COMPLETED', 'CANCELLED_USER', 'AUTO_CANCELLED_15MIN', 'CANCELLED_MACHINE_OUT_OF_ORDER'))` | Status cyklu życia rezerwacji |
+| `status` | `VARCHAR(30)` | `NOT NULL, CHECK (status IN ('CONFIRMED', 'KEY_ISSUED', 'COMPLETED', 'CANCELLED_USER', 'AUTO_CANCELLED_15MIN', 'CANCELLED_MACHINE_OUT_OF_ORDER'))` | Status cyklu życia rezerwacji |
 | `key_issued_at` | `TIMESTAMPTZ` | `NULLABLE` | Czas fizycznego wydania klucza |
 | `key_returned_at` | `TIMESTAMPTZ` | `NULLABLE` | Czas zwrotu klucza na portiernię |
 | `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu złożenia rezerwacji |
@@ -440,7 +440,7 @@ Tymczasowe tokeny kryptograficzne do bezpiecznej procedury odzyskiwania hasła p
 
 ## 4. Skrypt DDL SQL (PostgreSQL 16)
 
-Poniższy skrypt DDL jest w 100% gotowy do uruchomienia przy inicjalizacji kontenera bazy danych PostgreSQL (np. w katalogu `/docker-entrypoint-initdb.d/01_init.sql` lub jako migracja Flyway/Liquibase).
+Poniższy skrypt DDL jest w 100% gotowy do uruchomienia przy inicjalizacji kontenera bazy danych PostgreSQL poprzez mechanizm montowania wolumenu (`/docker-entrypoint-initdb.d/01_init.sql`). W fazie MVP zrezygnowano ze stosowania zewnętrznych narzędzi migracji schematu (takich jak Flyway czy Liquibase) na rzecz bezpośredniego wykonywania skryptu inicjalizującego `01_init.sql` przez oficjalny obraz PostgreSQL.
 
 ```sql
 -- Włączenie rozszerzenia do generowania UUID oraz indeksowania przedziałów czasowych GiST
@@ -521,7 +521,7 @@ CREATE TABLE laundry_bookings (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     start_time TIMESTAMPTZ NOT NULL,
     end_time TIMESTAMPTZ NOT NULL,
-    status VARCHAR(35) NOT NULL DEFAULT 'CONFIRMED' CHECK (status IN ('CONFIRMED', 'KEY_ISSUED', 'COMPLETED', 'CANCELLED_USER', 'AUTO_CANCELLED_15MIN', 'CANCELLED_MACHINE_OUT_OF_ORDER')),
+    status VARCHAR(30) NOT NULL DEFAULT 'CONFIRMED' CHECK (status IN ('CONFIRMED', 'KEY_ISSUED', 'COMPLETED', 'CANCELLED_USER', 'AUTO_CANCELLED_15MIN', 'CANCELLED_MACHINE_OUT_OF_ORDER')),
     key_issued_at TIMESTAMPTZ,
     key_returned_at TIMESTAMPTZ,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

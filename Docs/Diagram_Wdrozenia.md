@@ -236,7 +236,7 @@ services:
       - POSTGRES_PASSWORD=${DB_PASSWORD:?DB_PASSWORD required}
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./backend/src/main/resources/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./backend/src/main/resources/db/01_init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
     networks:
       - pkampus-net
     healthcheck:
