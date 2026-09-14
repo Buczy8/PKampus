@@ -50,15 +50,17 @@
   * Architektura Mobile-First dla widoków mieszkańca (pełna wygoda obsługi ze smartfona).
   * Dostosowanie widoków recepcji i panelu administracyjnego pod ekrany desktopowe i tablety.
   * Podstawowa dostępność zgodna z wybranymi kryteriami WCAG 2.1 AA (kontrast, fokus klawiaturowy, etykiety formularzy) — szczegóły w NFR-A11Y-01.
-* **Niezawodność i konteneryzacja:** Całość usług (frontend, backend, baza danych, object storage) uruchamiana i orkiestrowana przy użyciu `docker compose up`.
+* **Niezawodność i konteneryzacja:** Całość usług środowiska (brama Nginx serwująca frontend React PWA, backend Spring Boot, relacyjna baza danych PostgreSQL, magazyn obiektowy MinIO S3 oraz serwer pocztowy Mailpit) uruchamiana i orkiestrowana przy użyciu pojedynczego polecenia `docker compose up -d` (zgodnie z NFR-DEP-01).
 
 ## 7. Założenia, ograniczenia i technologie
 * **Stos technologiczny:**
-  * **Frontend:** React (nowoczesny UI, modularne komponenty, styling np. Tailwind CSS, obsługa RWD).
-  * **Backend:** Java + Spring Boot (Spring Web, Spring Security, Spring Data JPA, Hibernate, Maven/Gradle).
-  * **Baza danych:** PostgreSQL (relacyjny model danych, integralność referencyjna, transakcje ACID).
-  * **Magazyn obiektowy:** MinIO (kompatybilny z AWS S3 API).
-  * **Konteneryzacja:** Docker & Docker Compose.
+  * **Frontend:** React / PWA (nowoczesny UI, komponenty funkcyjne, stylizacja Tailwind CSS, responsywność RWD, instalowalność PWA).
+  * **Brama wejściowa serwera (Reverse Proxy):** Nginx (terminacja TLS 1.3, nagłówki bezpieczeństwa CSP/HSTS wg NFR-SEC-04, serwowanie skompilowanych zasobów PWA oraz proxy dla ścieżek `/api/*`).
+  * **Backend:** Java + Spring Boot (Spring Web, Spring Security, Spring Data JPA, Hibernate, Maven).
+  * **Baza danych:** PostgreSQL (relacyjny model danych, integralność referencyjna, transakcje ACID, ograniczenia `EXCLUDE USING gist`).
+  * **Magazyn obiektowy:** MinIO S3 (kompatybilny z AWS S3 API, prywatne buckety zdjęć kart i usterek).
+  * **Serwer pocztowy:** Mailpit (lokalny serwer SMTP do powiadomień e-mail i testowania bez ryzyka spamu).
+  * **Konteneryzacja i orkiestracja:** Docker & Docker Compose (sieć mostkowa `pkampus-net`, wolumeny trwałe `pg_data` i `minio_data`).
 * **Ograniczenia zasobowe i budżetowe:**
   * Projekt realizowany jednoosobowo w ramach pracy inżynierskiej w horyzoncie czasowym jednego semestru akademickiego.
   * Budżet finansowy: 0 PLN (wykorzystanie wyłącznie technologii Open Source, narzędzi darmowych i lokalnego środowiska wdrożeniowego).
@@ -72,7 +74,7 @@
   * Czas zgłoszenia usterki oraz czas rezerwacji slotu pralki przez mieszkańca skrócony do poniżej 30 sekund z poziomu smartfona.
   * Brak jakichkolwiek podwójnych rezerwacji na ten sam slot czasowy dla danego zasobu (pralka / salka).
 * **Kryteria odbioru (Definition of Done pracy inżynierskiej):**
-  * Bezbłędne, w pełni zautomatyzowane uruchomienie całego stosu (React + Spring Boot + PostgreSQL + MinIO) za pomocą pojedynczego polecenia `docker compose up`.
+  * Bezbłędne, w pełni zautomatyzowane uruchomienie całego stosu (brama Nginx z PWA + Spring Boot + PostgreSQL + MinIO + Mailpit) za pomocą pojedynczego polecenia `docker compose up -d` (zgodnie z NFR-DEP-01).
   * Zestaw testów jednostkowych i integracyjnych backendu (JUnit 5, Mockito, Testcontainers lub baza testowa H2/PostgreSQL) weryfikujących poprawność reguł biznesowych (np. walidacja limitów rezerwacji, autoryzacja ról).
   * Przygotowanie bazy danych z przykładowymi danymi początkowymi (seed data dla 2 akademików, pokoi, użytkowników testowych i salek).
   * Kompletna dokumentacja techniczna, architektoniczna i użytkowa zawarta w pisemnej części pracy inżynierskiej oraz bezproblemowa demonstracja scenariusza działania przed komisją egzaminacyjną.
