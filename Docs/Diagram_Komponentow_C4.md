@@ -38,7 +38,14 @@ flowchart TB
 
 ## 2. Poziom 2: Diagram Kontenerów (C4 Containers)
 
-Diagram dekomponuje system PKampus na odrębnie uruchamialne i skalowalne kontenery w środowisku Docker Compose.
+Diagram dekomponuje system PKampus na odrębne jednostki oprogramowania i magazyny danych zgodnie z modelem C4. W architekturze systemu wyróżnia się:
+1. **Kontener kliencki (PWA SPA):** Aplikacja React / TypeScript wykonywana bezpośrednio w silniku przeglądarki internetowej lub jako aplikacja PWA zainstalowana na urządzeniu użytkownika (smartfon / komputer).
+2. **Kontenery serwerowe (Docker Host / VPS PK):** Zespół 5 kontenerów zarządzanych przez Docker Compose w odizolowanej sieci mostkowej `pkampus-net`:
+   - `pkampus-proxy` (Nginx Alpine) – brama wejściowa serwera, terminacja TLS 1.3, serwowanie skompilowanych plików statycznych PWA (`/usr/share/nginx/html` montowane z wolumenu `./frontend/dist`) oraz reverse proxy dla ścieżek `/api/*`,
+   - `pkampus-backend` (Spring Boot) – warstwa logiki biznesowej REST API,
+   - `pkampus-db` (PostgreSQL) – relacyjna baza danych,
+   - `pkampus-minio` (MinIO S3) – magazyn obiektowy na zdjęcia usterek i awatary,
+   - `pkampus-mailpit` (Mailpit) – lokalny serwer SMTP na potrzeby deweloperskie i testowe.
 
 ```mermaid
 %%{init: {'flowchart': {'curve': 'stepBefore'}}}%%
@@ -47,27 +54,30 @@ flowchart LR
     classDef containerStyle fill:#2b6cb0,stroke:#2c5282,stroke-width:2px,color:#fff;
     classDef dbStyle fill:#2c5282,stroke:#1a365d,stroke-width:2px,color:#fff;
 
-    USER["Użytkownik<br/>(Student / Portier / ADS)"]:::userStyle
+    USER["Użytkownik<br/>(Student / Portier / ADS / AOS)"]:::userStyle
+
+    subgraph CLIENT["Urządzenie Klienckie (Przeglądarka WWW / Smartfon)"]
+        SPA["Frontend SPA / PWA<br/>[Kontener C4: React / TypeScript PWA]<br/>Interfejs Mobile-First, Service Worker, Camera API, Client-side Routing"]:::containerStyle
+    end
 
     subgraph Host ["Węzeł Wdrożeniowy (Docker Host / VPS PK)"]
         direction TB
 
-        PROXY["Brama Nginx (Reverse Proxy)<br/>[Kontener: Nginx / Alpine]<br/>Terminacja TLS 1.3, nagłówki bezpieczeństwa, serwowanie SPA"]:::containerStyle
+        PROXY["Brama Nginx (Reverse Proxy & Serwer Statyczny)<br/>[Kontener Docker: pkampus-proxy / Nginx Alpine]<br/>Terminacja TLS 1.3, serwowanie plików PWA, proxy /api/*"]:::containerStyle
 
-        SPA["Frontend SPA / PWA<br/>[React / TypeScript]<br/>Interfejs Mobile-First, Service Worker, Camera API"]:::containerStyle
+        API["Backend REST API<br/>[Kontener Docker: pkampus-backend / Spring Boot]<br/>Logika biznesowa, autoryzacja RBAC, transakcje JPA, Scheduler"]:::containerStyle
 
-        API["Backend REST API<br/>[Java / Spring Boot]<br/>Logika biznesowa, autoryzacja RBAC, transakcje JPA, Scheduler"]:::containerStyle
+        DB[("Baza Danych PostgreSQL<br/>[Kontener Docker: pkampus-db / PostgreSQL]<br/>Trwałe przechowywanie encji, unikalne indeksy, GiST anti-overlap")]:::dbStyle
 
-        DB[("Baza Danych PostgreSQL<br/>[Kontener: PostgreSQL]<br/>Trwałe przechowywanie encji, unikalne indeksy, GiST anti-overlap")]:::dbStyle
+        MINIO[("Pamięć Obiektowa MinIO<br/>[Kontener Docker: pkampus-minio / MinIO S3]<br/>Buckety: pkampus-issues, pkampus-avatars")]:::dbStyle
 
-        MINIO[("Pamięć Obiektowa MinIO<br/>[Kontener: MinIO S3]<br/>Buckety: pkampus-issues, pkampus-avatars")]:::dbStyle
-
-        MAIL["Usługa Pocztowa Mailpit<br/>[Kontener: Mailpit]<br/>Lokalny serwer SMTP do testów i dev"]:::containerStyle
+        MAIL["Usługa Pocztowa Mailpit<br/>[Kontener Docker: pkampus-mailpit / Mailpit]<br/>Lokalny serwer SMTP do testów i dev"]:::containerStyle
     end
 
-    USER -->|"HTTPS / TLS 1.3 / Port 443"| PROXY
-    PROXY -->|"Pliki statyczne HTML/JS/CSS"| SPA
-    PROXY -->|"Reverse Proxy /api/*"| API
+    USER -->|"Interakcja z interfejsem użytkownika"| SPA
+    SPA -->|"Pobieranie powłoki PWA (HTML/JS/CSS)<br/>HTTPS / Port 443"| PROXY
+    SPA -->|"Wywołania REST API (/api/*)<br/>HTTPS / Port 443 [JSON, Bearer JWT]"| PROXY
+    PROXY -->|"Reverse Proxy /api/*<br/>HTTP / Port 8080 - sieć pkampus-net"| API
 
     API -->|"JDBC / Port 5432 - sieć pkampus-net"| DB
     API -->|"S3 API / Port 9000 - sieć pkampus-net"| MINIO
@@ -78,7 +88,7 @@ flowchart LR
 
 ## 3. Poziom 3: Diagram Komponentów Backendowych (C4 Components - Spring Boot)
 
-Diagram szczegółowy prezentuje architekturę warstwową wewnątrz kontenera aplikacji Spring Boot API (`pkampus-api`).
+Diagram szczegółowy prezentuje architekturę warstwową wewnątrz kontenera aplikacji Spring Boot API (`pkampus-backend`).
 
 ```mermaid
 %%{init: {'flowchart': {'curve': 'stepBefore'}}}%%
