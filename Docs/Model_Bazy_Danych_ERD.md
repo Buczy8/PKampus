@@ -30,7 +30,7 @@ Diagram modeluje strukturę budynków, pokoje, konta użytkowników oraz mechani
 flowchart LR
     classDef tableStyle fill:#ffffff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
 
-    DORMITORIES["<b>dormitories</b><br/>----------------------------------<br/>PK id: UUID<br/>UK code: VARCHAR(10)<br/>name: VARCHAR(100)<br/>address: VARCHAR(255)<br/>floors_count: INT<br/>laundry_opening_time: TIME<br/>laundry_closing_time: TIME<br/>laundry_slot_duration_min: INT"]:::tableStyle
+    DORMITORIES["<b>dormitories</b><br/>----------------------------------<br/>PK id: UUID<br/>UK code: VARCHAR(10)<br/>name: VARCHAR(100)<br/>address: VARCHAR(255)<br/>floors_count: INT<br/>laundry_opening_time: TIME<br/>laundry_closing_time: TIME<br/>laundry_slot_duration_minutes: INT"]:::tableStyle
 
     ROOMS["<b>rooms</b><br/>----------------------------------<br/>PK id: UUID<br/>FK dormitory_id: UUID<br/>room_number: VARCHAR(10)<br/>floor: INT<br/>capacity: INT"]:::tableStyle
 
@@ -39,7 +39,7 @@ flowchart LR
     ROOM_ASSIGNMENTS["<b>room_assignments</b><br/>----------------------------------<br/>PK id: UUID<br/>FK user_id: UUID<br/>FK room_id: UUID<br/>academic_year: VARCHAR(9)<br/>is_active: BOOLEAN<br/>check_in_date: DATE<br/>check_out_date: DATE"]:::tableStyle
 
     DORMITORIES -->|1 : N| ROOMS
-    DORMITORIES -->|1 : 0..1| USERS
+    DORMITORIES -->|1 : N| USERS
     ROOMS -->|1 : N| ROOM_ASSIGNMENTS
     USERS -->|1 : N| ROOM_ASSIGNMENTS
 ```
@@ -255,7 +255,7 @@ Rezerwacje slotów pralki z zabezpieczeniem współbieżności.
 | `user_id` | `UUID` | `FK -> users(id), NOT NULL` | Rezerwujący mieszkaniec |
 | `start_time` | `TIMESTAMPTZ` | `NOT NULL` | Czas rozpoczęcia slotu |
 | `end_time` | `TIMESTAMPTZ` | `NOT NULL` | Czas zakończenia slotu |
-| `status` | `VARCHAR(30)` | `NOT NULL, CHECK (status IN ('CONFIRMED', 'KEY_ISSUED', 'COMPLETED', 'CANCELLED_USER', 'AUTO_CANCELLED_15MIN'))` | Status cyklu życia rezerwacji |
+| `status` | `VARCHAR(35)` | `NOT NULL, CHECK (status IN ('CONFIRMED', 'KEY_ISSUED', 'COMPLETED', 'CANCELLED_USER', 'AUTO_CANCELLED_15MIN', 'CANCELLED_MACHINE_OUT_OF_ORDER'))` | Status cyklu życia rezerwacji |
 | `key_issued_at` | `TIMESTAMPTZ` | `NULLABLE` | Czas fizycznego wydania klucza |
 | `key_returned_at` | `TIMESTAMPTZ` | `NULLABLE` | Czas zwrotu klucza na portiernię |
 | `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu złożenia rezerwacji |
@@ -318,10 +318,12 @@ Cyfrowy zeszyt napraw na portierni.
 | `category` | `VARCHAR(30)` | `NOT NULL, CHECK (category IN ('PLUMBING', 'ELECTRICAL', 'FURNITURE', 'LOCKSMITH', 'OTHER'))` | Branża awarii |
 | `urgency` | `VARCHAR(20)` | `NOT NULL, CHECK (urgency IN ('NORMAL', 'URGENT'))` | Stopień pilności |
 | `description` | `TEXT` | `NOT NULL` | Szczegółowy opis usterki |
-| `status` | `VARCHAR(30)` | `NOT NULL, CHECK (status IN ('NOWE', 'PRZEKAZANE_KONSERWATOROWI', 'W_TRAKCIE_NAPRAWY', 'NAPRAWIONE', 'ODRZUCONE', 'WYMAGA_CZESCI'))` | Status realizacji |
+| `status` | `VARCHAR(30)` | `NOT NULL, CHECK (status IN ('NEW', 'ASSIGNED_TO_MAINTENANCE', 'IN_PROGRESS', 'RESOLVED', 'REJECTED', 'PARTS_REQUIRED'))` | Status realizacji (w UI: Nowe, Przekazane konserwatorowi, W trakcie naprawy, Naprawione, Odrzucone, Wymaga części) |
 | `staff_notes` | `TEXT` | `NULLABLE` | Notatka portiera / konserwatora dla studenta |
 | `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data zgłoszenia |
 | `updated_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data aktualizacji |
+
+*Więz integralności lokalizacji:* `CONSTRAINT chk_issue_location CHECK ((room_id IS NOT NULL AND common_area_name IS NULL) OR (room_id IS NULL AND common_area_name IS NOT NULL))` – gwarantuje, że usterka dotyczy dokładnie jednego miejsca (albo pokoju, albo części wspólnej).
 
 ---
 
@@ -385,7 +387,7 @@ Ogłoszenia techniczno-organizacyjne (wymiana pościeli, przerwa w dostawie wody
 | `title` | `VARCHAR(200)` | `NOT NULL` | Nagłówek komunikatu |
 | `description` | `TEXT` | `NOT NULL` | Szczegóły ogłoszenia |
 | `category` | `VARCHAR(30)` | `NOT NULL, CHECK (category IN ('BED_LINEN', 'TECHNICAL_OUTAGE', 'ADMIN_NOTICE', 'STUDENT_EVENT'))` | Typ komunikatu |
-| `priority` | `VARCHAR(20)` | `NOT NULL, CHECK (priority IN ('INFO', 'WARNING', 'CRITICAL_ALERT'))` | Waga alertu |
+| `priority` | `VARCHAR(20)` | `NOT NULL, CHECK (priority IN ('INFO', 'WARNING', 'CRITICAL'))` | Waga alertu |
 | `is_pinned` | `BOOLEAN` | `NOT NULL, DEFAULT FALSE` | Czy wyświetlać jako czerwony baner u góry |
 | `event_date` | `TIMESTAMPTZ` | `NOT NULL` | Data rozpoczęcia / termin wymiany |
 | `end_date` | `TIMESTAMPTZ` | `NULLABLE` | Data zakończenia akcji |
@@ -492,7 +494,7 @@ CREATE TABLE laundry_bookings (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     start_time TIMESTAMPTZ NOT NULL,
     end_time TIMESTAMPTZ NOT NULL,
-    status VARCHAR(30) NOT NULL DEFAULT 'CONFIRMED' CHECK (status IN ('CONFIRMED', 'KEY_ISSUED', 'COMPLETED', 'CANCELLED_USER', 'AUTO_CANCELLED_15MIN')),
+    status VARCHAR(35) NOT NULL DEFAULT 'CONFIRMED' CHECK (status IN ('CONFIRMED', 'KEY_ISSUED', 'COMPLETED', 'CANCELLED_USER', 'AUTO_CANCELLED_15MIN', 'CANCELLED_MACHINE_OUT_OF_ORDER')),
     key_issued_at TIMESTAMPTZ,
     key_returned_at TIMESTAMPTZ,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -547,10 +549,14 @@ CREATE TABLE issues (
     category VARCHAR(30) NOT NULL CHECK (category IN ('PLUMBING', 'ELECTRICAL', 'FURNITURE', 'LOCKSMITH', 'OTHER')),
     urgency VARCHAR(20) NOT NULL DEFAULT 'NORMAL' CHECK (urgency IN ('NORMAL', 'URGENT')),
     description TEXT NOT NULL,
-    status VARCHAR(30) NOT NULL DEFAULT 'NOWE' CHECK (status IN ('NOWE', 'PRZEKAZANE_KONSERWATOROWI', 'W_TRAKCIE_NAPRAWY', 'NAPRAWIONE', 'ODRZUCONE', 'WYMAGA_CZESCI')),
+    status VARCHAR(30) NOT NULL DEFAULT 'NEW' CHECK (status IN ('NEW', 'ASSIGNED_TO_MAINTENANCE', 'IN_PROGRESS', 'RESOLVED', 'REJECTED', 'PARTS_REQUIRED')),
     staff_notes TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_issue_location CHECK (
+        (room_id IS NOT NULL AND common_area_name IS NULL) OR
+        (room_id IS NULL AND common_area_name IS NOT NULL)
+    )
 );
 
 -- 10. TABELA ZDJĘĆ USTEREK (MINIO S3)
@@ -598,7 +604,7 @@ CREATE TABLE dorm_events (
     title VARCHAR(200) NOT NULL,
     description TEXT NOT NULL,
     category VARCHAR(30) NOT NULL CHECK (category IN ('BED_LINEN', 'TECHNICAL_OUTAGE', 'ADMIN_NOTICE', 'STUDENT_EVENT')),
-    priority VARCHAR(20) NOT NULL DEFAULT 'INFO' CHECK (priority IN ('INFO', 'WARNING', 'CRITICAL_ALERT')),
+    priority VARCHAR(20) NOT NULL DEFAULT 'INFO' CHECK (priority IN ('INFO', 'WARNING', 'CRITICAL')),
     is_pinned BOOLEAN NOT NULL DEFAULT FALSE,
     event_date TIMESTAMPTZ NOT NULL,
     end_date TIMESTAMPTZ,

@@ -6,14 +6,14 @@
 
 Zgodnie z zasadami modelowania dynamiki systemów wielowarstwowych (Multi-tier Architecture / MVC):
 1. **Warstwy i Linie Życia (Lifelines):**
-   * **Aktor:** Reprezentuje użytkownika zewnętrznego systemu (`👤 Mieszkaniec`, `👤 Recepcjonista`, `👤 Administrator DS`) lub proces systemowy (`⏱️ System / Scheduler`).
-   * **Frontend (React UI):** Warstwa prezentacji SPA (komponenty React, stan lokalny, obsługa formularzy, żądania HTTP Axios/Fetch).
+   * **Aktor:** Reprezentuje użytkownika zewnętrznego systemu (`Mieszkaniec`, `Recepcjonista`, `Administrator DS`) lub proces systemowy (`System / Scheduler`).
+   * **Frontend (React PWA):** Warstwa prezentacji SPA/PWA (komponenty React, stan lokalny, obsługa formularzy, żądania HTTP Axios/Fetch).
    * **Kontroler REST (Spring Boot Controller):** Punkt wejściowy API (walidacja DTO `@Valid`, autoryzacja ról `@PreAuthorize`, mapowanie kodów HTTP).
    * **Serwis Biznesowy (Domain / Application Service):** Warstwa logiki biznesowej i zarządzania transakcjami (`@Transactional`, reguły PK, integralność).
    * **Baza Danych (Spring Data JPA / PostgreSQL):** Warstwa utrwalania danych, blokady transakcyjne, ograniczenia unikalności (`UNIQUE constraints`).
    * **Komponenty Zewnętrzne:** Usługi wyspecjalizowane w środowisku kontenerowym Docker Compose:
-     * `✉️ Mailpit (SMTP)` – asynchroniczna wysyłka powiadomień e-mail,
-     * `🪣 MinIO (S3)` – magazyn obiektowy na pliki multimedialne (zdjęcia usterek, awatary).
+     * `Mailpit (SMTP)` – asynchroniczna wysyłka powiadomień e-mail,
+     * `MinIO (S3)` – magazyn obiektowy na pliki multimedialne (zdjęcia usterek, awatary).
 2. **Semantyka Komunikatów:**
    * `->>` : Wywołanie synchroniczne (żądanie HTTP, wywołanie metody wewnątrzprocesowej).
    * `-)` : Wywołanie asynchroniczne (np. zadanie w tle `@Async`, delegacja do wątku pocztowego).
@@ -29,18 +29,18 @@ Zgodnie z zasadami modelowania dynamiki systemów wielowarstwowych (Multi-tier A
 
 ## 2. Sekwencja 1: Dwuetapowa Rejestracja i Aktywacja Meldunku (AUTH & CARD)
 
-Proces obejmuje rejestrację nowego mieszkańca, weryfikację adresu e-mail, przejście konta w stan oczekiwania na potwierdzenie meldunku (`PENDING_APPROVAL`) oraz zatwierdzenie tożsamości przez Administratora DS.
+Proces obejmuje rejestrację nowego mieszkańca, weryfikację adresu e-mail, przejście konta w stan oczekiwania na potwierdzenie meldunku (`PENDING_APPROVAL`) oraz zatwierdzenie tożsamości przez Administratora DS wraz z utworzeniem meldunku w `room_assignments`.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor M as 👤 Mieszkaniec
-    participant UI as 🖥️ Frontend (React)
-    participant CTL as ⚙️ AuthController
-    participant SVC as 🧠 AuthService
-    participant DB as 🗄️ PostgreSQL (JPA)
-    participant MAIL as ✉️ Mailpit (SMTP)
-    actor ADS as 👤 Administrator DS
+    actor M as Mieszkaniec
+    participant UI as Frontend (React PWA)
+    participant CTL as AuthController
+    participant SVC as AuthService
+    participant DB as PostgreSQL (JPA)
+    participant MAIL as Mailpit (SMTP)
+    actor ADS as Administrator DS
 
     M->>UI: Wypełnienie formularza rejestracji (dane, pokój, zdjęcie)
     activate UI
@@ -109,9 +109,13 @@ sequenceDiagram
     activate CTL
     CTL->>SVC: activateResidentAccount(id)
     activate SVC
-    SVC->>DB: update Status = ACTIVE, Aktywacja Karty Mieszkańca
+    SVC->>DB: update Status = ACTIVE
     activate DB
     DB-->>SVC: Zapisano status ACTIVE
+    deactivate DB
+    SVC->>DB: INSERT INTO room_assignments (user_id, room_id, academic_year, is_active=TRUE, check_in_date=NOW())
+    activate DB
+    DB-->>SVC: Utworzono aktywny meldunek mieszkańca
     deactivate DB
     SVC-)MAIL: sendAccountActivatedNotification(user.email)
     SVC-->>CTL: Konto aktywowane
@@ -131,11 +135,11 @@ Proces prezentuje rezerwację slotu czasowego na konkretną pralkę. Zabezpiecza
 ```mermaid
 sequenceDiagram
     autonumber
-    actor M as 👤 Mieszkaniec
-    participant UI as 🖥️ Frontend (React)
-    participant CTL as ⚙️ LaundryController
-    participant SVC as 🧠 LaundryBookingService
-    participant DB as 🗄️ PostgreSQL (JPA / Transakcja)
+    actor M as Mieszkaniec
+    participant UI as Frontend (React PWA)
+    participant CTL as LaundryController
+    participant SVC as LaundryBookingService
+    participant DB as PostgreSQL (JPA / Transakcja)
 
     M->>UI: Wybór pralki i slotu czasowego w siatce grafiku
     activate UI
@@ -189,13 +193,13 @@ Zgodnie z §2 ust. 5 Regulaminu Osiedla Studenckiego, mieszkaniec musi odebrać 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor M as 👤 Mieszkaniec
-    actor P as 👤 Recepcjonista (Portier)
-    participant UI as 🖥️ Pulpit Portierni (React)
-    participant CTL as ⚙️ KeyManagementController
-    participant SVC as 🧠 KeyService
-    participant DB as 🗄️ PostgreSQL (JPA)
-    participant SCH as ⏱️ Background Scheduler
+    actor M as Mieszkaniec
+    actor P as Recepcjonista (Portier)
+    participant UI as Pulpit Portierni (React)
+    participant CTL as KeyManagementController
+    participant SVC as KeyService
+    participant DB as PostgreSQL (JPA)
+    participant SCH as Background Scheduler
 
     %% Scenariusz A: Pomyślne wydanie klucza
     Note over M, P: SCENARIUSZ A: Mieszkaniec przychodzi na czas (< 15 min)
@@ -208,7 +212,7 @@ sequenceDiagram
     activate CTL
     CTL->>SVC: issueKey(bookingId, receptionistId)
     activate SVC
-    SVC->>DB: update Booking SET status='KEY_ISSUED', keyCollectedAt=NOW()
+    SVC->>DB: update Booking SET status='KEY_ISSUED', key_issued_at=NOW()
     activate DB
     DB-->>SVC: Zaktualizowano rezerwację
     deactivate DB
@@ -231,7 +235,7 @@ sequenceDiagram
     deactivate DB
 
     loop Dla każdej porzuconej rezerwacji
-        SVC->>DB: update Booking SET status='AUTO_CANCELLED_NO_SHOW'
+        SVC->>DB: update Booking SET status='AUTO_CANCELLED_15MIN'
         activate DB
         DB-->>SVC: Slot uwolniony
         deactivate DB
@@ -263,13 +267,13 @@ Proces przedstawia zgłoszenie usterki technicznej przez mieszkańca z dołącze
 ```mermaid
 sequenceDiagram
     autonumber
-    actor M as 👤 Mieszkaniec
-    participant UI as 🖥️ Frontend (React Mobile)
-    participant CTL as ⚙️ IssueController
-    participant SVC as 🧠 IssueService
-    participant S3 as 🪣 MinIO S3 Storage
-    participant DB as 🗄️ PostgreSQL (JPA)
-    actor P as 👤 Recepcjonista (Portier)
+    actor M as Mieszkaniec
+    participant UI as Frontend (React PWA)
+    participant CTL as IssueController
+    participant SVC as IssueService
+    participant S3 as MinIO S3 Storage
+    participant DB as PostgreSQL (JPA)
+    actor P as Recepcjonista (Portier)
 
     M->>UI: Wybór lokalizacji, opis usterki, załączenie zdjęcia z aparatu
     activate UI
@@ -285,21 +289,26 @@ sequenceDiagram
         activate SVC
 
         %% Przesyłanie do MinIO
-        SVC->>S3: putObject(bucket="issues", objectKey=UUID.jpg, stream)
+        SVC->>S3: putObject(bucket="pkampus-issues", objectKey=UUID.jpg, stream)
         activate S3
         S3-->>SVC: 200 OK (etag, objectUrl)
         deactivate S3
 
-        %% Zapis w bazie
-        SVC->>DB: INSERT INTO issues (title, room, photoUrl, status='NOWE')
+        %% Zapis w bazie: encja zgłoszenia oraz załącznik 1:N
+        SVC->>DB: INSERT INTO issues (reporter_id, dormitory_id, room_id, category, urgency, description, status='NEW')
         activate DB
         DB-->>SVC: Zapisana encja Issue z wygenerowanym ID
+        deactivate DB
+
+        SVC->>DB: INSERT INTO issue_photos (issue_id, photo_url, file_name, file_size_bytes)
+        activate DB
+        DB-->>SVC: Zapisano rekord załącznika fotograficznego
         deactivate DB
 
         SVC-->>CTL: IssueDetailsDTO
         deactivate SVC
         CTL-->>UI: 201 Created (Zgłoszenie przyjęte)
-        UI-->>M: Informacja o numerze zgłoszenia i statusie „NOWE”
+        UI-->>M: Informacja o numerze zgłoszenia i statusie „NEW” (Nowe)
     end
     deactivate CTL
     deactivate UI
@@ -309,7 +318,7 @@ sequenceDiagram
     activate UI
     UI->>CTL: GET /api/issues/active
     activate CTL
-    CTL->>DB: findAllByStatusIn('NOWE', 'PRZEKAZANE')
+    CTL->>DB: findAllByStatusIn('NEW', 'ASSIGNED_TO_MAINTENANCE')
     activate DB
     DB-->>CTL: Lista awarii z miniaturami zdjęć MinIO
     deactivate DB
@@ -317,13 +326,13 @@ sequenceDiagram
     deactivate CTL
     UI-->>P: Prezentacja rejestru spraw
 
-    P->>UI: Zmiana statusu na „PRZEKAZANE_KONSERWATOROWI” + notatka
+    P->>UI: Zmiana statusu na „ASSIGNED_TO_MAINTENANCE” + notatka
     activate UI
     UI->>CTL: PATCH /api/issues/{id}/status (status, komentarz)
     activate CTL
     CTL->>SVC: updateIssueStatus(id, newStatus, comment)
     activate SVC
-    SVC->>DB: UPDATE issues SET status='PRZEKAZANE_KONSERWATOROWI'
+    SVC->>DB: UPDATE issues SET status='ASSIGNED_TO_MAINTENANCE', staff_notes=comment
     activate DB
     DB-->>SVC: Zapisano zmianę statusu
     deactivate DB
@@ -344,12 +353,12 @@ Proces weryfikuje uprawnienia mieszkańca do rezerwacji salki tematycznej (cicha
 ```mermaid
 sequenceDiagram
     autonumber
-    actor M as 👤 Mieszkaniec (Organizator)
-    participant UI as 🖥️ Frontend (React)
-    participant CTL as ⚙️ RoomBookingController
-    participant SVC as 🧠 RoomBookingService
-    participant SANCT as 🛡️ SanctionService
-    participant DB as 🗄️ PostgreSQL (JPA)
+    actor M as Mieszkaniec (Organizator)
+    participant UI as Frontend (React PWA)
+    participant CTL as RoomBookingController
+    participant SVC as RoomBookingService
+    participant SANCT as SanctionService
+    participant DB as PostgreSQL (JPA)
 
     M->>UI: Wybór salki (np. Chillout), przedziału godzin i liczby osób
     activate UI
@@ -381,7 +390,7 @@ sequenceDiagram
             CTL-->>UI: 400 Bad Request (Niedozwolony przedział godzinowy dla typu salki)
             UI-->>M: Komunikat błędu: Maksymalny czas to 4h
         else [Parametry zgodne z regulaminem i brak kolizji slotu]
-            SVC->>DB: INSERT INTO room_bookings (userId, roomId, status='CONFIRMED', organizerTerms=TRUE)
+            SVC->>DB: INSERT INTO room_bookings (user_id, room_id, status='CONFIRMED', terms_accepted=TRUE)
             activate DB
             DB-->>SVC: Utworzono rezerwację salki
             deactivate DB
@@ -404,15 +413,15 @@ Proces obrazuje publikację ważnego komunikatu technicznego lub organizacyjnego
 ```mermaid
 sequenceDiagram
     autonumber
-    actor P as 👤 Recepcjonista / ADS
-    participant UI_P as 🖥️ Panel Personelu (React)
-    participant CTL as ⚙️ EventController
-    participant SVC as 🧠 EventService
-    participant DB as 🗄️ PostgreSQL (JPA)
-    participant UI_M as 📱 Frontend Mieszkańca (Mobile)
-    actor M as 👤 Mieszkaniec
+    actor P as Recepcjonista / ADS
+    participant UI_P as Panel Personelu (React)
+    participant CTL as EventController
+    participant SVC as EventService
+    participant DB as PostgreSQL (JPA)
+    participant UI_M as Frontend Mieszkańca (React PWA)
+    actor M as Mieszkaniec
 
-    P->>UI_P: Wprowadzenie komunikatu (Tytuł: "Wymiana pościeli", Priorytet: ALERT_CRITICAL, Data)
+    P->>UI_P: Wprowadzenie komunikatu (Tytuł: "Wymiana pościeli", Priorytet: CRITICAL, Data)
     activate UI_P
     UI_P->>CTL: POST /api/events/announcements (CreateEventDTO)
     activate CTL
@@ -449,7 +458,80 @@ sequenceDiagram
 
 ---
 
-### 8. Podsumowanie Pokrycia Dynamiki
+---
+
+## 8. Sekwencja 7: Awaryjne Wyłączenie Pralki z Eksploatacji i Kaskadowe Anulowanie Rezerwacji (LAUNDRY & ISSUES)
+
+Proces przedstawia zgłoszenie awarii pralki przez dyżurnego pracownika recepcji (lub ADS), jej natychmiastowe wyłączenie z eksploatacji w bazie danych (`OUT_OF_ORDER`), kaskadowe anulowanie wszystkich zaplanowanych rezerwacji ze statusem `CANCELLED_MACHINE_OUT_OF_ORDER`, asynchroniczną wysyłkę powiadomień e-mail do poszkodowanych studentów oraz automatyczne wygenerowanie powiązanego zgłoszenia usterki w rejestrze warsztatu (`issues`).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor ACT as Portier / Admin DS
+    participant UI as Frontend (React Desktop/PWA)
+    participant CTL as LaundryController
+    participant SVC as LaundryService
+    participant ISS as IssueService
+    participant DB as PostgreSQL (JPA)
+    participant MAIL as Mailpit (SMTP)
+
+    ACT->>UI: Wybór pralki i kliknięcie „Zgłoś awarię / Wyłącz pralkę” (powód: np. Wyciek wody)
+    activate UI
+    UI->>CTL: POST /api/laundry/machines/{id}/breakdown (MachineBreakdownDTO)
+    activate CTL
+
+    CTL->>SVC: reportMachineBreakdown(machineId, dto, reporterId)
+    activate SVC
+
+    %% Rozpoczęcie transakcji bazodanowej
+    rect rgb(240, 245, 255)
+        note over SVC,DB: Transakcja biznesowa (@Transactional)
+        
+        %% 1. Zmiana statusu pralki
+        SVC->>DB: UPDATE laundry_machines SET status='OUT_OF_ORDER', notes=dto.reason WHERE id=machineId
+        activate DB
+        DB-->>SVC: Zaktualizowano stan pralki (OUT_OF_ORDER)
+        deactivate DB
+
+        %% 2. Pobranie przyszłych rezerwacji
+        SVC->>DB: findFutureConfirmedBookings(machineId, NOW())
+        activate DB
+        DB-->>SVC: Lista aktywnych rezerwacji do anulowania (List<Booking>)
+        deactivate DB
+
+        %% 3. Kaskadowe anulowanie rezerwacji
+        SVC->>DB: UPDATE laundry_bookings SET status='CANCELLED_MACHINE_OUT_OF_ORDER' WHERE machine_id=machineId AND start_time >= NOW() AND status='CONFIRMED'
+        activate DB
+        DB-->>SVC: Zaktualizowano rezerwacje
+        deactivate DB
+
+        %% 4. Automatyczne utworzenie zgłoszenia w module ISSUES
+        SVC->>ISS: createAutomatedBreakdownIssue(machine, dto.reason, reporterId)
+        activate ISS
+        ISS->>DB: INSERT INTO issues (reporter_id, dormitory_id, common_area_name, category='OTHER', urgency='URGENT', description='Awaria pralki...', status='NEW')
+        activate DB
+        DB-->>ISS: Zapisano usterkę (issue_id)
+        deactivate DB
+        ISS-->>SVC: Utworzono zgłoszenie serwisowe
+        deactivate ISS
+    end
+
+    %% Asynchroniczna wysyłka powiadomień e-mail
+    loop Dla każdego poszkodowanego mieszkańca
+        SVC-)MAIL: sendBreakdownNotificationEmail(student.email, machine.identifier, booking.startTime)
+    end
+
+    SVC-->>CTL: BreakdownReportResponseDTO(machineId, cancelledCount, issueId)
+    deactivate SVC
+    CTL-->>UI: 200 OK (Podsumowanie wyłączenia zasobu)
+    deactivate CTL
+    UI-->>ACT: Wyświetlenie potwierdzenia: wyłączono pralkę, anulowano rezerwacje, zarejestrowano usterkę
+    deactivate UI
+```
+
+---
+
+### 9. Podsumowanie Pokrycia Dynamiki
 
 Zaprojektowane diagramy sekwencji pokrywają pełne spektrum zachowań dynamicznych systemu PKampus:
 1. **Asynchroniczność i integracja e-mail:** Zastosowanie kolejki zadań asynchronicznych w Spring Boot dla Mailpit.
@@ -457,3 +539,4 @@ Zaprojektowane diagramy sekwencji pokrywają pełne spektrum zachowań dynamiczn
 3. **Automatyzacja procesów w tle:** Dedykowany Spring Scheduler realizujący regułę 15 minut (§2 ust. 5 Regulaminu).
 4. **Zarządzanie mediami:** Bezpośrednia integracja backendu z magazynem obiektowym MinIO (S3) przy obsłudze usterek.
 5. **Egzekwowanie prawa wewnętrznego PK:** Walidacja czarnej listy kar dyscyplinarnych (§6 ust. 2) przed dopuszczeniem do zasobów.
+6. **Kaskadowa reakcja na awarie zasobów:** Automatyczne wyłączenie sprzętu, anulowanie rezerwacji, dyspozycja naprawy i powiadomienia mieszkańców.

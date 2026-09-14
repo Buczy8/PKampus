@@ -21,7 +21,7 @@ flowchart LR
     classDef staffStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
     classDef moduleStyle fill:#edf2f7,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
 
-    Student["👤 Mieszkaniec<br/>(Student)"]:::studentStyle
+    Student["Mieszkaniec<br/>(Student)"]:::studentStyle
 
     subgraph Granica_Systemu ["SYSTEM PKAMPUS - PODSYSTEMY"]
         direction TB
@@ -32,9 +32,9 @@ flowchart LR
         M5["Moduł 5: ADMIN<br/>(Konfiguracja i Kary)"]:::moduleStyle
     end
 
-    Portier["👤 Recepcjonista<br/>(Portier)"]:::staffStyle
-    AdminDS["👤 Administrator DS<br/>(ADS)"]:::staffStyle
-    SuperAdmin["👤 Superadmin<br/>(AOS)"]:::staffStyle
+    Portier["Recepcjonista<br/>(Portier)"]:::staffStyle
+    AdminDS["Administrator DS<br/>(ADS)"]:::staffStyle
+    SuperAdmin["Superadmin<br/>(AOS)"]:::staffStyle
 
     %% Relacje Mieszkańca (lewa strona)
     Student --- M1
@@ -49,6 +49,7 @@ flowchart LR
     M4 --- Portier
 
     %% Relacje Administracji (prawa strona - nadzór i konfiguracja)
+    M2 --- AdminDS
     M4 --- AdminDS
     M5 --- AdminDS
     M5 --- SuperAdmin
@@ -58,10 +59,10 @@ flowchart LR
 
 | Aktor | M1: AUTH & CARD | M2: LAUNDRY & ROOMS | M3: ISSUES | M4: BOARD & EVENTS | M5: ADMIN |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Mieszkaniec (Student)** | ✅ Dostęp (Karta, profil) | ✅ Dostęp (Rezerwacje) | ✅ Dostęp (Zgłoszenia) | ✅ Dostęp (Tablica, kalendarz) | ❌ Brak dostępu |
-| **Recepcjonista (Portier)** | ✅ Dostęp (Weryfikacja karty) | ✅ Dostęp (Wydawanie kluczy) | ✅ Dostęp (Rejestr napraw) | ✅ Dostęp (Komunikaty dyżurne, pościel) | ❌ Brak dostępu |
-| **Administrator DS (ADS)** | ✅ Weryfikacja meldunku | ❌ Brak operacji | ❌ Brak operacji | ✅ Komunikaty i moderacja | ✅ Konfiguracja i kary |
-| **Superadmin (AOS)** | ❌ Brak operacji | ❌ Brak operacji | ❌ Brak operacji | ❌ Brak operacji | ✅ Zarządzanie osiedlem |
+| **Mieszkaniec (Student)** | Dostęp (Karta, profil) | Dostęp (Rezerwacje) | Dostęp (Zgłoszenia) | Dostęp (Tablica, kalendarz) | Brak dostępu |
+| **Recepcjonista (Portier)** | Dostęp (Weryfikacja karty) | Dostęp (Klucze, blokada awaryjna) | Dostęp (Rejestr napraw) | Dostęp (Komunikaty dyżurne, pościel) | Brak dostępu |
+| **Administrator DS (ADS)** | Weryfikacja meldunku | Wyłączenie awaryjne (Nadzór) | Brak operacji | Komunikaty i moderacja | Konfiguracja i kary |
+| **Superadmin (AOS)** | Brak operacji | Brak operacji | Brak operacji | Brak operacji | Zarządzanie osiedlem |
 
 ---
 
@@ -73,7 +74,7 @@ flowchart LR
     classDef actorStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
     classDef ucStyle fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
 
-    Student["👤 Mieszkaniec"]:::actorStyle
+    Student["Mieszkaniec"]:::actorStyle
 
     subgraph System_Auth ["SYSTEM PKAMPUS: AUTH & CARD"]
         direction TB
@@ -85,8 +86,8 @@ flowchart LR
         UC_AUTH_05(["UC-AUTH-05: Weryfikacja wizualna karty"]):::ucStyle
     end
 
-    AdminDS["👤 Administrator DS"]:::actorStyle
-    Portier["👤 Recepcjonista"]:::actorStyle
+    AdminDS["Administrator DS"]:::actorStyle
+    Portier["Recepcjonista"]:::actorStyle
 
     Student --- UC_AUTH_01
     Student --- UC_AUTH_02
@@ -107,7 +108,7 @@ flowchart LR
     classDef actorStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
     classDef ucStyle fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
 
-    Student["👤 Mieszkaniec"]:::actorStyle
+    Student["Mieszkaniec"]:::actorStyle
 
     subgraph System_Laundry ["SYSTEM PKAMPUS: REZERWACJA PRALNI"]
         direction TB
@@ -115,11 +116,13 @@ flowchart LR
         UC_LAUND_02(["UC-RES-02: Rezerwacja slotu pralki"]):::ucStyle
         UC_LAUND_03(["UC-RES-04a: Anulowanie rezerwacji pralki"]):::ucStyle
         UC_LAUND_04(["UC-RES-05a: Wydanie i zwrot klucza pralni"]):::ucStyle
-        UC_LAUND_05(["UC-RES-06: Zwolnienie po 15 min spóźnienia"]):::ucStyle
+        UC_LAUND_05(["UC-SYS-01: Automatyczne zwolnienie slotu (15 min)"]):::ucStyle
+        UC_LAUND_06(["UC-LAUND-06: Wyłączenie pralki z eksploatacji"]):::ucStyle
     end
 
-    Portier["👤 Recepcjonista"]:::actorStyle
-    Sys["⏱️ System (Scheduler)"]:::actorStyle
+    Portier["Recepcjonista"]:::actorStyle
+    AdminDS["Administrator DS"]:::actorStyle
+    Sys["System (Scheduler)"]:::actorStyle
 
     Student --- UC_LAUND_01
     Student --- UC_LAUND_02
@@ -127,6 +130,8 @@ flowchart LR
 
     Portier --- UC_LAUND_04
     Portier --- UC_LAUND_05
+    Portier --- UC_LAUND_06
+    AdminDS --- UC_LAUND_06
     Sys --- UC_LAUND_05
 ```
 
@@ -140,7 +145,7 @@ flowchart LR
     classDef actorStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
     classDef ucStyle fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
 
-    Student["👤 Mieszkaniec"]:::actorStyle
+    Student["Mieszkaniec"]:::actorStyle
 
     subgraph System_Rooms ["SYSTEM PKAMPUS: SALKI TEMATYCZNE"]
         direction TB
@@ -151,8 +156,8 @@ flowchart LR
         UC_ROOM_04(["UC-ADM-03: Blokada salek (kara 1-3 mies.)"]):::ucStyle
     end
 
-    Portier["👤 Recepcjonista"]:::actorStyle
-    AdminDS["👤 Administrator DS"]:::actorStyle
+    Portier["Recepcjonista"]:::actorStyle
+    AdminDS["Administrator DS"]:::actorStyle
 
     Student --- UC_ROOM_01
     Student --- UC_ROOM_02
@@ -173,7 +178,7 @@ flowchart LR
     classDef staffStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
     classDef ucStyle fill:#edf2f7,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
 
-    Student["👤 Mieszkaniec<br/>(Student)"]:::studentStyle
+    Student["Mieszkaniec<br/>(Student)"]:::studentStyle
 
     subgraph System_Issues ["SYSTEM PKAMPUS: OBSŁUGA USTEREK"]
         direction TB
@@ -189,8 +194,7 @@ flowchart LR
         end
     end
 
-    Portier["👤 Recepcjonista<br/>(Portier)"]:::staffStyle
-    AdminDS["👤 Administrator DS<br/>(ADS)"]:::staffStyle
+    Portier["Recepcjonista<br/>(Portier)"]:::staffStyle
 
     %% Relacje mieszkańca po lewej stronie (tylko do strefy zgłoszeń)
     Student --- UC_ISSUE_01
@@ -200,7 +204,6 @@ flowchart LR
     UC_ISSUE_02 --- Portier
     UC_ISSUE_03 --- Portier
     UC_ISSUE_04 --- Portier
-    UC_ISSUE_02 --- AdminDS
 ```
 
 ---
@@ -213,7 +216,7 @@ flowchart LR
     classDef actorStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
     classDef ucStyle fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
 
-    Student["👤 Mieszkaniec"]:::actorStyle
+    Student["Mieszkaniec"]:::actorStyle
 
     subgraph System_Board ["SYSTEM PKAMPUS: TABLICA SĄSIEDZKA"]
         direction TB
@@ -223,7 +226,7 @@ flowchart LR
         UC_BOARD_04(["UC-BOARD-04: Moderacja i usuwanie wpisów"]):::ucStyle
     end
 
-    AdminDS["👤 Administrator DS"]:::actorStyle
+    AdminDS["Administrator DS"]:::actorStyle
 
     Student --- UC_BOARD_01
     Student --- UC_BOARD_02
@@ -242,7 +245,7 @@ flowchart LR
     classDef actorStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
     classDef ucStyle fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
 
-    Student["👤 Mieszkaniec"]:::actorStyle
+    Student["Mieszkaniec"]:::actorStyle
 
     subgraph System_Events ["SYSTEM PKAMPUS: KALENDARZ I KOMUNIKATY"]
         direction TB
@@ -251,8 +254,8 @@ flowchart LR
         UC_EVT_03(["UC-EVT-03: Publikacja komunikatu / terminu pościeli"]):::ucStyle
     end
 
-    Portier["👤 Recepcjonista"]:::actorStyle
-    AdminDS["👤 Administrator DS"]:::actorStyle
+    Portier["Recepcjonista"]:::actorStyle
+    AdminDS["Administrator DS"]:::actorStyle
 
     Student --- UC_EVT_01
     Student --- UC_EVT_02
@@ -271,7 +274,7 @@ flowchart LR
     classDef actorStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
     classDef ucStyle fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
 
-    AdminDS["👤 Administrator DS<br/>(ADS)"]:::actorStyle
+    AdminDS["Administrator DS<br/>(ADS)"]:::actorStyle
 
     subgraph System_Admin ["SYSTEM PKAMPUS: ADMINISTRACJA I NADZÓR"]
         direction TB
@@ -282,7 +285,7 @@ flowchart LR
         UC_ADM_05(["UC-ADM-05: Zarządzanie obiektami akademików"]):::ucStyle
     end
 
-    SuperAdmin["👤 Superadmin<br/>(AOS)"]:::actorStyle
+    SuperAdmin["Superadmin<br/>(AOS)"]:::actorStyle
 
     AdminDS --- UC_ADM_01
     AdminDS --- UC_ADM_02
@@ -305,13 +308,14 @@ flowchart LR
 | **FR-CARD-01 .. FR-CARD-04** | **UC-AUTH-04, UC-AUTH-05** | Karta mieszkańca i weryfikacja wzrokowa (anty-screenshot) | Mieszkaniec, Portier |
 | **FR-LAUND-01** | **UC-ADM-01** | Konfiguracja pralek i parametrów slotów per DS | Admin DS |
 | **FR-LAUND-02 .. FR-LAUND-04** | **UC-RES-01, UC-RES-02, UC-RES-04a** | Harmonogram, rezerwacja pralki i anulowanie slotu | Mieszkaniec |
-| **FR-LAUND-05, FR-LAUND-06** | **UC-RES-05a, UC-SYS-01, UC-ADM-01** | Odbiór klucza, zwalnianie slotu (15 min) i awarie | Portier, System, ADS |
+| **FR-LAUND-05** | **UC-RES-05a, UC-SYS-01** | Odbiór i zwrot klucza pralni, zwalnianie slotu po 15 min | Portier, System |
+| **FR-LAUND-06** | **UC-LAUND-06** | Awaryjne wyłączenie pralki, auto-anulowanie slotów i zgłoszenie naprawy | Portier, Admin DS |
 | **FR-ROOM-01, FR-ROOM-02** | **UC-ADM-02** | Katalog i parametryzacja salek per DS (Kujon, Chillout) | Admin DS |
 | **FR-ROOM-03, FR-ROOM-04** | **UC-RES-03** | Rezerwacja salki (formularz organizatora i regulamin) | Mieszkaniec |
 | **FR-ROOM-05** | **UC-RES-04b, UC-RES-05b** | Anulowanie rezerwacji, odbiór i zwrot klucza salki | Mieszkaniec, Portier |
 | **FR-ROOM-06** | **UC-RES-06** | Wniosek o przedłużenie rezerwacji salki | Mieszkaniec |
 | **FR-ROOM-07** | **UC-ADM-03** | Ewidencja kar i czarna lista salek (blokada 1–3 mies.) | Admin DS |
-| **FR-ISSUE-01 .. FR-ISSUE-05** | **UC-ISSUE-01 .. UC-ISSUE-03, UC-ISSUE-05** | Zgłoszenia awarii ze zdjęciem MinIO, rejestr i obsługa | Mieszkaniec, Portier, ADS |
+| **FR-ISSUE-01 .. FR-ISSUE-05** | **UC-ISSUE-01 .. UC-ISSUE-03, UC-ISSUE-05** | Zgłoszenia awarii ze zdjęciem MinIO, rejestr i obsługa | Mieszkaniec, Portier |
 | **FR-ISSUE-06** | **UC-ISSUE-04** | Generowanie listy zadań dla konserwatora | Portier |
 | **FR-BOARD-01 .. FR-BOARD-05** | **UC-BOARD-01 .. UC-BOARD-03** | Tablica ogłoszeń sąsiedzkich, komentarze i statusy | Mieszkaniec |
 | **FR-BOARD-06** | **UC-BOARD-04** | Moderacja i usuwanie wpisów na tablicy | Admin DS |
