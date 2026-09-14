@@ -320,7 +320,7 @@ Cyfrowy zeszyt napraw na portierni.
 | `id` | `UUID` | `PK, DEFAULT gen_random_uuid()` | Identyfikator zgłoszenia |
 | `reporter_id` | `UUID` | `FK -> users(id), NOT NULL` | Zgłaszający mieszkaniec |
 | `dormitory_id` | `UUID` | `FK -> dormitories(id), NOT NULL` | Akademik |
-| `room_id` | `UUID` | `FK -> rooms(id), NULLABLE` | Pokój (jeśli usterka w pokoju) |
+| `room_id` | `UUID` | `FK -> rooms(id) ON DELETE RESTRICT, NULLABLE` | Pokój (jeśli usterka w pokoju; NULL dla części wspólnych) |
 | `common_area_name`| `VARCHAR(100)` | `NULLABLE` | Część wspólna (kuchnia, pralnia, winda) |
 | `category` | `VARCHAR(30)` | `NOT NULL, CHECK (category IN ('PLUMBING', 'ELECTRICAL', 'FURNITURE', 'LOCKSMITH', 'OTHER'))` | Branża awarii |
 | `urgency` | `VARCHAR(20)` | `NOT NULL, CHECK (urgency IN ('NORMAL', 'URGENT'))` | Stopień pilności |
@@ -576,7 +576,7 @@ CREATE TABLE issues (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     reporter_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     dormitory_id UUID NOT NULL REFERENCES dormitories(id) ON DELETE CASCADE,
-    room_id UUID REFERENCES rooms(id) ON DELETE SET NULL,
+    room_id UUID REFERENCES rooms(id) ON DELETE RESTRICT,
     common_area_name VARCHAR(100),
     category VARCHAR(30) NOT NULL CHECK (category IN ('PLUMBING', 'ELECTRICAL', 'FURNITURE', 'LOCKSMITH', 'OTHER')),
     urgency VARCHAR(20) NOT NULL DEFAULT 'NORMAL' CHECK (urgency IN ('NORMAL', 'URGENT')),
