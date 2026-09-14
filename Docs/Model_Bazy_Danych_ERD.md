@@ -64,7 +64,7 @@ flowchart LR
 
     LAUNDRY_BOOKINGS["<b>laundry_bookings</b><br/>----------------------------------<br/>PK id: UUID<br/>FK machine_id: UUID<br/>FK user_id: UUID<br/>start_time: TIMESTAMPTZ<br/>end_time: TIMESTAMPTZ<br/>status: VARCHAR(30)<br/>key_issued_at: TIMESTAMPTZ"]:::tableStyle
 
-    THEMATIC_ROOMS["<b>thematic_rooms</b><br/>----------------------------------<br/>PK id: UUID<br/>FK dormitory_id: UUID<br/>name: VARCHAR(100)<br/>room_type: VARCHAR(30)<br/>max_capacity: INT<br/>opening_time: TIME<br/>closing_time: TIME"]:::tableStyle
+    THEMATIC_ROOMS["<b>thematic_rooms</b><br/>----------------------------------<br/>PK id: UUID<br/>FK dormitory_id: UUID<br/>name: VARCHAR(100)<br/>room_type: VARCHAR(30)<br/>max_capacity: INT<br/>opening_time: TIME<br/>closing_time: TIME<br/>spans_midnight: BOOLEAN<br/>max_duration_hours: INT"]:::tableStyle
 
     ROOM_BOOKINGS["<b>room_bookings</b><br/>----------------------------------<br/>PK id: UUID<br/>FK room_id: UUID<br/>FK user_id: UUID<br/>start_time: TIMESTAMPTZ<br/>end_time: TIMESTAMPTZ<br/>participants_count: INT<br/>status: VARCHAR(30)<br/>terms_accepted: BOOLEAN"]:::tableStyle
 
@@ -278,12 +278,15 @@ Pomieszczenia wspólne zgodnie z Zarządzeniem Rektora PK ws. salek tematycznych
 | `name` | `VARCHAR(100)` | `NOT NULL` | Nazwa salki (np. "Cicha nauka Kujon", "Chillout") |
 | `room_type` | `VARCHAR(30)` | `NOT NULL, CHECK (room_type IN ('STANDARD', 'QUIET_STUDY_KUJON', 'CHILLOUT', 'CLUB'))` | Typ regulaminowy |
 | `max_capacity` | `INT` | `NOT NULL, CHECK (max_capacity > 0)` | Limit osób (Kujon: 16, Chillout: 30) |
-| `opening_time` | `TIME` | `NOT NULL, DEFAULT '06:00:00'` | Godzina otwarcia |
-| `closing_time` | `TIME` | `NOT NULL, DEFAULT '23:30:00'` | Godzina zamknięcia (dla Chillout: '02:00:00') |
-| `max_duration_hours`| `INT` | `NOT NULL, DEFAULT 4` | Max czas jednorazowej rezerwacji |
+| `opening_time` | `TIME` | `NOT NULL, DEFAULT '06:00:00'` | Godzina otwarcia (standard/Kujon: 06:00, Chillout: 14:00) |
+| `closing_time` | `TIME` | `NOT NULL, DEFAULT '23:30:00'` | Godzina zamknięcia (standard/Kujon: 23:30, Chillout: 02:00) |
+| `spans_midnight` | `BOOLEAN` | `NOT NULL, DEFAULT FALSE` | Flaga przejścia przez północ (dla Chillout: TRUE) |
+| `max_duration_hours`| `INT` | `NOT NULL, DEFAULT 4` | Max czas jednorazowej rezerwacji (standard/Kujon: 4h, Chillout: 12h) |
 | `description` | `TEXT` | `NULLABLE` | Wyposażenie i regulamin salki |
 | `status` | `VARCHAR(20)` | `NOT NULL, CHECK (status IN ('AVAILABLE', 'MAINTENANCE'))` | Dostępność |
 | `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu |
+
+*Specyfika salki Chillout (§5 ust. 8 Regulaminu salek):* Dla salki typu `CHILLOUT` parametry konfiguracyjne wynoszą: `opening_time = '14:00:00'`, `closing_time = '02:00:00'`, `spans_midnight = TRUE` oraz `max_duration_hours = 12`. Flaga `spans_midnight = TRUE` jednoznacznie definiuje, że `closing_time < opening_time` oznacza przejście przez północ (koniec rezerwacji w dobie kolejnej), a dozwolony czas trwania rezerwacji wynosi do 12 godzin.
 
 ---
 
@@ -540,10 +543,15 @@ CREATE TABLE thematic_rooms (
     max_capacity INT NOT NULL CHECK (max_capacity > 0),
     opening_time TIME NOT NULL DEFAULT '06:00:00',
     closing_time TIME NOT NULL DEFAULT '23:30:00',
+    spans_midnight BOOLEAN NOT NULL DEFAULT FALSE,
     max_duration_hours INT NOT NULL DEFAULT 4 CHECK (max_duration_hours > 0),
     description TEXT,
     status VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE' CHECK (status IN ('AVAILABLE', 'MAINTENANCE')),
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_thematic_hours CHECK (
+        (spans_midnight = FALSE AND closing_time > opening_time) OR
+        (spans_midnight = TRUE AND closing_time < opening_time)
+    )
 );
 
 -- 8. TABELA REZERWACJI SALEK TEMATYCZNYCH

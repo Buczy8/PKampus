@@ -146,7 +146,7 @@ Dokument specyfikacji wymagań funkcjonalnych, pozafunkcjonalnych i reguł bizne
 | :--- | :--- | :--- |
 | **BR-01** | Okno i limit rezerwacji pralni | Mieszkaniec może rezerwować pralkę maksymalnie na 7 dni w przód i posiadać w danym tygodniu maksymalnie 2 aktywne rezerwacje. |
 | **BR-02** | Reguła 15 minut przy pobieraniu klucza | Zgodnie z §2 ust. 5 Regulaminu salek: jeśli uprawniony mieszkaniec nie odbierze klucza z recepcji w ciągu 15 minut od startu slotu, rezerwacja zostaje anulowana, a zasób uwolniony. |
-| **BR-03** | Ramy czasowe salek tematycznych | Salki standardowe oraz salka do nauki („Kujon”) mogą być rezerwowane na jednorazowy czas maksymalnie do 4 godzin (w godzinach 6:00–23:30). Salka „Chillout” funkcjonuje w oknie 14:00–02:00. |
+| **BR-03** | Ramy czasowe salek tematycznych | Salki standardowe oraz salka do nauki („Kujon”) mogą być rezerwowane na jednorazowy czas maksymalnie do 4 godzin (w godzinach 6:00–23:30). Salka „Chillout” funkcjonuje w dedykowanym oknie 14:00–02:00 dnia następnego (maksymalny czas trwania: 12 godzin; cisza nocna po 23:00). |
 | **BR-04** | Odpowiedzialność Organizatora | Rezerwujący salkę staje się Organizatorem odpowiadającym materialnie i porządkowo za salę, gości oraz przestrzeganie ciszy nocnej (23:00–06:00 w budynku). |
 | **BR-05** | Blokady regulaminowe (Czarna lista) | Na wniosek ADS/KOS (§6 ust. 2 Regulaminu) student, który dopuścił się dewastacji, nieporządku lub złamania regulaminu, może zostać zablokowany w możliwości rezerwacji salek na okres od 1 do 3 miesięcy. |
 | **BR-06** | Wymóg aktywacji konta | Konto ze statusem `PENDING_APPROVAL` nie może tworzyć rezerwacji ani zgłaszać usterek do momentu weryfikacji tożsamości i zatwierdzenia meldunku przez Administratora Domu Studenckiego (ADS). |
