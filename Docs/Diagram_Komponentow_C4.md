@@ -40,7 +40,7 @@ flowchart TB
 
 Diagram dekomponuje system PKampus na odrębne jednostki oprogramowania i magazyny danych zgodnie z modelem C4. W architekturze systemu wyróżnia się:
 1. **Kontener kliencki (PWA SPA):** Aplikacja React / TypeScript wykonywana bezpośrednio w silniku przeglądarki internetowej lub jako aplikacja PWA zainstalowana na urządzeniu użytkownika (smartfon / komputer).
-2. **Kontenery serwerowe (Docker Host / VPS PK):** Zespół 5 kontenerów zarządzanych przez Docker Compose w odizolowanej sieci mostkowej `pkampus-net`:
+2. **Kontenery serwerowe (Docker Host: VPS PK w profilu produkcyjnym lub stacja robocza w profilu demonstracyjnym):** Zespół 5 kontenerów usługowych zarządzanych przez Docker Compose w odizolowanej sieci mostkowej `pkampus-net` (oraz opcjonalny kontener `pkampus-certbot` w profilu produkcyjnym):
    - `pkampus-proxy` (Nginx Alpine) – brama wejściowa serwera, terminacja TLS 1.3, serwowanie skompilowanych plików statycznych PWA (`/usr/share/nginx/html` montowane z wolumenu `./frontend/dist`) oraz reverse proxy dla ścieżek `/api/*`,
    - `pkampus-backend` (Spring Boot) – warstwa logiki biznesowej REST API,
    - `pkampus-db` (PostgreSQL) – relacyjna baza danych,

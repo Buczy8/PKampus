@@ -28,7 +28,7 @@ flowchart TD
         BROWSER["Przeglądarka / Środowisko PWA<br/>(Silnik Chromium, WebKit, Gecko)<br/>Progressive Web App (React)"]:::containerStyle
     end
 
-    subgraph SERVER_NODE["Węzeł: Serwer Uczelniany / VPS PK (System operacyjny Linux)"]
+    subgraph SERVER_NODE["Węzeł: Serwer Uczelniany / VPS PK lub Stacja Demonstracyjna (System operacyjny Linux / macOS / Windows)"]
         subgraph DOCKER_COMPOSE["Środowisko konteneryzacji: Docker Engine & Docker Compose"]
             subgraph BRIDGE_NET["Wirtualna Sieć Mostkowa: pkampus-net (Izolacja 172.28.0.0/16)"]
                 NGINX["Kontener: pkampus-proxy<br/>(Nginx Reverse Proxy)<br/>Serwowanie PWA & Brama API<br/>Porty zewn: 80 (HTTP), 443 (HTTPS)"]:::containerStyle
@@ -68,7 +68,7 @@ Zgodnie z wymogami inżynierii oprogramowania każdy węzeł i artefakt środowi
 | Identyfikator Węzła | Typ Węzła | Środowisko bazowe (OS / Runtime) | Adresacja / Rola |
 | :--- | :--- | :--- | :--- |
 | **Urządzenie Użytkownika (Smartfon / Komputer)** | Fizyczny (Smartfon Android/iOS, laptop, stacja robocza) | Dowolny system operacyjny (Android, iOS, Windows, Linux, macOS) | Klient HTTP uruchamiający przeglądarkę WWW lub zainstalowaną aplikację **PWA (Progressive Web Application)** z obsługą manifestu instalacyjnego, Service Workera i aparatu fotograficznego (zgłaszanie usterek). |
-| **Serwer Uczelniany / VPS PK** | Maszyna wirtualna / serwer dedykowany | Linux Server (Dystrybucja serwerowa x86_64, np. Ubuntu/Debian) | Główny węzeł aplikacyjny hostujący silnik Docker Engine oraz orkiestrator Docker Compose. |
+| **Serwer Uczelniany / VPS PK (lub Stacja Demonstracyjna)** | Maszyna wirtualna / serwer dedykowany / stacja robocza (laptop) | Linux Server (Ubuntu/Debian) lub środowisko lokalne (Linux/macOS/Windows z Docker Desktop) | Główny węzeł aplikacyjny hostujący silnik Docker Engine oraz orkiestrator Docker Compose. Obsługuje dwa profile: **profil demonstracyjny** (lokalny, w 100% autonomiczny, certyfikaty lokalne/localhost, brak zależności od sieci PK — gwarancja niezawodności obrony) oraz **profil produkcyjny** (VPS PK, subdomena uczelniana, TLS 1.3 Let's Encrypt z automatycznym odnawianiem przez kontener certbot). |
 
 ---
 
@@ -81,6 +81,7 @@ Zgodnie z wymogami inżynierii oprogramowania każdy węzeł i artefakt środowi
 | **`pkampus-db`** | `postgres:alpine` | Instancja silnika PostgreSQL + DDL schematu | **Zewn:** brak (izolacja)<br/>**Wewn:** 5432 | Relacyjny magazyn danych. Przechowuje 15 tabel domenowych, realizuje blokady transakcyjne, egzekwuje ograniczenia `EXCLUDE USING gist` (anti-overlap) i integralność referencyjną. |
 | **`pkampus-minio`** | `minio/minio` | Silnik MinIO Object Storage | **Zewn:** brak<br/>**Wewn:** 9000 (S3 API), 9001 (Console) | Magazyn obiektowy S3. Buckety: `pkampus-issues` (zdjęcia usterek) oraz `pkampus-avatars` (zdjęcia karty mieszkańca); dostęp tylko przez backend (bez publicznego anonymous download). |
 | **`pkampus-mailpit`** | `axllent/mailpit` | Serwer Mailpit | **Zewn:** 8025 (Web UI - dev only)<br/>**Wewn:** 1025 (SMTP) | Serwer pocztowy w kontenerze. Przechwytuje wiadomości e-mail z linkami aktywacyjnymi meldunku i powiadomieniami o rezerwacjach bez ryzyka wysyłki spamu. |
+| **`pkampus-certbot`** | `certbot/certbot:latest` | Klient ACME Certbot (uruchamiany z profilem `production`) | **Zewn:** brak<br/>**Wewn:** brak | Usługa opcjonalna dla profilu produkcyjnego (VPS PK). Odpowiada za cykliczne, automatyczne odnawianie certyfikatów SSL/TLS Let's Encrypt w wolumenie `letsencrypt_certs` poprzez wyzwanie HTTP-01 webroot Nginx. W profilu demonstracyjnym nie jest uruchamiana. |
 
 ---
 
@@ -129,7 +130,7 @@ Zgodnie z zasadą bezstanowości kontenerów aplikacyjnych (ang. *Stateless Cont
 | :--- | :--- | :--- | :--- |
 | **`pg_data`** | `/var/lib/postgresql/data` | Fizyczne pliki relacyjnej bazy danych PostgreSQL (tabele, indeksy, WAL). | Codzienny automatyczny zrzut logiczny poleceniem `pg_dump` do archiwum skompresowanego `*.sql.gz` na wydzieloną przestrzeń backupową. |
 | **`minio_data`** | `/data` | Binarny magazyn obiektowy MinIO (zdjęcia usterek w buckecie `pkampus-issues` oraz zdjęcia profilowe legitymacji mieszkańca w buckecie `pkampus-avatars`). | Kopia lustrzana bucketów z użyciem narzędzia `mc mirror` na zewnętrzny serwer plików PK. |
-| **`letsencrypt_certs`**| `/etc/letsencrypt` | Certyfikaty SSL/TLS wygenerowane przez certbot oraz klucze prywatne. | Odtwarzalny zasób; backup kluczy prywatnych i konfiguracji certyfikatu. |
+| **`letsencrypt_certs`**| `/etc/letsencrypt` | Certyfikaty SSL/TLS i klucze prywatne. | W profilu produkcyjnym (VPS PK): certyfikaty Let's Encrypt generowane i cyklicznie odnawiane przez kontener `pkampus-certbot`. W profilu demonstracyjnym: certyfikaty lokalne (self-signed/mkcert) lub bezpieczny kontekst localhost. |
 
 ---
 
@@ -171,6 +172,7 @@ services:
       - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
       - ./frontend/dist:/usr/share/nginx/html:ro
       - letsencrypt_certs:/etc/letsencrypt:ro
+      - ./infra/nginx/certbot-challenge:/var/www/certbot:ro
     networks:
       - pkampus-net
     depends_on:
@@ -300,6 +302,27 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
+
+  # -------------------------------------------------------------
+  # Automatyczne odnawianie certyfikatów Let's Encrypt (Profil produkcyjny VPS PK)
+  # -------------------------------------------------------------
+  pkampus-certbot:
+    image: certbot/certbot:latest
+    container_name: pkampus-certbot
+    profiles:
+      - production
+    restart: unless-stopped
+    volumes:
+      - letsencrypt_certs:/etc/letsencrypt
+      - ./infra/nginx/certbot-challenge:/var/www/certbot:rw
+    entrypoint: >
+      /bin/sh -c "
+      trap exit TERM;
+      while :; do
+        certbot renew --webroot -w /var/www/certbot --quiet;
+        sleep 12h & wait $${!};
+      done;
+      "
 ```
 
 ---
@@ -312,7 +335,7 @@ services:
 | **NFR-SEC-01** | Bezpieczeństwo sesji (JWT Bearer) | JWT w nagłówku `Authorization`; brak sesji cookie — CSRF cookie-based nie dotyczy; klucz `JWT_SECRET` wymagany z env (bez fallbacku w compose). | Zgodny |
 | **NFR-SEC-02** | Ochrona poświadczeń (BCrypt) | Bezpieczne haszowanie haseł algorytmem BCrypt z soleniem po stronie Spring Security przed utrwaleniem w relacyjnej bazie danych PostgreSQL. | Zgodny |
 | **NFR-SEC-03** | Bezpieczeństwo plików (MinIO S3) | Walidacja MIME/rozmiaru w API; buckety `MINIO_BUCKET_ISSUES` / `MINIO_BUCKET_AVATARS` prywatne; brak anonymous download. | Zgodny |
-| **NFR-SEC-04** | Szyfrowanie transmisji sieciowej (TLS 1.3 / HTTPS) | Nginx Reverse Proxy (`pkampus-proxy`) jako jedyny publiczny punkt styku wymusza protokół HTTPS, szyfrowanie TLS 1.3, nagłówek HSTS oraz polityki CSP i anty-clickjacking. | Zgodny |
+| **NFR-SEC-04** | Szyfrowanie transmisji sieciowej (TLS 1.3 / HTTPS) | Nginx Reverse Proxy (`pkampus-proxy`) jako jedyny publiczny punkt styku wymusza protokół HTTPS, szyfrowanie TLS 1.3, nagłówek HSTS oraz polityki CSP i anty-clickjacking. W profilu produkcyjnym (VPS PK) certyfikaty dostarcza Let's Encrypt z automatycznym odnawianiem przez kontener `pkampus-certbot` (profil `production`). W profilu demonstracyjnym (obrona pracy) stosowane są certyfikaty lokalne self-signed/mkcert lub kontekst Secure Context localhost (W3C), co gwarantuje pełną autonomiczność od infrastruktury zewnętrznej i 100% niezawodności. | Zgodny |
 | **NFR-SEC-05** | Izolacja sieciowa bazy danych i magazynu | Baza PostgreSQL oraz MinIO nie publikują portów na interfejsie publicznym serwera; komunikacja backendu z bazą i storage odbywa się wyłącznie wewnątrz izolowanej sieci `pkampus-net`. | Zgodny |
 | **NFR-SEC-06** | XSS / SQL Injection | Parametryzowane JPA + CSP/HSTS na Nginx; escapowanie danych w UI. | Zgodny |
 | **NFR-CONC-01** | Współbieżność i integralność transakcyjna | Mechanizmy transakcyjne Spring Data JPA oraz ograniczenia wykluczające PostgreSQL `EXCLUDE USING gist` (`chk_laundry_no_overlap`, `chk_room_no_overlap`) wykluczają nakładanie przedziałów rezerwacji w warunkach współbieżnych. | Zgodny |

@@ -37,7 +37,7 @@
 ## 5. Integracje i otoczenie systemowe
 * **Lokalny Object Storage (MinIO S3):** Kontener MinIO w ramach Docker Compose do przechowywania plików multimedialnych (zdjęcia do wirtualnej karty mieszkańca oraz dokumentacja fotograficzna zgłaszanych usterek).
 * **Serwis poczty elektronicznej (SMTP / Mailpit):** Lokalny/darmowy serwer SMTP do powiadomień systemowych (potwierdzenia konta, reset hasła, powiadomienia o zmianie statusu usterki).
-* **Granice systemu:** System projektowany jako w pełni autonomiczny i samowystarczalny pakiet kontenerowy; brak twardych zależności od płatnych API zewnętrznych czy sieci kampusowej Politechniki, co gwarantuje 100% niezawodności podczas demonstracji i obrony pracy.
+* **Granice systemu:** System projektowany w architekturze dwuprofilowej: (1) **profil demonstracyjny (lokalny / obrona pracy)** — w pełni autonomiczny i samowystarczalny pakiet kontenerowy uruchamiany lokalnie na stacji roboczej (localhost, certyfikaty lokalne/self-signed), bez twardych zależności od zewnętrznych API czy sieci kampusowej Politechniki, co gwarantuje 100% niezawodności podczas demonstracji i obrony pracy inżynierskiej; (2) **profil produkcyjny (środowisko docelowe)** — wdrożenie na serwerze uczelnianym VPS PK pod domeną uczelni, ze zautomatyzowaną terminacją TLS 1.3 przez Let's Encrypt (kontener certbot).
 
 ## 6. Wymagania pozafunkcjonalne i standardy jakościowe
 * **Wydajność i współbieżność:** Czas odpowiedzi API < 200 ms dla operacji odczytu; obsługa transakcyjności i blokad (optymistycznych/pesymistycznych) na poziomie PostgreSQL/JPA przy rezerwacjach slotów pralek i salek w celu wyeliminowania podwójnych rezerwacji (race conditions / overbooking).
@@ -63,7 +63,7 @@
   * **Konteneryzacja i orkiestracja:** Docker & Docker Compose (sieć mostkowa `pkampus-net`, wolumeny trwałe `pg_data` i `minio_data`).
 * **Ograniczenia zasobowe i budżetowe:**
   * Projekt realizowany jednoosobowo w ramach pracy inżynierskiej w horyzoncie czasowym jednego semestru akademickiego.
-  * Budżet finansowy: 0 PLN (wykorzystanie wyłącznie technologii Open Source, narzędzi darmowych i lokalnego środowiska wdrożeniowego).
+  * Budżet finansowy: 0 PLN (wykorzystanie wyłącznie technologii Open Source, narzędzi darmowych, darmowych certyfikatów Let's Encrypt oraz lokalnego/uczelnianego środowiska wdrożeniowego).
 * **Kluczowe założenia wstępne:**
   * Użytkownicy dysponują urządzeniem z aktualną przeglądarką internetową (smartfon/PC).
   * Pokój w akademiku oraz dane studenta są wstępnie weryfikowane przez administrację domu studenckiego.
