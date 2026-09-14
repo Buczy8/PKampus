@@ -61,7 +61,7 @@ sequenceDiagram
         S3-->>SVC: 200 OK (avatarUrl)
         deactivate S3
 
-        SVC->>DB: save(nowy użytkownik: PENDING_EMAIL, hash BCrypt, avatar_url)
+        SVC->>DB: save(nowy użytkownik: PENDING_EMAIL, hash BCrypt, avatar_url, dormitory_id, declared_room_number)
         activate DB
         DB-->>SVC: Encja User z wygenerowanym ID
         deactivate DB
@@ -105,23 +105,25 @@ sequenceDiagram
     activate CTL
     CTL->>DB: findAllByStatus(PENDING_APPROVAL)
     activate DB
-    DB-->>CTL: Lista studentów do weryfikacji
+    DB-->>CTL: Lista studentów do weryfikacji (dane, akademik, declared_room_number)
     deactivate DB
-    CTL-->>UI: 200 OK (Lista oczekujących)
+    CTL-->>UI: 200 OK (Lista oczekujących z deklarowanymi numerami pokoi)
     deactivate CTL
-    UI-->>ADS: Wyświetlenie listy meldunkowej
+    UI-->>ADS: Prezentacja listy meldunkowej do weryfikacji
 
-    ADS->>UI: Kliknięcie „Zatwierdź meldunek” dla mieszkańca
+    ADS->>UI: Weryfikacja z listą uczelnianą i kliknięcie „Zatwierdź meldunek”
     UI->>CTL: POST /api/admin/residents/{id}/activate
     activate CTL
     CTL->>SVC: activateResidentAccount(id)
     activate SVC
+    SVC->>DB: findById(id) -> odczyt dormitory_id i declared_room_number
+    activate DB
+    DB-->>SVC: Dane użytkownika
+    SVC->>DB: findByDormitoryAndRoomNumber(dormitory_id, declared_room_number)
+    DB-->>SVC: Encja Room (room_id)
     SVC->>DB: update Status = ACTIVE
-    activate DB
     DB-->>SVC: Zapisano status ACTIVE
-    deactivate DB
-    SVC->>DB: INSERT INTO room_assignments (user_id, room_id, academic_year, is_active=TRUE, check_in_date=NOW())
-    activate DB
+    SVC->>DB: INSERT INTO room_assignments (user_id, room_id, academic_year, is_active=TRUE, check_in_date=CURRENT_DATE)
     DB-->>SVC: Utworzono aktywny meldunek mieszkańca
     deactivate DB
     SVC-)MAIL: sendAccountActivatedNotification(user.email)
@@ -416,12 +418,12 @@ sequenceDiagram
 
 ## 7. Sekwencja 6: Publikacja Komunikatu Dyżurnego / Wymiany Pościeli i Odbiór Alertu (BOARD & EVENTS)
 
-Proces obrazuje publikację ważnego komunikatu technicznego lub organizacyjnego przez portiernię lub ADS oraz prezentację banera alertu u mieszkańca dla przypiętych komunikatów `CRITICAL` (bez osobnego potwierdzania odczytu per użytkownik — baner znika po odpięciu/wygaśnięciu).
+Proces obrazuje publikację ważnego komunikatu technicznego lub organizacyjnego przez personel (portiernię/ADS dla danego DS lub Superadmina AOS o zasięgu ogólnokampusowym, `dormId = NULL`) oraz prezentację banera alertu u mieszkańca dla przypiętych komunikatów `CRITICAL` (bez osobnego potwierdzania odczytu per użytkownik — baner znika po odpięciu/wygaśnięciu).
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor P as Recepcjonista / ADS
+    actor P as Personel (Portier / ADS / Superadmin AOS)
     participant UI_P as Panel Personelu (React)
     participant CTL as EventController
     participant SVC as EventService
@@ -429,14 +431,15 @@ sequenceDiagram
     participant UI_M as Frontend Mieszkańca (React PWA)
     actor M as Mieszkaniec
 
-    P->>UI_P: Wprowadzenie komunikatu (Tytuł: "Wymiana pościeli", Priorytet: CRITICAL, Data)
+    P->>UI_P: Wprowadzenie komunikatu (Tytuł, Priorytet: CRITICAL, Data, Zasięg: DS lub Kampus)
     activate UI_P
     UI_P->>CTL: POST /api/events/announcements (CreateEventDTO)
     activate CTL
+    Note over CTL, SVC: dormId = ID_DS (Portier/ADS) lub dormId = null (ogólnokampusowy Superadmina AOS)
     CTL->>SVC: publishAnnouncement(dto, authorId, dormId)
     activate SVC
 
-    SVC->>DB: INSERT INTO dorm_events (category='BED_LINEN', isPinned=TRUE, priority='CRITICAL')
+    SVC->>DB: INSERT INTO dorm_events (dormitory_id, category, isPinned, priority)
     activate DB
     DB-->>SVC: Zapisano ogłoszenie urzędowe
     deactivate DB
@@ -454,9 +457,10 @@ sequenceDiagram
     activate UI_M
     UI_M->>CTL: GET /api/events/active-alerts?dormId={dormId}
     activate CTL
+    Note over CTL, DB: Zapytanie uwzględnia (dormitory_id = dormId OR dormitory_id IS NULL)
     CTL->>DB: findActivePinnedAlerts(dormId, currentDate)
     activate DB
-    DB-->>CTL: Aktywny komunikat o wymianie pościeli (Priorytet CRITICAL)
+    DB-->>CTL: Aktywny komunikat (priorytet CRITICAL: lokalny DS lub ogólnokampusowy)
     deactivate DB
     CTL-->>UI_M: 200 OK (Lista aktywnych alertów)
     deactivate CTL

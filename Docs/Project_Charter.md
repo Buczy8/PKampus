@@ -16,7 +16,7 @@
 * **Mieszkaniec (Student):** Użytkownik zalogowany, przypisany do konkretnego akademika i numeru pokoju. Posiada dostęp do: wirtualnej karty mieszkańca, rezerwacji pralni i salek tematycznych, zgłaszania usterek w swoim pokoju/częściach wspólnych, tablicy ogłoszeń i kalendarza oraz sekcji sąsiedzkiej.
 * **Recepcjonista / Portier:** Pracownik dyżurujący na recepcji. Posiada uprawnienia do: weryfikacji tożsamości mieszkańca (podgląd wirtualnej karty), podglądu bieżących rezerwacji i wydawania kluczy (do pralni, salek), obsługi centralnego rejestru usterek (przekazywanie listy konserwatorowi bez konieczności jego logowania do systemu oraz zmiana statusów napraw zgodnie z cyklem domenowym: *Nowe* → *Przekazane konserwatorowi* → *W trakcie naprawy* → *Naprawione* / *Odrzucone* / *Wymaga części*).
 * **Administrator Domu Studenckiego (Kierownik / Admin Akademika):** Zarządza konfiguracją zasobów danego akademika (dostępne pralki, sale, przedziały czasowe rezerwacji), publikuje oficjalne ogłoszenia i wydarzenia w kalendarzu (np. brak wody, wymiana pościeli, wydarzenia integracyjne), zarządza kontami i weryfikuje przypisanie studentów do pokoi.
-* **Administrator Główny (Superadmin):** Zarządza instancją systemu na poziomie całego miasteczka akademickiego (dodawanie/edycja obiektów akademików, globalne zarządzanie kontami administracyjnymi).
+* **Administrator Główny (Superadmin / AOS):** Zarządza instancją systemu na poziomie całego miasteczka akademickiego (dodawanie/edycja obiektów akademików, globalne zarządzanie kontami administracyjnymi, publikacja oficjalnych komunikatów ogólnokampusowych w kalendarzu oraz globalna moderacja tablicy ogłoszeń).
 
 ## 4. Zakres projektu
 * **Co wchodzi w zakres (MVP / In-Scope):**

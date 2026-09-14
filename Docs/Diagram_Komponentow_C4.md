@@ -28,7 +28,7 @@ flowchart TB
     M -->|Rezerwacje, usterki, ogłoszenia, legitymacja PWA| PKAMPUS
     P -->|Wydawanie kluczy, weryfikacja karty, rejestr awarii| PKAMPUS
     ADS -->|Akceptacja meldunków, konfiguracja pralek/salek, kary| PKAMPUS
-    AOS -->|Zarządzanie obiektami akademików na kampusie| PKAMPUS
+    AOS -->|Zarządzanie obiektami, komunikaty kampusowe i moderacja| PKAMPUS
 
     PKAMPUS -->|Zapis i odczyt plików binarnych| S3
     PKAMPUS -->|Asynchroniczna wysyłka wiadomości e-mail| MAIL

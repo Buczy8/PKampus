@@ -34,7 +34,7 @@ flowchart LR
 
     ROOMS["<b>rooms</b><br/>----------------------------------<br/>PK id: UUID<br/>FK dormitory_id: UUID<br/>room_number: VARCHAR(10)<br/>floor: INT<br/>capacity: INT"]:::tableStyle
 
-    USERS["<b>users</b><br/>----------------------------------<br/>PK id: UUID<br/>UK email: VARCHAR(150)<br/>password_hash: VARCHAR(255)<br/>first_name: VARCHAR(50)<br/>last_name: VARCHAR(80)<br/>phone_number: VARCHAR(20)<br/>role: VARCHAR(30)<br/>status: VARCHAR(30)<br/>FK dormitory_id: UUID"]:::tableStyle
+    USERS["<b>users</b><br/>----------------------------------<br/>PK id: UUID<br/>UK email: VARCHAR(150)<br/>password_hash: VARCHAR(255)<br/>first_name: VARCHAR(50)<br/>last_name: VARCHAR(80)<br/>phone_number: VARCHAR(20)<br/>role: VARCHAR(30)<br/>status: VARCHAR(30)<br/>FK dormitory_id: UUID<br/>declared_room_number: VARCHAR(10) NULLABLE"]:::tableStyle
 
     ROOM_ASSIGNMENTS["<b>room_assignments</b><br/>----------------------------------<br/>PK id: UUID<br/>FK user_id: UUID<br/>FK room_id: UUID<br/>academic_year: VARCHAR(9)<br/>is_active: BOOLEAN<br/>check_in_date: DATE<br/>check_out_date: DATE"]:::tableStyle
 
@@ -209,7 +209,8 @@ Główna tabela użytkowników systemu (studenci, recepcjoniści, kierownicy DS,
 | `avatar_url` | `VARCHAR(500)` | `NULLABLE` | Ścieżka do zdjęcia w MinIO S3 (karta) |
 | `role` | `VARCHAR(30)` | `NOT NULL, CHECK (role IN ('RESIDENT', 'RECEPTIONIST', 'DORM_ADMIN', 'SUPER_ADMIN'))` | Rola w systemie (RBAC) |
 | `status` | `VARCHAR(30)` | `NOT NULL, CHECK (status IN ('PENDING_EMAIL', 'PENDING_APPROVAL', 'ACTIVE', 'BLOCKED', 'CHECKED_OUT'))` | Status cyklu życia konta |
-| `dormitory_id` | `UUID` | `FK -> dormitories(id), NULLABLE` | Przypisany akademik (dla Portiera/ADS) |
+| `dormitory_id` | `UUID` | `FK -> dormitories(id), NULLABLE` | Przypisany akademik (dla Portiera/ADS lub wybrany przy rejestracji mieszkańca) |
+| `declared_room_number` | `VARCHAR(10)` | `NULLABLE` | Deklarowany numer pokoju z formularza rejestracji (do weryfikacji i przydziału przez ADS) |
 | `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data rejestracji |
 | `updated_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data ostatniej edycji |
 
@@ -358,7 +359,7 @@ Wpisy na tablicy studenckiej z podziałem na zasięg (mój DS / cały kampus).
 | :--- | :--- | :--- | :--- |
 | `id` | `UUID` | `PK, DEFAULT gen_random_uuid()` | Identyfikator posta |
 | `author_id` | `UUID` | `FK -> users(id), NOT NULL` | Autor (Mieszkaniec) |
-| `dormitory_id` | `UUID` | `FK -> dormitories(id), NULLABLE` | DS (NULL jeśli post ogólnokampusowy) |
+| `dormitory_id` | `UUID` | `FK -> dormitories(id), NULLABLE` | DS autora (NULL jeśli post ogólnokampusowy CAMPUS; publikacja bezpośrednia przez studenta, moderacja przez ADS/AOS) |
 | `title` | `VARCHAR(150)` | `NOT NULL` | Tytuł ogłoszenia |
 | `content` | `TEXT` | `NOT NULL` | Treść wpisu |
 | `category` | `VARCHAR(30)` | `NOT NULL, CHECK (category IN ('BORROW_HELP', 'BUY_SELL', 'LOST_FOUND', 'GENERAL'))` | Kategoria wpisu |
@@ -392,8 +393,8 @@ Ogłoszenia techniczno-organizacyjne (wymiana pościeli, przerwa w dostawie wody
 | Kolumna | Typ danych | Ograniczenia | Opis |
 | :--- | :--- | :--- | :--- |
 | `id` | `UUID` | `PK, DEFAULT gen_random_uuid()` | Identyfikator wydarzenia |
-| `author_id` | `UUID` | `FK -> users(id), NOT NULL` | Twórca (Portier, ADS, Student) |
-| `dormitory_id` | `UUID` | `FK -> dormitories(id), NULLABLE` | Obiekt (NULL dla całego kampusu) |
+| `author_id` | `UUID` | `FK -> users(id), NOT NULL` | Twórca (Superadmin AOS, ADS, Portier, Student) |
+| `dormitory_id` | `UUID` | `FK -> dormitories(id), NULLABLE` | Obiekt (NULL dla całego kampusu — komunikaty publikowane przez Superadmina AOS) |
 | `title` | `VARCHAR(200)` | `NOT NULL` | Nagłówek komunikatu |
 | `description` | `TEXT` | `NOT NULL` | Szczegóły ogłoszenia |
 | `category` | `VARCHAR(30)` | `NOT NULL, CHECK (category IN ('BED_LINEN', 'TECHNICAL_OUTAGE', 'ADMIN_NOTICE', 'STUDENT_EVENT'))` | Typ komunikatu |
@@ -482,6 +483,7 @@ CREATE TABLE users (
     role VARCHAR(30) NOT NULL CHECK (role IN ('RESIDENT', 'RECEPTIONIST', 'DORM_ADMIN', 'SUPER_ADMIN')),
     status VARCHAR(30) NOT NULL CHECK (status IN ('PENDING_EMAIL', 'PENDING_APPROVAL', 'ACTIVE', 'BLOCKED', 'CHECKED_OUT')),
     dormitory_id UUID REFERENCES dormitories(id) ON DELETE SET NULL,
+    declared_room_number VARCHAR(10),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

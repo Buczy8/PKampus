@@ -7,7 +7,7 @@
 1. **Mieszkaniec (Student)** – zameldowany student korzystający z funkcji bytowych, rezerwacji, karty i tablicy.
 2. **Recepcjonista (Portier)** – pracownik portierni (weryfikacja wejść, wydawanie/odbiór kluczy, koordynacja napraw, komunikaty dyżurne).
 3. **Administrator Domu Studenckiego (ADS)** – kierownik DS (weryfikacja meldunków, konfiguracja zasobów, kary regulaminowe, oficjalne komunikaty).
-4. **Superadmin (AOS)** – kierownictwo osiedla studenckiego (zarządzanie obiektami domów studenckich).
+4. **Superadmin (AOS)** – kierownictwo osiedla studenckiego (zarządzanie obiektami domów studenckich, publikacja oficjalnych komunikatów ogólnokampusowych, moderacja tablicy kampusu).
 5. **System (Scheduler)** – automatyczny proces uwalniający nieodebrane rezerwacje po 15 minutach.
 
 ---
@@ -51,6 +51,7 @@ flowchart LR
     %% Relacje Administracji (prawa strona - nadzór i konfiguracja)
     M2 --- AdminDS
     M4 --- AdminDS
+    M4 --- SuperAdmin
     M5 --- AdminDS
     M5 --- SuperAdmin
 ```
@@ -62,7 +63,7 @@ flowchart LR
 | **Mieszkaniec (Student)** | Dostęp (Karta, profil) | Dostęp (Rezerwacje) | Dostęp (Zgłoszenia) | Dostęp (Tablica, kalendarz) | Brak dostępu |
 | **Recepcjonista (Portier)** | Dostęp (Weryfikacja karty) | Dostęp (Klucze, blokada awaryjna) | Dostęp (Rejestr napraw) | Dostęp (Komunikaty dyżurne, pościel) | Brak dostępu |
 | **Administrator DS (ADS)** | Weryfikacja meldunku | Wyłączenie awaryjne (Nadzór) | Brak operacji | Komunikaty i moderacja | Konfiguracja i kary |
-| **Superadmin (AOS)** | Brak operacji | Brak operacji | Brak operacji | Brak operacji | Zarządzanie osiedlem |
+| **Superadmin (AOS)** | Brak operacji | Brak operacji | Brak operacji | Komunikaty kampusowe i moderacja CAMPUS | Zarządzanie osiedlem |
 
 ---
 
@@ -233,12 +234,14 @@ flowchart LR
     end
 
     AdminDS["Administrator DS"]:::actorStyle
+    SuperAdmin["Superadmin (AOS)"]:::actorStyle
 
     Student --- UC_BOARD_01
     Student --- UC_BOARD_02
     Student --- UC_BOARD_03
 
     AdminDS --- UC_BOARD_04
+    SuperAdmin --- UC_BOARD_04
 ```
 
 ---
@@ -262,12 +265,14 @@ flowchart LR
 
     Portier["Recepcjonista"]:::actorStyle
     AdminDS["Administrator DS"]:::actorStyle
+    SuperAdmin["Superadmin (AOS)"]:::actorStyle
 
     Student --- UC_EVT_01
     Student --- UC_EVT_02
 
     Portier --- UC_EVT_03
     AdminDS --- UC_EVT_03
+    SuperAdmin --- UC_EVT_03
 ```
 
 ---
@@ -327,9 +332,9 @@ flowchart LR
 | **FR-ISSUE-06** | **UC-ISSUE-04** | Generowanie listy zadań dla konserwatora | Portier |
 | **FR-BOARD-01 .. FR-BOARD-05** | **UC-BOARD-01 .. UC-BOARD-03** | Tablica ogłoszeń (SHOULD / Etap 4) | Mieszkaniec |
 | **FR-BOARD-02** | **UC-BOARD-01** (widok feedu) | Filtrowanie feedu (SHOULD; bez full-text search) | Mieszkaniec |
-| **FR-BOARD-06** | **UC-BOARD-04** | Moderacja i usuwanie wpisów na tablicy (SHOULD) | Admin DS |
-| **FR-EVENT-01, FR-EVENT-02** | **UC-EVT-03, UC-EVT-01** | Publikacja komunikatów + baner przypiętych CRITICAL | Portier, Admin DS, Mieszkaniec |
+| **FR-BOARD-06** | **UC-BOARD-04** | Moderacja i usuwanie wpisów na tablicy (SHOULD) | Admin DS, Superadmin (AOS) |
+| **FR-EVENT-01, FR-EVENT-02** | **UC-EVT-03, UC-EVT-01** | Publikacja komunikatów + baner przypiętych CRITICAL | Portier, Admin DS, Superadmin (AOS), Mieszkaniec |
 | **FR-EVENT-03** | **UC-EVT-01** | Kalendarz oficjalnych terminów kampusu | Mieszkaniec |
 | **FR-EVENT-04** | **UC-EVT-02** | Wydarzenia mieszkańców (COULD) | Mieszkaniec |
 | **FR-PORTAL-01 .. FR-PORTAL-04** | **UC-RES-05a/b, UC-ADM-01 .. UC-ADM-04** | Dashboard recepcji, klucze, konfiguracja i meldunki | Portier, Admin DS |
-| **FR-PORTAL-05** | **UC-ADM-05** | Zarządzanie obiektami akademików osiedla | Superadmin |
+| **FR-PORTAL-05** | **UC-ADM-05, UC-EVT-03, UC-BOARD-04** | Zarządzanie obiektami akademików, komunikacja ogólnokampusowa i moderacja | Superadmin (AOS) |
