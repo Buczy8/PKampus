@@ -379,7 +379,7 @@ sequenceDiagram
     activate SVC
 
     %% Krok 1: Weryfikacja czarnej listy kar regulaminowych
-    SVC->>SANCT: checkActiveSanctions(userId, category='ROOM_BAN')
+    SVC->>SANCT: checkActiveSanctions(userId, sanctionType='ROOM_BAN')
     activate SANCT
     SANCT->>DB: findActiveSanction(userId, currentDate)
     activate DB
@@ -394,19 +394,27 @@ sequenceDiagram
         UI-->>M: Czerwony komunikat odmowy z datą wygaśnięcia kary
     else [Brak aktywnych kar dyscyplinarnych]
 
-        %% Krok 2: Walidacja reguł czasowych danej salki
-        alt [Przekroczono limit czasu: > 4h dla salki standardowej/Kujon lub poza oknem 14:00-02:00 dla Chillout]
-            SVC-->>CTL: throw InvalidRoomTimeWindowException
-            CTL-->>UI: 400 Bad Request (Niedozwolony przedział godzinowy dla typu salki)
-            UI-->>M: Komunikat błędu: Maksymalny czas to 4h
-        else [Parametry zgodne z regulaminem i brak kolizji slotu]
-            SVC->>DB: INSERT INTO room_bookings (user_id, room_id, status='CONFIRMED', terms_accepted=TRUE)
-            activate DB
-            DB-->>SVC: Utworzono rezerwację salki
-            deactivate DB
-            SVC-->>CTL: RoomBookingDetailsDTO
-            CTL-->>UI: 201 Created (Rezerwacja pomyślna)
-            UI-->>M: Potwierdzenie z przypomnieniem o odbiorze klucza w 15 min
+        %% Krok 2: Walidacja pojemności salki (FR-ROOM-03)
+        alt [Liczba uczestników przekracza pojemność: participants_count > room.max_capacity]
+            SVC-->>CTL: throw RoomCapacityExceededException
+            CTL-->>UI: 400 Bad Request (Przekroczono limit osób w salce)
+            UI-->>M: Komunikat błędu: Zbyt duża deklarowana liczba uczestników
+        else [Pojemność salki poprawna]
+
+            %% Krok 3: Walidacja reguł czasowych danej salki
+            alt [Przekroczono limit czasu: > 4h dla salki standardowej/Kujon lub poza oknem 14:00-02:00 dla Chillout]
+                SVC-->>CTL: throw InvalidRoomTimeWindowException
+                CTL-->>UI: 400 Bad Request (Niedozwolony przedział godzinowy dla typu salki)
+                UI-->>M: Komunikat błędu: Maksymalny czas to 4h
+            else [Parametry zgodne z regulaminem i brak kolizji slotu]
+                SVC->>DB: INSERT INTO room_bookings (user_id, room_id, status='CONFIRMED', terms_accepted=TRUE)
+                activate DB
+                DB-->>SVC: Utworzono rezerwację salki
+                deactivate DB
+                SVC-->>CTL: RoomBookingDetailsDTO
+                CTL-->>UI: 201 Created (Rezerwacja pomyślna)
+                UI-->>M: Potwierdzenie z przypomnieniem o odbiorze klucza w 15 min
+            end
         end
     end
     deactivate SVC

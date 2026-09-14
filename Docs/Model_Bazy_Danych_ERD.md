@@ -303,7 +303,7 @@ Rezerwacje salek z oświadczeniem Organizatora (§2 ust. 2 Regulaminu).
 | `end_time` | `TIMESTAMPTZ` | `NOT NULL` | Koniec rezerwacji |
 | `participants_count`| `INT` | `NOT NULL, CHECK (participants_count > 0)` | Deklarowana liczba uczestników |
 | `purpose` | `VARCHAR(255)` | `NOT NULL` | Cel rezerwacji |
-| `status` | `VARCHAR(30)` | `NOT NULL, CHECK (status IN ('CONFIRMED', 'KEY_ISSUED', 'COMPLETED', 'CANCELLED_USER', 'AUTO_CANCELLED_15MIN'))` | Status rezerwacji |
+| `status` | `VARCHAR(30)` | `NOT NULL, CHECK (status IN ('CONFIRMED', 'KEY_ISSUED', 'COMPLETED', 'CANCELLED_USER', 'AUTO_CANCELLED_15MIN', 'CANCELLED_ROOM_MAINTENANCE'))` | Status rezerwacji |
 | `terms_accepted` | `BOOLEAN` | `NOT NULL, CHECK (terms_accepted = TRUE)` | Zgoda na regulamin i odpowiedzialność |
 | `key_issued_at` | `TIMESTAMPTZ` | `NULLABLE` | Godzina odbioru klucza |
 | `key_returned_at` | `TIMESTAMPTZ` | `NULLABLE` | Godzina zwrotu klucza |
@@ -567,7 +567,7 @@ CREATE TABLE room_bookings (
     end_time TIMESTAMPTZ NOT NULL,
     participants_count INT NOT NULL CHECK (participants_count > 0),
     purpose VARCHAR(255) NOT NULL,
-    status VARCHAR(30) NOT NULL DEFAULT 'CONFIRMED' CHECK (status IN ('CONFIRMED', 'KEY_ISSUED', 'COMPLETED', 'CANCELLED_USER', 'AUTO_CANCELLED_15MIN')),
+    status VARCHAR(30) NOT NULL DEFAULT 'CONFIRMED' CHECK (status IN ('CONFIRMED', 'KEY_ISSUED', 'COMPLETED', 'CANCELLED_USER', 'AUTO_CANCELLED_15MIN', 'CANCELLED_ROOM_MAINTENANCE')),
     terms_accepted BOOLEAN NOT NULL CHECK (terms_accepted = TRUE),
     key_issued_at TIMESTAMPTZ,
     key_returned_at TIMESTAMPTZ,
