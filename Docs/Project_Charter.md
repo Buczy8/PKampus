@@ -23,13 +23,14 @@
   * **Moduł Uwierzytelniania i Profili:** Rejestracja/logowanie z podziałem na role (Mieszkaniec, Recepcjonista, Admin Akademika, Superadmin); przypisanie studenta do akademika i pokoju.
   * **Wirtualna Karta Mieszkańca (styl mObywatel):** Widok identyfikacyjny z danymi mieszkańca (zdjęcie, imię, nazwisko, akademik, numer pokoju, status ważności, zegar czasu rzeczywistego / element anty-screenshot do sprawnej weryfikacji na portierni bez papierowego laminatu).
   * **Moduł Rezerwacji Pralni (całkowicie bezpłatny):** Wybór akademika i konkretnej pralki; harmonogram w postaci slotów czasowych zapobiegający nakładaniu się rezerwacji; reguły limitujące (np. max liczba aktywnych rezerwacji na studenta/pokój); podgląd dla recepcji w celu wydania kluczy.
-  * **Moduł Rezerwacji Salek Tematycznych (całkowicie bezpłatny):** Katalog salek w danym akademiku (salka do nauki, salka TV/gier, siłownia, bilard); podgląd dostępności w kalendarzu i rezerwacja slotów.
+  * **Moduł Rezerwacji Salek Tematycznych (całkowicie bezpłatny):** Katalog regulaminowych salek w danym akademiku (salka do cichej nauki „Kujon”, bilard, tenis stołowy, salka TV, Funzone, salka Chillout); podgląd dostępności w kalendarzu i rezerwacja slotów.
   * **Moduł Zgłaszania Usterek (Cyfrowy Zeszyt Awarii):** Zgłaszanie problemu przez studenta (kategoria, lokalizacja/pokój, opis, załączenie zdjęcia) oraz personel (części wspólne, automatyczne auto-zgłoszenie przy wyłączeniu pralki z eksploatacji); panel recepcji z rejestrem spraw, możliwością wydruku/przekazania listy konserwatorowi i zmianą statusów (*Nowe* → *Przekazane konserwatorowi* → *W trakcie* → *Naprawione* itd.); lista własnych zgłoszeń mieszkańca z bieżącym statusem i ostatnią notatką portiera (bez pełnego dziennika historii zmian w MVP).
   * **Moduł Tablicy Ogłoszeń i Pomocy Sąsiedzkiej (Etap 4 / SHOULD):** Kanały ogłoszeniowe (ogólnokampusowy oraz per akademik); kategorie postów sąsiedzkich; wątki komentarzy; oznaczanie postów jako rozwiązane — po domknięciu modułów bytowych.
   * **Moduł Oficjalnych Komunikatów i Kalendarza:** Publikowanie ważnych ogłoszeń przez administrację (np. brak wody/internetu, terminy wymiany pościeli); kalendarz wydarzeń i imprez okolicznościowych na kampusie.
 * **Co jest poza zakresem (Out of Scope):**
   * Obsługa płatności elektronicznych (rezerwacja pralek i salek jest w 100% darmowa dla mieszkańców; brak integracji z PayU/Stripe/BLIK).
   * Rezerwacje i obsługa Klubu Studenckiego „Piwnica” (obiekt ten wymaga opłat 50/100 zł, manualnego trybu rezerwacji mailowej u Koordynatora Klubu oraz dedykowanego regulaminu wykraczającego poza model bezpłatnych salek tematycznych PKampus).
+  * Rezerwacje obiektów o odrębnych regulaminach (siłownie akademickie oraz sale sportowe posiadają odrębne regulaminy obiektowe, zasady BHP i procedury wstępu — są całkowicie wyłączone z systemu PKampus).
   * Integracja fizyczna IoT / Hardware (brak bezpośredniego sterowania zasilaniem pralek, brak elektrozamków i czytników RFID – klucze wydaje fizycznie portier po weryfikacji rezerwacji w aplikacji).
   * Prywatny komunikator 1-na-1 w czasie rzeczywistym (komunikacja sąsiedzka odbywa się w komentarzach pod ogłoszeniami, co zapobiega spamowi i ogranicza złożoność).
   * Bezpośrednia integracja z centralnymi systemami dziekanatowymi uczelni (np. USOS API) – dane studentów i pokoi zarządzane są wewnętrznie w systemie PKampus.
@@ -105,6 +106,6 @@
 * **Portiernia / Recepcja:** Punkt obsługi stacjonarnej w akademiku, odpowiedzialny za weryfikację tożsamości, wydawanie fizycznych kluczy oraz przekazywanie usterek konserwatorowi.
 * **Wirtualna Karta Mieszkańca:** Cyfrowy dokument tożsamości w aplikacji z weryfikacją wizualną, zastępujący papierową, laminowaną kartę mieszkańca.
 * **Slot rezerwacyjny:** Dyskretny przedział czasu (np. 1.5 lub 2 godziny), na który można zarezerwować konkretne urządzenie (pralkę) lub salkę.
-* **Salka tematyczna:** Pomieszczenie wspólne w akademiku przeznaczone do określonych celów (np. salka cichej nauki, salka telewizyjna, siłownia, bilard).
+* **Salka tematyczna:** Pomieszczenie wspólne w akademiku objęte Regulaminem korzystania z salek tematycznych PK (np. salka cichej nauki „Kujon”, salka TV, bilard, tenis stołowy, Funzone, Chillout). Obiekty sportowe (siłownie) podlegają osobnym regulaminom i są wyłączone z systemu.
 * **Cyfrowy Zeszyt Awarii:** Moduł ewidencji zgłoszeń usterek zastępujący fizyczny zeszyt papierowy na portierni.
 * **Pomoc Sąsiedzka:** Kategoria na tablicy ogłoszeń dedykowana szybkiej wymianie dóbr i wzajemnej pomocy pomiędzy mieszkańcami (np. pożyczenie drobnych przedmiotów, sprzętu).
