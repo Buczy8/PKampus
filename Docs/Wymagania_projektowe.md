@@ -13,6 +13,12 @@ Dokument specyfikacji wymagań funkcjonalnych, pozafunkcjonalnych i reguł bizne
   * **SHOULD:** Ważne, powinno się znaleźć w projekcie
   * **COULD:** Opcjonalne, mile widziane
   * **WON'T:** Poza zakresem MVP (odłożone)
+* **Relacja ról systemowych (RBAC) do pojęć Regulaminu OS PK:**
+  * **Mieszkaniec (`RESIDENT`):** Student PK zameldowany w DS PK z aktywnym kontem.
+  * **Recepcjonista / Portier (`RECEPTIONIST`):** Pracownik portierni/recepcji obsługujący fizyczne wydawanie kluczy oraz cyfrowy zeszyt usterek.
+  * **ADS – Administrator Domu Studenckiego (`DORM_ADMIN`):** Rola systemowa reprezentująca Kierownika DS oraz pracowników Administracji Domu Studenckiego (w regulaminie ADS to jednostka organizacyjna pod kierownictwem Kierownika DS). Zarządza zasobami, personelem portierni i weryfikacją meldunków danego akademika.
+  * **AOS – Administrator Osiedla Studenckiego / Superadmin (`SUPER_ADMIN`):** Rola systemowa reprezentująca Kierownika Osiedla Studenckiego oraz pion Administracji Osiedla Studenckiego (centralna jednostka osiedla). Posiada uprawnienia nadrzędne dla całego miasteczka akademickiego.
+  * **KOS – Komisja Osiedla Studenckiego:** Organ Samorządu Studenckiego PK reprezentujący mieszkańców. W fazie MVP KOS nie posiada odrębnego konta technicznego w aplikacji; jego regulaminowa rola wnioskodawcy lub organu opiniującego (np. przy nakładaniu sankcji wg BR-05 / §6 ust. 2) realizowana jest w procedurze organizacyjnej, a wynikowe blokady wprowadza do systemu administrator ADS (`DORM_ADMIN`).
 
 ---
 
