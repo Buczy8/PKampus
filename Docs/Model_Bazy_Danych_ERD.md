@@ -312,7 +312,7 @@ Rezerwacje salek z oświadczeniem Organizatora (§2 ust. 2 Regulaminu).
 *Kluczowe ograniczenie integralności (Anti-Overlap):*
 `ALTER TABLE room_bookings ADD CONSTRAINT chk_room_no_overlap EXCLUDE USING gist (room_id WITH =, tstzrange(start_time, end_time) WITH &&) WHERE (status IN ('CONFIRMED', 'KEY_ISSUED'));` — gwarantuje wykluczenie nakładających się rezerwacji salki w bazie.
 
-*Reguła zwrotu klucza dla salki Chillout (BR-08 / §3 ust. 7):* Dla rezerwacji kończących się w oknie nocnym (do 02:00) portiernia egzekwuje zwrot klucza do 10:00 operacyjnie. System przechowuje `key_issued_at` / `key_returned_at`; automatyczna blokada kolejnych wydań klucza nie jest wymagana w MVP.
+*Reguła zwrotu klucza dla salki Chillout (BR-08 / §5 ust. 10):* Dla rezerwacji kończących się w oknie nocnym (do 02:00) portiernia egzekwuje zwrot klucza do 10:00 operacyjnie. System przechowuje `key_issued_at` / `key_returned_at`; automatyczna blokada kolejnych wydań klucza nie jest wymagana w MVP.
 
 ---
 

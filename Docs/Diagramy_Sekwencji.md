@@ -193,7 +193,7 @@ sequenceDiagram
 
 ## 4. Sekwencja 3: Procedura Wydania Klucza i Reguła 15 Minut (LAUNDRY/ROOMS & SCHEDULER)
 
-Zgodnie z §2 ust. 5 Regulaminu Osiedla Studenckiego, mieszkaniec musi odebrać klucz w ciągu 15 minut od startu rezerwacji. Diagram ilustruje dwa alternatywne warianty: pomyślny odbiór klucza na portierni oraz automatyczne zwolnienie zasobu przez harmonogram zadań w tle (`@Scheduled`).
+Zgodnie z §2 ust. 5 Regulaminu korzystania z salek tematycznych (oraz analogiczną decyzją projektową przyjętą dla pralni w celu zapobiegania blokowaniu slotów), mieszkaniec musi odebrać klucz w ciągu 15 minut od startu rezerwacji. Diagram ilustruje dwa alternatywne warianty: pomyślny odbiór klucza na portierni oraz automatyczne zwolnienie zasobu przez harmonogram zadań w tle (`@Scheduled`).
 
 ```mermaid
 sequenceDiagram
@@ -636,7 +636,7 @@ sequenceDiagram
 Zaprojektowane diagramy sekwencji pokrywają **kluczowe** zachowania dynamiczne systemu PKampus (ścieżki krytyczne MVP), a nie pełną listę wszystkich FR:
 1. **Asynchroniczność i integracja e-mail:** Zastosowanie kolejki zadań asynchronicznych w Spring Boot dla Mailpit (aktywacja konta, usterki, awarie sprzętu, reset hasła).
 2. **Bezpieczeństwo transakcyjne:** Blokady bazodanowe i ograniczenia `EXCLUDE USING gist` wykluczające nakładające się rezerwacje w pralniach i salkach.
-3. **Automatyzacja procesów w tle:** Dedykowany Spring Scheduler realizujący regułę 15 minut (§2 ust. 5 Regulaminu).
+3. **Automatyzacja procesów w tle:** Dedykowany Spring Scheduler realizujący regułę 15 minut (§2 ust. 5 Regulaminu salek oraz analogiczną zasadę dla pralni).
 4. **Zarządzanie mediami:** Bezpośrednia integracja backendu z magazynem obiektowym MinIO (S3) przy obsłudze usterek i zdjęć profilowych.
 5. **Egzekwowanie prawa wewnętrznego PK:** Walidacja czarnej listy kar dyscyplinarnych (§6 ust. 2) przed dopuszczeniem do zasobów.
 6. **Kaskadowa reakcja na awarie zasobów:** Automatyczne wyłączenie sprzętu, anulowanie rezerwacji, dyspozycja naprawy i powiadomienia mieszkańców.
