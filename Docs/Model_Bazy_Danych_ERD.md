@@ -5,7 +5,9 @@
 ## 1. Założenia Projektowe i Integralność Danych
 
 1. **Silnik Bazy Danych:** PostgreSQL 16 (zgodność z ACID, wysoka wydajność współbieżna, natywna obsługa typów `UUID`, `TIMESTAMPTZ`, `JSONB`).
-2. **Standard Identyfikatorów (Primary Keys):** Wszystkie encje posiadają klucz główny typu `UUIDv4` generowany automatycznie (`DEFAULT gen_random_uuid()`), co zapobiega podatnościom typu *Insecure Direct Object References* (IDOR) oraz zgadywaniu identyfikatorów w REST API.
+2. **Standard Identyfikatorów i Bezpieczeństwo Dostępu (IDOR / BOLA):** Wszystkie encje posiadają klucz główny typu `UUIDv4` generowany automatycznie (`DEFAULT gen_random_uuid()`), co uniemożliwia przewidywanie i sekwencyjną enumerację zasobów w REST API. Sam UUID nie stanowi jednak zabezpieczenia przed atakami typu *Insecure Direct Object References* (IDOR / Broken Object Level Authorization) — ochrona ta jest bezwzględnie egzekwowana w warstwie logiki biznesowej (Spring Security) poprzez:
+   * **Autoryzację na poziomie instancji zasobu (Object-Level Authorization / ABAC):** weryfikację własności (`resource.user_id == current_user.id`) przy dostępie studenta do własnych rezerwacji i zgłoszeń,
+   * **Izolację kontekstu akademika (Tenant / Dormitory Scope Enforcement):** sprawdzanie zgodności `resource.dormitory_id == current_user.dormitory_id` dla operacji personelu portierni i kierownictwa DS (blokada dostępu portiera z DS-1 do spraw z DS-2).
 3. **Czas i Strefy Czasowe:** Wszystkie znaczniki czasowe operacji i rezerwacji zapisywane są w formacie `TIMESTAMPTZ` (UTC).
 4. **Obsługa Corocznej Rotacji Mieszkańców (Wymeldowania na Koniec Roku):**
    * Pokoje fizyczne (`rooms`) są stałymi obiektami przypisanymi do danego akademika.
@@ -15,6 +17,12 @@
    * Rezerwacje slotów pralki i salek zabezpieczone są na poziomie jądra bazy za pomocą **ograniczeń wykluczających** `EXCLUDE USING gist` (rozszerzenie `btree_gist`) na równości identyfikatora zasobu oraz przecięciu przedziałów `tstzrange(start_time, end_time)`. Baza odrzuca nachodzące aktywne rezerwacje (`CONFIRMED`, `KEY_ISSUED`) kodem SQLSTATE **`23P01` (`exclusion_violation`)** — nie `23505`.
 6. **Polityka Usuwania Danych (Soft Delete):**
    * Posty i komentarze na tablicy sąsiedzkiej podlegają mechanizmowi miękkiego usuwania (`is_deleted BOOLEAN`, `deleted_at TIMESTAMPTZ`), co zapewnia ślad audytowy moderacji dla Administratora DS.
+7. **Zasady Retencji Danych i Ochrona Prywatności (RODO / Data Retention):**
+   * **Konta wymeldowanych (`CHECKED_OUT`):** Przechowywane do końca roku akademickiego + 30 dni na rozliczenie kaucji, po czym dane osobowe podlegają anonimizacji (zastąpienie imienia/nazwiska ciągiem zanonimizowanym, wyczyszczenie telefonu i e-maila).
+   * **Zrealizowane i anulowane rezerwacje:** Retencja przez 90 dni dla celów ewentualnych postępowań dyscyplinarnych, po czym następuje czyszczenie rekordów lub agregacja statystyczna.
+   * **Zdjęcia usterek w MinIO (`issue_photos`):** Pliki binarne zdjęć usuwane z bucketu MinIO po 30 dniach od przejścia usterki w stan `RESOLVED` lub `REJECTED`. Rekord tekstowy usterki w PostgreSQL zachowywany przez 12 miesięcy dla celów analizy technicznej.
+   * **Ochrona prywatności na tablicy (Pokoje):** Przy zasięgu kampusowym (`scope = 'CAMPUS'`) DTO widoku ukrywa numer pokoju (autor prezentowany jako `Jan Kowalski (DS-1)`), natomiast pełny numer pokoju ujawniany jest wyłącznie dla sąsiadów z tego samego budynku (`scope = 'DORMITORY'`).
+   * **Wpisy na tablicy i komentarze:** Wpisy `RESOLVED` usuwane po 30 dniach; wpisy miękko usunięte (`is_deleted = TRUE` / `REMOVED_MODERATOR`) usuwane trwale przez scheduler po 14 dniach.
 
 ---
 
