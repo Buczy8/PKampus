@@ -152,7 +152,7 @@ flowchart LR
         direction TB
         UC_LAUND_01(["UC-LAUND-01: Przeglądanie grafiku pralek"]):::ucStyle
         UC_LAUND_02(["UC-LAUND-02: Rezerwacja slotu pralki"]):::ucStyle
-        UC_INC_BR01(["<<include>><br/>Walidacja 1 aktywnej rezerwacji (BR-01)"]):::subUcStyle
+        UC_INC_BR01(["<<include>><br/>Walidacja max 2 rezerwacji/tydz. (BR-01)"]):::subUcStyle
         UC_LAUND_03(["UC-LAUND-03: Anulowanie rezerwacji pralki"]):::ucStyle
         UC_LAUND_04(["UC-LAUND-04: Wydanie i zwrot klucza pralni"]):::ucStyle
         UC_LAUND_05(["UC-LAUND-05: Ręczne zwolnienie slotu (Portier 15 min)"]):::ucStyle
@@ -197,7 +197,7 @@ flowchart LR
         direction TB
         UC_ROOM_01(["UC-ROOM-01: Rezerwacja salki tematycznej"]):::ucStyle
         UC_INC_SANCTION(["<<include>><br/>Weryfikacja braku ROOM_BAN (BR-05)"]):::subUcStyle
-        UC_INC_CAPACITY(["<<include>><br/>Walidacja pojemności i limitu 4h"]):::subUcStyle
+        UC_INC_CAPACITY(["<<include>><br/>Walidacja pojemności i czasu (BR-03)"]):::subUcStyle
         UC_ROOM_02(["UC-ROOM-02: Anulowanie rezerwacji salki"]):::ucStyle
         UC_ROOM_03(["UC-ROOM-03: Przedłużenie rezerwacji salki (COULD)"]):::ucStyle
         UC_ROOM_04(["UC-ROOM-04: Wydanie i zwrot klucza salki"]):::ucStyle
@@ -399,10 +399,11 @@ flowchart LR
 | **FR-ROOM-07** | **UC-ADM-03** | Ewidencja kar i czarna lista salek (ROOM_BAN 1–3 mies.) | Admin DS |
 | **FR-ROOM-08** | **UC-ROOM-02** | Anulowanie rezerwacji salki przed startem (SHOULD) | Mieszkaniec |
 | **FR-ROOM-09** | **UC-ROOM-06** | Wyłączenie salki z eksploatacji (Stan MAINTENANCE / Awaria) | Portier, Admin DS |
-| **FR-ISSUE-01 .. FR-ISSUE-03** | **UC-ISSUE-01** | Zgłoszenie usterki ze zdjęciem MinIO, walidacja pokoju i pilność | Mieszkaniec, Portier, Admin DS |
-| **FR-ISSUE-04** | **UC-ISSUE-02, UC-ISSUE-05** | Rejestr napraw portierni oraz podgląd własnych zgłoszeń mieszkańca | Portier, Admin DS, Mieszkaniec |
-| **FR-ISSUE-05** | **UC-ISSUE-03** | Aktualizacja statusu naprawy i notatki personelu (staff_notes) | Portier, Admin DS |
-| **FR-ISSUE-06** | **UC-ISSUE-04** | Generowanie listy zadań dla konserwatora | Portier |
+| **FR-ISSUE-01, FR-ISSUE-02** | **UC-ISSUE-01** | Zgłaszanie usterek technicznych z dokumentacją fotograficzną MinIO | Mieszkaniec, Portier, Admin DS |
+| **FR-ISSUE-03** | **UC-ISSUE-02** | Cyfrowy rejestr usterek dla recepcji (pulpit portiera z filtrowaniem) | Portier, Admin DS |
+| **FR-ISSUE-04** | **UC-ISSUE-03** | Cykl życia i statusy naprawy oraz notatki personelu (staff_notes) | Portier, Admin DS |
+| **FR-ISSUE-05** | **UC-ISSUE-05** | Śledzenie stanu zgłoszenia przez mieszkańca (historia i ostatnia notatka) | Mieszkaniec |
+| **FR-ISSUE-06** | **UC-ISSUE-04** | Generowanie listy zadań dla konserwatora (widok/wydruk zadań na dyżur) | Portier, Admin DS |
 | **FR-BOARD-01** | **UC-BOARD-01** | Publikacja nowego ogłoszenia sąsiedzkiego | Mieszkaniec |
 | **FR-BOARD-02** | **UC-BOARD-02** | Przeglądanie i filtrowanie feedu ogłoszeń | Mieszkaniec |
 | **FR-BOARD-03** | **UC-BOARD-03** | Dodanie komentarza w wątku ogłoszenia | Mieszkaniec |
@@ -429,13 +430,13 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
 * **Aktorzy pomocniczy:** Uczelniany serwer pocztowy (SMTP / Mailpit)
 * **Warunki początkowe (Preconditions):** Użytkownik posiada aktywny adres e-mail i nie posiada zarejestrowanego konta w systemie.
 * **Warunki końcowe (Postconditions):**
-  * *Sukces:* W bazie utworzono rekord użytkownika w stanie `PENDING_APPROVAL` (po potwierdzeniu e-maila podpisanym linkiem z tokenem HMAC ważnym 24h wg `BR-06`), oczekujący na zatwierdzenie meldunku przez ADS (`FR-AUTH-02`).
+  * *Sukces:* W bazie utworzono rekord użytkownika w stanie `PENDING_APPROVAL` (po potwierdzeniu e-maila podpisanym linkiem z tokenem HMAC ważnym 24h wg `FR-AUTH-01`), oczekujący na zatwierdzenie meldunku przez ADS (`FR-AUTH-02`). Zgodnie z `BR-06` konto w stanie `PENDING_APPROVAL` nie może tworzyć rezerwacji ani zgłaszać usterek.
   * *Porażka:* Brak konta lub odrzucenie formularza z komunikatem błędu.
 * **Scenariusz główny (Główny ciąg akcji):**
   1. Student otwiera formularz rejestracji w portalu/aplikacji PKampus.
   2. Student podaje: imię, nazwisko, e-mail, hasło (min. 8 znaków, duża litera, cyfra, znak specjalny wg `NFR-SEC-02`), wybiera akademik oraz wskazuje przydzielony pokój.
   3. System waliduje unikalność adresu e-mail oraz siłę hasła.
-  4. System tworzy rekord w tabeli `users` ze statusem `PENDING_EMAIL`, haszuje hasło algorytmem **BCrypt** (12 rund soli) i generuje kryptograficznie podpisany token weryfikacyjny HMAC-SHA256 (TTL: 24h wg `BR-06`).
+  4. System tworzy rekord w tabeli `users` ze statusem `PENDING_EMAIL`, haszuje hasło algorytmem **BCrypt** (12 rund soli) i generuje kryptograficznie podpisany token weryfikacyjny HMAC-SHA256 (TTL: 24h wg `FR-AUTH-01`).
   5. System wysyła wiadomość e-mail z linkiem aktywacyjnym na podany adres (`FR-AUTH-01`).
   6. Student odbiera pocztę i klika link aktywacyjny w ciągu 24h.
   7. System weryfikuje podpis tokenu, po czym zmienia status konta na `PENDING_APPROVAL`.
@@ -497,26 +498,29 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
 * **Warunki końcowe:** Nowe hasło zapisane w bazie; token w `password_reset_tokens` oznaczony jako zużyty (`used_at IS NOT NULL`).
 * **Scenariusz główny:**
   1. Użytkownik klika „Nie pamiętam hasła” na ekranie logowania i wprowadza adres e-mail.
-  2. System sprawdza obecność adresu w bazie. Generuje jednorazowy token kryptograficzny (TTL: 15 min wg `BR-06`), zapisuje jego skrót w tabeli `password_reset_tokens` i wysyła e-mail z linkiem (`FR-AUTH-07`).
+  2. System sprawdza obecność adresu w bazie. Generuje jednorazowy token kryptograficzny (TTL: 15 min wg `FR-AUTH-07`, `ADR-07`), zapisuje jego skrót w tabeli `password_reset_tokens` i wysyła e-mail z linkiem (`FR-AUTH-07`).
   3. Użytkownik otwiera link w ciągu 15 minut.
   4. System weryfikuje ważność tokenu i wyświetla formularz wprowadzenia nowego hasła.
   5. Użytkownik podaje nowe hasło i zatwierdza.
   6. System zapisuje nowe hasło (BCrypt wg `NFR-SEC-02`), ustawia `used_at = CURRENT_TIMESTAMP` dla tokenu i przekierowuje do logowania.
 * **Rozszerzenia:**
   * **4a. Token wygasł (>15 min) lub został już zużyty:** System wyświetla błąd i uniemożliwia zmianę hasła.
-* **Powiązane wymagania:** `FR-AUTH-07`, `NFR-SEC-02`, `BR-06`.
+* **Powiązane wymagania:** `FR-AUTH-07`, `NFR-SEC-02`, `ADR-07`.
 
-#### UC-CARD-01: Wyświetlenie Cyfrowej Karty Mieszkańca
+#### UC-CARD-01: Wyświetlenie Cyfrowej Karty Mieszkańca (Weryfikacja on-line)
 * **Aktor główny:** Mieszkaniec (Student)
-* **Warunki początkowe:** Mieszkaniec zalogowany w aplikacji mobilnej/PWA; konto w stanie `ACTIVE`.
-* **Warunki końcowe:** Dynamiczna karta mieszkańca wyrenderowana na ekranie urządzenia.
+* **Warunki początkowe:** Mieszkaniec zalogowany w aplikacji mobilnej/PWA z aktywnym połączeniem sieciowym; konto w stanie `ACTIVE`.
+* **Warunki końcowe:** Dynamiczna karta mieszkańca wyrenderowana na ekranie urządzenia z bieżącym statusem i czasem serwera.
 * **Scenariusz główny:**
   1. Mieszkaniec wybiera zakładkę „Karta Mieszkańca”.
-  2. System pobiera dane profilowe (imię, nazwisko, nazwa akademika, numer pokoju, zdjęcie profilowe) (`FR-CARD-01`).
-  3. Aplikacja renderuje kartę z dynamicznym zegarem serwera (odświeżanym co sekundę) oraz płynnym gradientem animacyjnym CSS (`BR-07`, `FR-CARD-04`).
+  2. Aplikacja wysyła zapytanie do endpointu weryfikacyjnego backendu (`/api/v1/profile/card`).
+  3. Serwer weryfikuje token JWT oraz aktualny status użytkownika w bazie danych (`users.status = 'ACTIVE'`).
+  4. System zwraca dane profilowe (imię, nazwisko, nazwa akademika, numer pokoju, zdjęcie profilowe, pieczęć graficzną) (`FR-CARD-01`).
+  5. Aplikacja renderuje pełnoekranową kartę z zielonym oznaczeniem „AKTYWNA / MIESZKANIEC” (`FR-CARD-03`), działającym na żywo zegarem serwera (godzina, minuta, sekundy) oraz animowanym hologramem wizualnym (płynny gradient CSS) uniemożliwiającym fałszerstwa (`FR-CARD-02`, `FR-CARD-04`).
 * **Rozszerzenia:**
-  * **2a. Tryb offline PWA:** Aplikacja wyświetla ostatnio pobraną kartę z wyraźnym oznaczeniem trybu offline (`FR-CARD-04`).
-* **Powiązane wymagania:** `FR-CARD-01`, `FR-CARD-02`, `FR-CARD-04`, `BR-07`.
+  * **2a. Brak połączenia sieciowego (Tryb offline):** Dynamiczna weryfikacja anty-fraud bezwzględnie wymaga łączności z serwerem. W przypadku braku sieci aplikacja blokuje prezentację karty i wyświetla komunikat ostrzegawczy: „Brak połączenia sieciowego — weryfikacja dynamiczna karty wymaga połączenia z serwerem. Zgodnie z regulaminem okazanie karty offline lub zrzutu ekranu jest nieważne”.
+  * **3a. Status konta uległ zmianie na `BLOCKED` lub `CHECKED_OUT` w trakcie trwania sesji:** Serwer zwraca zaktualizowany status, a aplikacja natychmiast blokuje widok karty mieszkańca i wyświetla pełnoekranowy czerwony baner ostrzegawczy: „KONTO ZABLOKOWANE ADMINISTRACYJNIE” lub „KONTO WYGASŁE (WYMELDOWANY)” (`FR-CARD-03`). Użytkownik nieposiadający aktywnej sesji nie może zalogować się do systemu (kod błędu HTTP 403 Forbidden wg `UC-AUTH-02`).
+* **Powiązane wymagania:** `FR-CARD-01`, `FR-CARD-02`, `FR-CARD-03`, `FR-CARD-04`.
 
 #### UC-CARD-02: Wzrokowa weryfikacja karty (anty-screenshot)
 * **Aktor główny:** Recepcjonista (Portier)
@@ -525,11 +529,13 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
 * **Warunki końcowe:** Mieszkaniec wpuszczony do obiektu lub skierowany do weryfikacji tożsamości.
 * **Scenariusz główny:**
   1. Portier sprawdza zgodność wizerunku na zdjęciu z twarzą wchodzącego studenta.
-  2. Portier weryfikuje ruchomy element animacji tła oraz płynnie idący zegar serwerowy w celu wykluczenia statycznego zrzutu ekranu (`FR-CARD-02`, `BR-07`).
-  3. Portier potwierdza zgodność obiektu i zezwala na wejście (`FR-CARD-03`).
+  2. Portier weryfikuje ruchomy element animacji tła oraz płynnie idący zegar serwerowy w celu wykluczenia statycznego zrzutu ekranu (`FR-CARD-02`).
+  3. Portier weryfikuje zielony wskaźnik „AKTYWNA / MIESZKANIEC” (`FR-CARD-03`) oraz zgodność nazwy akademika.
+  4. Portier zezwala na wejście do budynku w 2-3 sekundy bez konieczności obsługi komputera (`FR-CARD-04`).
 * **Rozszerzenia:**
-  * **2a. Wykryto statyczny screenshot:** Portier żąda interakcji z aplikacją lub okazania fizycznej legitymacji studenckiej.
-* **Powiązane wymagania:** `FR-CARD-02`, `FR-CARD-03`, `BR-07`.
+  * **2a. Wykryto statyczny screenshot lub brak animacji:** Portier żąda interakcji z aplikacją (przewinięcie, kliknięcie) lub okazania fizycznej legitymacji studenckiej.
+  * **3a. Wyświetlona czerwona plansza blokady/wygaszenia:** Portier odmawia wpuszczenia do akademika i kieruje studenta do kierownika DS.
+* **Powiązane wymagania:** `FR-CARD-02`, `FR-CARD-03`, `FR-CARD-04`.
 
 ---
 
@@ -541,7 +547,7 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
 * **Warunki końcowe:** Prezentacja graficznej siatki dostępności pralek i slotów czasowych.
 * **Scenariusz główny:**
   1. Mieszkaniec otwiera moduł „Pralnia”.
-  2. System pobiera listę pralek (`laundry_machines`) w akademiku użytkownika oraz parametry harmonogramu z `dormitory_settings` (domyślny czas slotu: 90 minut, okno rezerwacji do 7 dni w przód, `FR-LAUND-01`).
+  2. System pobiera listę pralek (`laundry_machines`) w akademiku użytkownika oraz parametry harmonogramu z tabeli `dormitories` (`laundry_slot_duration_minutes`: domyślnie 90 minut, godziny otwarcia/zamknięcia pralni, `FR-LAUND-01`).
   3. System renderuje siatkę slotów:
      * Dostępny: slot wolny do rezerwacji.
      * Zajęty: slot zarezerwowany przez innego mieszkańca.
@@ -753,26 +759,26 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
 * **Warunki końcowe:** Utworzony rekord w tabeli `issues` ze statusem `NEW` i opcjonalnym załącznikiem w `issue_photos`.
 * **Scenariusz główny:**
   1. Użytkownik klika „Nowe zgłoszenie usterki”.
-  2. Wybiera lokalizację: pokój mieszkańca (`room_id`) albo część wspólna (`common_area_name`) – zgodnie z więzem `chk_issue_location` (`FR-ISSUE-02`).
-  3. Wybiera branżę awarii (`category`: `PLUMBING`, `ELECTRICAL`, `FURNITURE`, `LOCKSMITH`, `OTHER`) oraz stopień pilności (`urgency`: `NORMAL`, `URGENT`) i wprowadza opis usterki (`FR-ISSUE-01`, `FR-ISSUE-03`).
-  4. Użytkownik opcjonalnie załącza zdjęcie usterki (formaty JPEG, PNG, WebP do 5 MB wg `NFR-SEC-03`).
+  2. Wybiera lokalizację: pokój mieszkańca (`room_id`) albo część wspólna (`common_area_name`) – zgodnie z więzem `chk_issue_location` (`FR-ISSUE-01`).
+  3. Wybiera branżę awarii (`category`: `PLUMBING`, `ELECTRICAL`, `FURNITURE`, `LOCKSMITH`, `OTHER`) oraz stopień pilności (`urgency`: `NORMAL`, `URGENT`) i wprowadza opis usterki (`FR-ISSUE-01`).
+  4. Użytkownik opcjonalnie załącza zdjęcie usterki (`FR-ISSUE-02`, formaty JPEG, PNG, WebP do 5 MB wg `NFR-SEC-03`).
   5. System przesyła plik do MinIO pod unikalnym identyfikatorem UUID i zapisuje rekord w `issue_photos`.
   6. System tworzy zgłoszenie w tabeli `issues` ze statusem `NEW`.
   7. Zgłoszenie pojawia się w rejestrze personelu DS.
 * **Rozszerzenia:**
   * **4a. Plik przekracza rozmiar 5 MB lub niedozwolony format:** System odrzuca plik z komunikatem błędu (`NFR-SEC-03`).
-* **Powiązane wymagania:** `FR-ISSUE-01`, `FR-ISSUE-02`, `FR-ISSUE-03`, `NFR-SEC-03`.
+* **Powiązane wymagania:** `FR-ISSUE-01`, `FR-ISSUE-02`, `NFR-SEC-03`.
 
 #### UC-ISSUE-02: Przeglądanie i obsługa rejestru awarii w DS (Personel)
 * **Aktor główny:** Portier, Administrator DS (ADS)
 * **Warunki początkowe:** Użytkownik personelu zalogowany.
 * **Warunki końcowe:** Prezentacja listy zgłoszeń w danym DS z możliwością filtrowania.
 * **Scenariusz główny:**
-  1. Personel otwiera cyfrowy rejestr awarii (`FR-ISSUE-04`, `FR-PORTAL-01`).
+  1. Personel otwiera cyfrowy rejestr awarii (`FR-ISSUE-03`, `FR-PORTAL-01`).
   2. System pobiera listę zgłoszeń powiązanych z danym akademikiem.
   3. Personel filtruje zgłoszenia wg statusu (`NEW`, `ASSIGNED_TO_MAINTENANCE`, `IN_PROGRESS`, `RESOLVED`, `REJECTED`, `PARTS_REQUIRED`), kategorii i pilności (`urgency`).
   4. Kliknięcie w zgłoszenie otwiera szczegóły wraz ze zdjęciem MinIO i bieżącą notatką personelu (`staff_notes`).
-* **Powiązane wymagania:** `FR-ISSUE-04`, `FR-PORTAL-01`.
+* **Powiązane wymagania:** `FR-ISSUE-03`, `FR-PORTAL-01`.
 
 #### UC-ISSUE-03: Aktualizacja statusu naprawy i notatki personelu (staff_notes)
 * **Aktor główny:** Portier, Administrator DS
@@ -787,8 +793,8 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
      * `RESOLVED` – pomyślne usunięcie awarii przez konserwatora,
      * `REJECTED` – odrzucenie zgłoszenia (np. brak usterki, duplikat).
   3. Personel wprowadza lub aktualizuje treść bieżącej notatki w polu `staff_notes` (widocznej dla studenta, zgodnie z `ADR-09`).
-  4. System zapisuje zmiany i wysyła powiadomienie e-mail do zgłaszającego mieszkańca (`FR-ISSUE-05`).
-* **Powiązane wymagania:** `FR-ISSUE-05`, `ADR-09`.
+  4. System zapisuje zmiany i wysyła powiadomienie e-mail do zgłaszającego mieszkańca (`FR-ISSUE-04`).
+* **Powiązane wymagania:** `FR-ISSUE-04`, `ADR-09`.
 
 #### UC-ISSUE-04: Generowanie listy zadań dla konserwatora
 * **Aktor główny:** Portier, Administrator DS
@@ -808,8 +814,8 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
 * **Scenariusz główny:**
   1. Student przechodzi do zakładki „Moje usterki”.
   2. System wyświetla historię zgłoszeń zalogowanego użytkownika z aktualnym statusem (`NEW`, `ASSIGNED_TO_MAINTENANCE`, `IN_PROGRESS`, `PARTS_REQUIRED`, `RESOLVED`, `REJECTED`).
-  3. Student widzi bieżącą notatkę personelu wpisaną w `staff_notes` (np. „Zamówiono nową uszczelkę, montaż we wtorek”) (`FR-ISSUE-04`, `ADR-09`).
-* **Powiązane wymagania:** `FR-ISSUE-04`, `ADR-09`.
+  3. Student widzi bieżącą notatkę personelu wpisaną w `staff_notes` (np. „Zamówiono nową uszczelkę, montaż we wtorek”) (`FR-ISSUE-05`, `ADR-09`).
+* **Powiązane wymagania:** `FR-ISSUE-05`, `ADR-09`.
 
 ---
 
@@ -913,11 +919,11 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
 #### UC-ADM-01: Konfiguracja pralek i parametrów slotów per DS
 * **Aktor główny:** Administrator DS (ADS)
 * **Warunki początkowe:** ADS zalogowany do panelu zarządczego swojego DS.
-* **Warunki końcowe:** Rekordy w `laundry_machines` lub `dormitory_settings` zaktualizowane.
+* **Warunki końcowe:** Rekordy w `laundry_machines` lub parametry konfiguracji w `dormitories` zaktualizowane.
 * **Scenariusz główny:**
   1. ADS otwiera panel zarządzania pralnią (`FR-PORTAL-03`).
   2. ADS może dodać nową pralkę do tabeli `laundry_machines` (oznaczenie fizyczne `machine_identifier`, lokalizacja `floor_location`, status `AVAILABLE`) lub edytować istniejącą (`FR-LAUND-01`).
-  3. ADS konfiguruje parametry w `dormitory_settings`: długość slotu w minutach (`slot_duration_minutes`, domyślnie 90 min) oraz wyprzedzenie rezerwacji (`max_advance_days`, domyślnie 7 dni).
+  3. ADS konfiguruje parametry w tabeli `dormitories`: długość slotu w minutach (`laundry_slot_duration_minutes`, domyślnie 90 min) oraz godziny otwarcia i zamknięcia pralni (`laundry_opening_time`, `laundry_closing_time`).
   4. System waliduje i zapisuje dane w bazie PostgreSQL.
 * **Powiązane wymagania:** `FR-LAUND-01`, `FR-PORTAL-03`.
 

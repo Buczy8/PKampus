@@ -6,7 +6,7 @@
 
 Zgodnie z metodyką inżynierii oprogramowania (modelowanie dynamiki systemu, stany obiektów, warunki dozoru oraz akcje przejść), niniejszy dokument przedstawia formalne **Diagramy Maszyny Stanów UML** dla kluczowych encji systemu PKampus.
 
-Wszystkie nazwy stanów, ograniczenia i dozwolone przejścia są w 100% zgodne ze skryptem DDL ([Model_Bazy_Danych_ERD.md](file:///home/pawel/Dokumenty/Studia/Inżynierka/PKampus/Docs/Model_Bazy_Danych_ERD.md)) oraz regułami biznesowymi ([Wymagania_projektowe.md](file:///home/pawel/Dokumenty/Studia/Inżynierka/PKampus/Docs/Wymagania_projektowe.md)).
+Wszystkie nazwy stanów, ograniczenia i dozwolone przejścia są w 100% zgodne ze skryptem DDL ([Model_Bazy_Danych_ERD.md](Model_Bazy_Danych_ERD.md)) oraz regułami biznesowymi ([Wymagania_projektowe.md](Wymagania_projektowe.md)).
 
 Notacja przejść stosuje standard UML: `Zdarzenie [Warunek_Dozoru] / Akcja`.
 
@@ -14,7 +14,7 @@ Notacja przejść stosuje standard UML: `Zdarzenie [Warunek_Dozoru] / Akcja`.
 
 ## 2. Maszyna Stanów 1: Cykl Życia Konta Użytkownika (`users.status`)
 
-Cykl życia konta użytkownika odzwierciedla dwuetapową procedurę rejestracji i autoryzacji: weryfikację adresu e-mail za pomocą podpisanego linku z tokenem HMAC (TTL: 24h, `FR-AUTH-01`, `BR-06`) oraz zatwierdzenie meldunku przez Administratora DS na podstawie uczelnianych list kwaterunkowych (`FR-AUTH-02`).
+Cykl życia konta użytkownika odzwierciedla dwuetapową procedurę rejestracji i autoryzacji: weryfikację adresu e-mail za pomocą podpisanego linku z tokenem HMAC (TTL: 24h, `FR-AUTH-01`) oraz zatwierdzenie meldunku przez Administratora DS na podstawie uczelnianych list kwaterunkowych (`FR-AUTH-02`). Zgodnie z regułą **`BR-06`**, do momentu zatwierdzenia meldunku konto w stanie `PENDING_APPROVAL` ma bezwzględną blokadę tworzenia rezerwacji i zgłaszania usterek.
 
 ```mermaid
 stateDiagram-v2
@@ -48,7 +48,8 @@ stateDiagram-v2
 ```
 
 ### Reguły przejść:
-* `PENDING_EMAIL` -> `PENDING_APPROVAL`: Wymaga kliknięcia w link z kryptograficznym tokenem HMAC-SHA256 w ciągu 24 godzin (`BR-06`, `FR-AUTH-01`).
+* `PENDING_EMAIL` -> `PENDING_APPROVAL`: Wymaga kliknięcia w link z kryptograficznym tokenem HMAC-SHA256 w ciągu 24 godzin (`FR-AUTH-01`).
+* `PENDING_APPROVAL` (Stan oczekiwania): Zgodnie z `BR-06` użytkownik nie posiada możliwości rezerwacji zasobów ani zgłaszania usterek do czasu zatwierdzenia meldunku.
 * `PENDING_APPROVAL` -> `ACTIVE`: Wyzwalane wyłącznie przez autoryzowanego Administratora DS (`DORM_ADMIN`) w portalu administracyjnym (`FR-AUTH-02`).
 * `ACTIVE` -> `BLOCKED`: Blokada administracyjna nakładana przez ADS (`FR-PORTAL-04`).
 
