@@ -29,6 +29,7 @@
   * **Moduł Oficjalnych Komunikatów i Kalendarza:** Publikowanie ważnych ogłoszeń przez administrację (np. brak wody/internetu, terminy wymiany pościeli); kalendarz wydarzeń i imprez okolicznościowych na kampusie.
 * **Co jest poza zakresem (Out of Scope):**
   * Obsługa płatności elektronicznych (rezerwacja pralek i salek jest w 100% darmowa dla mieszkańców; brak integracji z PayU/Stripe/BLIK).
+  * Rezerwacje i obsługa Klubu Studenckiego „Piwnica” (obiekt ten wymaga opłat 50/100 zł, manualnego trybu rezerwacji mailowej u Koordynatora Klubu oraz dedykowanego regulaminu wykraczającego poza model bezpłatnych salek tematycznych PKampus).
   * Integracja fizyczna IoT / Hardware (brak bezpośredniego sterowania zasilaniem pralek, brak elektrozamków i czytników RFID – klucze wydaje fizycznie portier po weryfikacji rezerwacji w aplikacji).
   * Prywatny komunikator 1-na-1 w czasie rzeczywistym (komunikacja sąsiedzka odbywa się w komentarzach pod ogłoszeniami, co zapobiega spamowi i ogranicza złożoność).
   * Bezpośrednia integracja z centralnymi systemami dziekanatowymi uczelni (np. USOS API) – dane studentów i pokoi zarządzane są wewnętrznie w systemie PKampus.

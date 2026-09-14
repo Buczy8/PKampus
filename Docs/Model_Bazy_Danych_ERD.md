@@ -277,7 +277,7 @@ Pomieszczenia wspólne zgodnie z Zarządzeniem Rektora PK ws. salek tematycznych
 | `id` | `UUID` | `PK, DEFAULT gen_random_uuid()` | Identyfikator salki |
 | `dormitory_id` | `UUID` | `FK -> dormitories(id), NOT NULL` | Akademik |
 | `name` | `VARCHAR(100)` | `NOT NULL` | Nazwa salki (np. "Cicha nauka Kujon", "Chillout") |
-| `room_type` | `VARCHAR(30)` | `NOT NULL, CHECK (room_type IN ('STANDARD', 'QUIET_STUDY_KUJON', 'CHILLOUT', 'CLUB'))` | Typ regulaminowy |
+| `room_type` | `VARCHAR(30)` | `NOT NULL, CHECK (room_type IN ('STANDARD', 'QUIET_STUDY_KUJON', 'CHILLOUT'))` | Typ regulaminowy |
 | `max_capacity` | `INT` | `NOT NULL, CHECK (max_capacity > 0)` | Limit osób (Kujon: 16, Chillout: 30) |
 | `opening_time` | `TIME` | `NOT NULL, DEFAULT '06:00:00'` | Godzina otwarcia (standard/Kujon: 06:00, Chillout: 14:00) |
 | `closing_time` | `TIME` | `NOT NULL, DEFAULT '23:30:00'` | Godzina zamknięcia (standard/Kujon: 23:30, Chillout: 02:00) |
@@ -541,7 +541,7 @@ CREATE TABLE thematic_rooms (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     dormitory_id UUID NOT NULL REFERENCES dormitories(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
-    room_type VARCHAR(30) NOT NULL CHECK (room_type IN ('STANDARD', 'QUIET_STUDY_KUJON', 'CHILLOUT', 'CLUB')),
+    room_type VARCHAR(30) NOT NULL CHECK (room_type IN ('STANDARD', 'QUIET_STUDY_KUJON', 'CHILLOUT')),
     max_capacity INT NOT NULL CHECK (max_capacity > 0),
     opening_time TIME NOT NULL DEFAULT '06:00:00',
     closing_time TIME NOT NULL DEFAULT '23:30:00',
