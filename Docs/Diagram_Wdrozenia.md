@@ -76,12 +76,12 @@ Zgodnie z wymogami inżynierii oprogramowania każdy węzeł i artefakt środowi
 
 | Nazwa Kontenera | Obraz bazowy (Docker Image) | Artefakt oprogramowania | Porty wewn. / zewn. | Rola i odpowiedzialność w systemie |
 | :--- | :--- | :--- | :--- | :--- |
-| **`pkampus-proxy`** | `nginx:alpine` | Skompilowany pakiet **React PWA** (`manifest.webmanifest`, `sw.js`, HTML/JS/CSS, ikony) + plik `nginx.conf` | **Zewn:** 80 (HTTP), 443 (HTTPS)<br/>**Wewn:** brak | Brama wejściowa serwera (Reverse Proxy). Wymusza HTTPS, serwuje statyczne zasoby PWA (App Shell, cache), terminacja SSL oraz przekazuje zapytania `/api/*` do kontenera backendu. |
+| **`pkampus-proxy`** | `nginx:alpine` (multi-stage build z `node:20-alpine`) | Skompilowany pakiet **React PWA** (`manifest.webmanifest`, `sw.js`, HTML/JS/CSS, ikony) budowany w kontenerze + plik `nginx.conf` | **Zewn:** 80 (HTTP), 443 (HTTPS)<br/>**Wewn:** brak | Brama wejściowa serwera (Reverse Proxy). Wymusza HTTPS, serwuje statyczne zasoby PWA (App Shell, cache), terminacja SSL oraz przekazuje zapytania `/api/*` do kontenera backendu. |
 | **`pkampus-backend`** | `eclipse-temurin:21-jre-alpine` | `pkampus-backend.jar` (Spring Boot Executable JAR na Java 21) | **Zewn:** brak (izolacja)<br/>**Wewn:** 8080 | Główna warstwa logiki biznesowej, uwierzytelniania JWT, transakcji rezerwacji pralni/salek, walidacji czarnej listy oraz obsługi zgłoszeń usterek. |
 | **`pkampus-db`** | `postgres:16-alpine` | Instancja silnika PostgreSQL 16 + DDL schematu | **Zewn:** brak (izolacja)<br/>**Wewn:** 5432 | Relacyjny magazyn danych. Przechowuje 15 tabel domenowych, realizuje blokady transakcyjne, egzekwuje ograniczenia `EXCLUDE USING gist` (anti-overlap) i integralność referencyjną. |
 | **`pkampus-minio`** | `minio/minio` | Silnik MinIO Object Storage | **Zewn:** brak<br/>**Wewn:** 9000 (S3 API), 9001 (Console) | Magazyn obiektowy S3. Buckety: `pkampus-issues` (zdjęcia usterek) oraz `pkampus-avatars` (zdjęcia karty mieszkańca); dostęp tylko przez backend (bez publicznego anonymous download). |
-| **`pkampus-mailpit`** | `axllent/mailpit` | Serwer Mailpit | **Zewn:** 8025 (Web UI - dev only)<br/>**Wewn:** 1025 (SMTP) | Serwer pocztowy w kontenerze. Przechwytuje wiadomości e-mail z linkami aktywacyjnymi meldunku i powiadomieniami o rezerwacjach bez ryzyka wysyłki spamu. |
-| **`pkampus-certbot`** | `certbot/certbot:latest` | Klient ACME Certbot (uruchamiany z profilem `production`) | **Zewn:** brak<br/>**Wewn:** brak | Usługa opcjonalna dla profilu produkcyjnego (VPS PK). Odpowiada za cykliczne, automatyczne odnawianie certyfikatów SSL/TLS Let's Encrypt w wolumenie `letsencrypt_certs` poprzez wyzwanie HTTP-01 webroot Nginx. W profilu demonstracyjnym nie jest uruchamiana. |
+| **`pkampus-mailpit`** | `axllent/mailpit` | Serwer Mailpit (uruchamiany wyłącznie z profilami `demo`, `dev`) | **Zewn:** 8025 (Web UI - dev only)<br/>**Wewn:** 1025 (SMTP) | Serwer pocztowy w kontenerze na potrzeby środowiska deweloperskiego/pokazowego. W profilu `production` kontener nie startuje, a backend łączy się bezpośrednio z uczelnianym serwerem SMTP PK. |
+| **`pkampus-certbot`** | `certbot/certbot:latest` | Klient ACME Certbot (uruchamiany z profilem `production`) | **Zewn:** brak<br/>**Wewn:** brak | Usługa dla profilu produkcyjnego (VPS PK). Skrypt startowy weryfikuje obecność certyfikatu, wykonuje inicjalne żądanie certyfikatu (`certbot certonly`), a następnie cyklicznie odnawia certyfikat Let's Encrypt (`certbot renew` co 12h). |
 
 ---
 
@@ -128,9 +128,9 @@ Zgodnie z zasadą bezstanowości kontenerów aplikacyjnych (ang. *Stateless Cont
 
 | Nazwa Wolumenu | Ścieżka docelowa w kontenerze | Typ danych | Polityka kopii zapasowych (Backup Policy) |
 | :--- | :--- | :--- | :--- |
-| **`pg_data`** | `/var/lib/postgresql/data` | Fizyczne pliki relacyjnej bazy danych PostgreSQL (tabele, indeksy, WAL). | Codzienny automatyczny zrzut logiczny poleceniem `pg_dump` do archiwum skompresowanego `*.sql.gz` na wydzieloną przestrzeń backupową. |
-| **`minio_data`** | `/data` | Binarny magazyn obiektowy MinIO (zdjęcia usterek w buckecie `pkampus-issues` oraz zdjęcia profilowe legitymacji mieszkańca w buckecie `pkampus-avatars`). | Kopia lustrzana bucketów z użyciem narzędzia `mc mirror` na zewnętrzny serwer plików PK. |
-| **`letsencrypt_certs`**| `/etc/letsencrypt` | Certyfikaty SSL/TLS i klucze prywatne. | W profilu produkcyjnym (VPS PK): certyfikaty Let's Encrypt generowane i cyklicznie odnawiane przez kontener `pkampus-certbot`. W profilu demonstracyjnym: certyfikaty lokalne (self-signed/mkcert) lub bezpieczny kontekst localhost. |
+| **`pg_data`** | `/var/lib/postgresql/data` | Fizyczne pliki relacyjnej bazy danych PostgreSQL (tabele, indeksy, WAL). | Codzienny automatyczny zrzut logiczny `pg_dump`, kompresowany i symetrycznie szyfrowany algorytmem **AES-256 (GPG)** kluczem z menedżera sekretów, a następnie transferowany szyfrowanym kanałem (SFTP/rsync) na zewnętrzny serwer kopii zapasowych PK (reguła 3-2-1). Dostęp do klucza deszyfrującego posiada wyłącznie wyznaczony administrator infrastruktury. |
+| **`minio_data`** | `/data` | Binarny magazyn obiektowy MinIO (zdjęcia usterek w buckecie `pkampus-issues` oraz zdjęcia profilowe legitymacji mieszkańca w buckecie `pkampus-avatars`). | Szyfrowana kopia lustrzana bucketów z użyciem narzędzia `mc mirror` na zewnętrzny bezpieczny zasób backupowy PK. Retencja plików zdjęciowych: usunięcie z magazynu po 30 dniach od rozwiązania usterki (`RESOLVED`). |
+| **`letsencrypt_certs`**| `/etc/letsencrypt` | Certyfikaty SSL/TLS i klucze prywatne. | W profilu produkcyjnym (VPS PK): certyfikaty Let's Encrypt generowane przy pierwszym uruchomieniu (`certbot certonly`) i cyklicznie odnawiane (`certbot renew` co 12h) przez kontener `pkampus-certbot`. W profilu demonstracyjnym: certyfikaty lokalne (mkcert) lub bezpieczny kontekst localhost. |
 
 ---
 
@@ -155,13 +155,18 @@ volumes:
     driver: local
   letsencrypt_certs:
     driver: local
+  certbot_challenge:
+    driver: local
 
 services:
   # -------------------------------------------------------------
   # Brama wejściowa Reverse Proxy & Serwer Statyczny SPA React
   # -------------------------------------------------------------
   pkampus-proxy:
-    image: nginx:alpine
+    build:
+      context: .
+      dockerfile: ./infra/nginx/Dockerfile
+    image: pkampus-proxy:latest
     container_name: pkampus-proxy
     restart: unless-stopped
     ports:
@@ -170,9 +175,8 @@ services:
     volumes:
       - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./frontend/dist:/usr/share/nginx/html:ro
       - letsencrypt_certs:/etc/letsencrypt:ro
-      - ./infra/nginx/certbot-challenge:/var/www/certbot:ro
+      - certbot_challenge:/var/www/certbot:ro
     networks:
       - pkampus-net
     depends_on:
@@ -208,6 +212,10 @@ services:
       - MINIO_BUCKET_AVATARS=pkampus-avatars
       - SPRING_MAIL_HOST=${MAIL_HOST:-pkampus-mailpit}
       - SPRING_MAIL_PORT=${MAIL_PORT:-1025}
+      - SPRING_MAIL_USERNAME=${MAIL_USERNAME:-}
+      - SPRING_MAIL_PASSWORD=${MAIL_PASSWORD:-}
+      - SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=${MAIL_SMTP_AUTH:-false}
+      - SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=${MAIL_STARTTLS_ENABLE:-false}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET required}
     networks:
       - pkampus-net
@@ -287,11 +295,14 @@ services:
       "
 
   # -------------------------------------------------------------
-  # Usługa Pocztowa Dev/Test (Mailpit)
+  # Usługa Pocztowa Dev/Test (Mailpit) — profil demo/dev
   # -------------------------------------------------------------
   pkampus-mailpit:
     image: axllent/mailpit
     container_name: pkampus-mailpit
+    profiles:
+      - demo
+      - dev
     restart: unless-stopped
     ports:
       - "127.0.0.1:8025:8025" # Dostęp do panelu WWW wyłącznie z localhost / tunelu SSH
@@ -304,7 +315,7 @@ services:
       retries: 3
 
   # -------------------------------------------------------------
-  # Automatyczne odnawianie certyfikatów Let's Encrypt (Profil produkcyjny VPS PK)
+  # Bootstrap i odnawianie certyfikatów Let's Encrypt (Profil produkcyjny VPS PK)
   # -------------------------------------------------------------
   pkampus-certbot:
     image: certbot/certbot:latest
@@ -314,15 +325,35 @@ services:
     restart: unless-stopped
     volumes:
       - letsencrypt_certs:/etc/letsencrypt
-      - ./infra/nginx/certbot-challenge:/var/www/certbot:rw
+      - certbot_challenge:/var/www/certbot:rw
     entrypoint: >
       /bin/sh -c "
       trap exit TERM;
+      if [ ! -f /etc/letsencrypt/live/$${DOMAIN:-pkampus.pk.edu.pl}/fullchain.pem ]; then
+        echo 'Brak certyfikatu SSL — inicjalizacja procedury certbot certonly...';
+        certbot certonly --webroot -w /var/www/certbot --non-interactive --agree-tos \
+          --email $${SSL_EMAIL:?SSL_EMAIL required} -d $${DOMAIN:-pkampus.pk.edu.pl};
+      fi;
       while :; do
         certbot renew --webroot -w /var/www/certbot --quiet;
         sleep 12h & wait $${!};
       done;
       "
+```
+
+---
+
+### 6.1. Uszczegółowienie Procedury Wdrożenia i Rozwiązanie Ograniczeń Środowiskowych
+
+1. **Autonomiczna kompilacja frontendu (PWA) w kontenerze:**
+   * Aby wyeliminować wymóg wcześniejszego ręcznego budowania aplikacji (`npm run build`) na maszynie gospodarza, obraz `pkampus-proxy` wykorzystuje Dockerfile wieloetapowy (*Multi-Stage Build*). W etapie 1 kontener Node.js (`node:20-alpine`) pobiera zależności (`npm ci`) i generuje zminifikowany pakiet produkcyjny PWA, po czym w etapie 2 serwer `nginx:alpine` kopiuje artefakty bezpośrednio do katalogu `/usr/share/nginx/html`. Dzięki temu komenda `docker compose up -d` działa w 100% autonomicznie na czystej stacji.
+2. **Izolacja profilu pocztowego (Mailpit vs Uczelniany serwer SMTP PK):**
+   * Serwer testowy `pkampus-mailpit` objęty jest profilami compose: `profiles: ["demo", "dev"]`.
+   * Na środowisku demonstracyjnym (np. obrona pracy) Mailpit przechwytuje całą pocztę lokalnie, zapewniając bezpieczną inspekcję linków aktywacyjnych i tokenów pod adresem `http://127.0.0.1:8025`.
+   * Na środowisku produkcyjnym (VPS PK) kontener Mailpit nie jest uruchamiany. Backend Spring Boot łączy się bezpośrednio z oficjalną bramą pocztową uczelni (`poczta.pk.edu.pl`, port 587 z szyfrowaniem STARTTLS) na podstawie poświadczeń wstrzykiwanych ze zmiennych środowiskowych `.env` (`MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_STARTTLS_ENABLE=true`).
+3. **Dwuetapowy mechanizm certyfikacji TLS (Inicjalizacja certonly + Odnawianie renew):**
+   * Standardowe polecenie `certbot renew` kończy się błędem, gdy na nowym serwerze nie istnieje jeszcze katalog certyfikatów w `/etc/letsencrypt/live/`.
+   * Skrypt wejściowy `entrypoint` kontenera `pkampus-certbot` w profilu produkcyjnym weryfikuje istnienie pliku `fullchain.pem`. Przy pierwszym uruchomieniu wykonuje żądanie wstępne `certbot certonly --webroot` z wykorzystaniem wyzwania HTTP-01 w wolumenie `certbot_challenge`, a po pomyślnym pobraniu certyfikatu przechodzi w 12-godzinną pętlę automatycznego odnawiania (`certbot renew`). Nginx wyposażony jest w konfigurację bootstrap z certyfikatem tymczasowym, co gwarantuje poprawny start bramy przed wygenerowaniem pierwszego certyfikatu Let's Encrypt.
 ```
 
 ---
