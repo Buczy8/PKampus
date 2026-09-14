@@ -103,6 +103,7 @@ flowchart TD
         C_AUTH["AuthController<br/>/api/auth/*"]:::ctrlStyle
         C_LAUND["LaundryController<br/>/api/laundry/*"]:::ctrlStyle
         C_ROOM["RoomController<br/>/api/rooms/*"]:::ctrlStyle
+        C_KEY["KeyManagementController<br/>/api/keys/*"]:::ctrlStyle
         C_ISSUE["IssueController<br/>/api/issues/*"]:::ctrlStyle
         C_BOARD["BoardController<br/>/api/board/*"]:::ctrlStyle
         C_EVENT["EventController<br/>/api/events/*"]:::ctrlStyle
@@ -113,7 +114,9 @@ flowchart TD
         direction TB
         S_AUTH["AuthService & Security<br/>(JWT, BCrypt, Token Reset)"]:::svcStyle
         S_LAUND["LaundryService<br/>(Rezerwacje, Sloty, Awaria)"]:::svcStyle
-        S_ROOM["RoomService<br/>(Rezerwacje, Regulamin PK, Kary)"]:::svcStyle
+        S_ROOM["RoomService<br/>(Rezerwacje salek, Regulamin PK)"]:::svcStyle
+        S_KEY["KeyService<br/>(Wydawanie i zwrot kluczy, reguła 15 min)"]:::svcStyle
+        S_SANC["SanctionService<br/>(Weryfikacja kar, nakładanie blokad)"]:::svcStyle
         S_ISSUE["IssueService<br/>(Rejestr usterek, Koordynacja)"]:::svcStyle
         S_COMM["CommunicationService<br/>(Tablica, Kalendarz, Pościel)"]:::svcStyle
         S_SCHED["ReservationScheduler<br/>(@Scheduled - reguła 15 min)"]:::svcStyle
@@ -140,14 +143,17 @@ flowchart TD
     C_AUTH --> S_AUTH
     C_LAUND --> S_LAUND
     C_ROOM --> S_ROOM
+    C_KEY --> S_KEY
     C_ISSUE --> S_ISSUE
     C_BOARD --> S_COMM
     C_EVENT --> S_COMM
     C_ADMIN --> S_AUTH
     C_ADMIN --> S_LAUND
     C_ADMIN --> S_ROOM
+    C_ADMIN --> S_SANC
 
     %% Koordynacja między serwisami
+    S_ROOM --> S_SANC
     S_LAUND --> S_ISSUE
     S_LAUND --> S_MAIL
     S_ROOM --> S_MAIL
@@ -155,6 +161,7 @@ flowchart TD
     S_ISSUE --> S_MAIL
     S_AUTH --> S_MAIL
     S_AUTH --> S_S3
+    S_SCHED --> S_KEY
     S_SCHED --> S_LAUND
     S_SCHED --> S_ROOM
 
@@ -162,7 +169,9 @@ flowchart TD
     S_AUTH --> R_USER
     S_LAUND --> R_LAUND
     S_ROOM --> R_ROOM
-    S_ROOM --> R_SANC
+    S_KEY --> R_LAUND
+    S_KEY --> R_ROOM
+    S_SANC --> R_SANC
     S_ISSUE --> R_ISSUE
     S_COMM --> R_POST
     S_COMM --> R_EVENT
