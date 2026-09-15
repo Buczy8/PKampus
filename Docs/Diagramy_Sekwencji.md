@@ -54,10 +54,10 @@ sequenceDiagram
     UI->>CTL: POST /api/v1/auth/register<br/>(multipart/form-data: RegisterRequestDTO + photo File)
     activate CTL
 
-    alt [Zdjęcie nie spełnia wymogów: rozmiar > 5 MB lub MIME ≠ JPEG/PNG/WebP]
+    alt [Zdjęcie nie spełnia wymogów: rozmiar ponad 5 MB lub zły MIME]
         CTL-->>UI: 400 Bad Request<br/>(Nieobsługiwany format lub plik za duży)
         UI-->>M: Komunikat o błędzie walidacji załącznika (NFR-SEC-03)
-    else [Plik poprawny — Content-Type: multipart/form-data]
+    else [Plik poprawny - Content-Type multipart form-data]
         CTL->>SVC: registerResident(dto, photoFile)
         activate SVC
 
@@ -98,25 +98,22 @@ sequenceDiagram
     activate CTL
     CTL->>SVC: verifySignedEmailToken(token)
     activate SVC
-    alt [Token wygasł (>24h) lub nieprawidłowy podpis]
+    alt [Token wygasł po 24h lub nieprawidłowy podpis]
         SVC-->>CTL: throw EmailVerificationTokenInvalidException
-        deactivate SVC
         CTL-->>UI: 410 Gone<br/>(Link aktywacyjny wygasł lub jest nieprawidłowy)
-        deactivate CTL
-        UI-->>M: Komunikat: Link nieważny — zleć ponowne wysłanie
-        deactivate UI
+        UI-->>M: Komunikat: Link nieważny - zleć ponowne wysłanie
     else [Token HMAC ważny]
         SVC->>DB: UPDATE users SET status='PENDING_APPROVAL'
         activate DB
         DB-->>SVC: Zaktualizowano status
         deactivate DB
         SVC-->>CTL: Token poprawny
-        deactivate SVC
         CTL-->>UI: 200 OK (Status: PENDING_APPROVAL)
-        deactivate CTL
-        UI-->>M: Ekran informacyjny:<br/>"Oczekiwanie na weryfikację meldunku"
-        deactivate UI
+        UI-->>M: Ekran informacyjny:<br/>Oczekiwanie na weryfikację meldunku
     end
+    deactivate SVC
+    deactivate CTL
+    deactivate UI
 
     %% Etap 3: Akceptacja przez ADS (AdminController /api/v1/admin/*)
     ADS->>UI: Przegląd listy meldunków
@@ -178,30 +175,30 @@ sequenceDiagram
     activate SVC
 
     %% Sprawdzenie reguł biznesowych BR-01
-    alt [slotStart poza horyzontem > 7 dni w przód (BR-01)]
+    alt [slotStart poza horyzontem 7 dni w przód BR-01]
         SVC-->>CTL: throw BookingHorizonExceededException
         CTL-->>UI: 422 Unprocessable Entity<br/>(Rezerwacja tylko do 7 dni w przód)
         UI-->>M: Komunikat: Slot poza dozwolonym horyzontem
     else [Horyzont 7 dni OK]
-        SVC->>DB: countActiveBookingsInCurrentWeek(userId)<br/>(status IN CONFIRMED,KEY_ISSUED;<br/>start_time w pon–niedz. Europe/Warsaw)
+        SVC->>DB: countActiveBookingsInCurrentWeek(userId)<br/>(status IN CONFIRMED KEY_ISSUED, tydzień pon-niedz Europe/Warsaw)
         activate DB
         DB-->>SVC: Liczba aktywnych rezerwacji mieszkańca
         deactivate DB
 
-        alt [Mieszkaniec ma już >= 2 aktywne CONFIRMED/KEY_ISSUED (BR-01)]
+        alt [Mieszkaniec ma już co najmniej 2 aktywne CONFIRMED lub KEY_ISSUED BR-01]
             SVC-->>CTL: throw BookingLimitExceededException
-            CTL-->>UI: 422 Unprocessable Entity<br/>(Wyczerpano limit 2 rezerwacji/tydzień)
+            CTL-->>UI: 422 Unprocessable Entity<br/>(Wyczerpano limit 2 rezerwacji na tydzień)
             UI-->>M: Komunikat: Przekroczono limit rezerwacji
         else [Mieszkaniec spełnia limit tygodniowy]
             SVC->>DB: INSERT INTO laundry_bookings<br/>(machine_id, user_id, start_time, end_time)
             activate DB
 
-            alt [Brak kolizji slotów (sukces chk_laundry_no_overlap)]
+            alt [Brak kolizji slotów sukces chk_laundry_no_overlap]
                 DB-->>SVC: Zapisano rezerwację (ID, znacznik czasu)
                 SVC-->>CTL: BookingDTO (Potwierdzona rezerwacja)
                 CTL-->>UI: 201 Created (Rezerwacja potwierdzona)
                 UI-->>M: Zielony alert sukcesu + podświetlenie kafelka
-            else [Kolizja przedziałów czasowych (błąd chk_laundry_no_overlap)]
+            else [Kolizja przedziałów czasowych błąd chk_laundry_no_overlap]
                 DB-->>SVC: Błąd SQLSTATE 23P01 (exclusion_violation)
                 SVC-->>CTL: throw SlotAlreadyBookedException
                 CTL-->>UI: 409 Conflict<br/>(Slot został przed chwilą zajęty)
@@ -432,38 +429,37 @@ sequenceDiagram
     SANCT-->>SVC: Wynik weryfikacji (Status kary)
     deactivate SANCT
 
-    alt [Mieszkaniec posiada aktywną karę ROOM_BAN (1-3 mies.)]
+    alt [Mieszkaniec posiada aktywną karę ROOM_BAN 1-3 mies.]
         SVC-->>CTL: throw ResidentSanctionBlockedException
         CTL-->>UI: 403 Forbidden<br/>(Blokada rezerwacji salek do YYYY-MM-DD)
         UI-->>M: Odmowa: Aktywna blokada salek z datą wygaśnięcia
     else [Brak aktywnych kar dyscyplinarnych]
 
-        alt [Przekroczona pojemność salki (uczestnicy > max_capacity)]
+        alt [Przekroczona pojemność salki uczestnicy powyżej max_capacity]
             SVC-->>CTL: throw RoomCapacityExceededException
             CTL-->>UI: 422 Unprocessable Entity<br/>(Przekroczono limit osób w salce)
             UI-->>M: Komunikat: Zbyt duża liczba uczestników
         else [Pojemność salki poprawna]
 
-            alt [Naruszenie BR-03 wg typu salki<br/>(Kujon/std: poza 06:00–23:30 lub >4h;<br/>Chillout: poza 14:00–02:00 lub >12h)]
+            alt [Naruszenie BR-03 wg typu salki Kujon/std lub Chillout]
                 SVC-->>CTL: throw InvalidRoomTimeWindowException
                 CTL-->>UI: 422 Unprocessable Entity<br/>(Niedozwolony przedział godzinowy)
                 UI-->>M: Błąd: Przedział niezgodny z regulaminem salki
             else [Parametry zgodne z BR-03]
-                SVC->>DB: INSERT INTO room_bookings<br/>(user_id, room_id, status='CONFIRMED')
+                SVC->>DB: INSERT INTO room_bookings<br/>(user_id, room_id, status CONFIRMED)
                 activate DB
-                alt [Brak kolizji (sukces chk_room_no_overlap)]
+                alt [Brak kolizji sukces chk_room_no_overlap]
                     DB-->>SVC: Utworzono rezerwację salki
-                    deactivate DB
                     SVC-->>CTL: RoomBookingDetailsDTO
                     CTL-->>UI: 201 Created (Rezerwacja pomyślna)
                     UI-->>M: Potwierdzenie z przypomnieniem o odbiorze w 15 min
-                else [Kolizja przedziałów (chk_room_no_overlap / 23P01)]
+                else [Kolizja przedziałów chk_room_no_overlap 23P01]
                     DB-->>SVC: Błąd SQLSTATE 23P01 (exclusion_violation)
-                    deactivate DB
                     SVC-->>CTL: throw SlotAlreadyBookedException
                     CTL-->>UI: 409 Conflict<br/>(Slot salki został przed chwilą zajęty)
                     UI-->>M: Odświeżenie grafiku i komunikat o kolizji
                 end
+                deactivate DB
             end
         end
     end
