@@ -57,13 +57,13 @@ stateDiagram-v2
 
 ## 3. Maszyna Stanów 2: Cykl Życia Rezerwacji Pralni (`laundry_bookings.status`)
 
-Modeluje obieg slotu pralniczego z uwzględnieniem regulaminowego limitu maksymalnie 2 aktywnych rezerwacji na tydzień (`BR-01`), 15-minutowej reguły przepadku rezerwacji (`BR-02`, §2 ust. 5 Regulaminu) oraz fizycznego wydania i zwrotu klucza na portierni (`BR-09`).
+Modeluje obieg slotu pralniczego z uwzględnieniem limitu maksymalnie 2 aktywnych rezerwacji (`CONFIRMED`/`KEY_ISSUED`) na tydzień kalendarzowy (`BR-01`), 15-minutowej reguły przepadku rezerwacji (`BR-02`, §2 ust. 5 Regulaminu) oraz fizycznego wydania i zwrotu klucza na portierni (`BR-09`).
 
 Wszystkie statusy odpowiadają ograniczeniu `CHECK (status IN ('CONFIRMED', 'KEY_ISSUED', 'COMPLETED', 'CANCELLED_USER', 'AUTO_CANCELLED_15MIN', 'CANCELLED_MACHINE_OUT_OF_ORDER'))` w tabeli `laundry_bookings`.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> CONFIRMED: Wybór wolnego slotu [użytkownik posiada < 2 aktywne rezerwacje w tygodniu (BR-01)] / utrwalenie rezerwacji
+    [*] --> CONFIRMED: Wybór wolnego slotu [użytkownik posiada < 2 aktywne CONFIRMED/KEY_ISSUED w tygodniu (BR-01)] / utrwalenie rezerwacji
 
     state CONFIRMED {
         [*] --> OczekiwanieNaStart
@@ -91,7 +91,7 @@ stateDiagram-v2
 ```
 
 ### Reguły przejść i strażnicy (Guards):
-* **Do CONFIRMED:** System weryfikuje limit: mieszkaniec może posiadać maksymalnie **2 aktywne rezerwacje pralki w danym tygodniu** (`BR-01`).
+* **Do CONFIRMED:** System weryfikuje limit `BR-01`: maksymalnie **2** rezerwacje ze statusem `CONFIRMED` lub `KEY_ISSUED` z `start_time` w bieżącym tygodniu kalendarzowym (pon–niedz., `Europe/Warsaw`); horyzont max 7 dni w przód.
 * **Do CANCELLED_USER:** Mieszkaniec może anulować rezerwację w dowolnym momencie przed godziną rozpoczęcia slotu (`start_time > now()`, `FR-LAUND-04`).
 * **Do AUTO_CANCELLED_15MIN:** Następuje automatycznie przez Spring Scheduler (`NFR-REL-03`) lub ręcznie przez portiera (`FR-LAUND-05`), gdy minęło 15 minut od startu, a klucz nie został pobrany (`BR-02`).
 * **Do KEY_ISSUED:** Wydanie klucza fizycznego przez portiera w recepcji (`FR-PORTAL-02`).
@@ -115,7 +115,7 @@ stateDiagram-v2
 
     CONFIRMED --> CANCELLED_USER: Anulowanie przez organizatora [przed rozpoczęciem slotu] / zwolnienie salki (FR-ROOM-08)
     CONFIRMED --> AUTO_CANCELLED_15MIN: Niestawienie się po klucz w ciągu 15 min [Scheduler (NFR-REL-03) lub Portier (FR-ROOM-05)] (§2 ust. 5, BR-02)
-    CONFIRMED --> CANCELLED_ROOM_MAINTENANCE: Wyłączenie salki w stan MAINTENANCE przez ADS / kaskadowe odwołanie (FR-ROOM-09)
+    CONFIRMED --> CANCELLED_ROOM_MAINTENANCE: Wyłączenie salki w stan MAINTENANCE przez Portiera/ADS / kaskadowe odwołanie (FR-ROOM-09)
 
     CONFIRMED --> KEY_ISSUED: Odbiór klucza przez organizatora [w ciągu 15 min] / Portier odnotowuje wydanie (FR-PORTAL-02, BR-02)
 
@@ -156,23 +156,23 @@ stateDiagram-v2
     }
 
     NEW --> ASSIGNED_TO_MAINTENANCE: Przydzielenie do konserwatora / eksport na listę zadań (FR-ISSUE-04, FR-ISSUE-06)
-    NEW --> REJECTED: Odrzucenie niezasadnego zgłoszenia / wprowadzenie uzasadnienia w staff_notes (FR-ISSUE-05)
+    NEW --> REJECTED: Odrzucenie niezasadnego zgłoszenia / wprowadzenie uzasadnienia w staff_notes (FR-ISSUE-04)
 
     state ASSIGNED_TO_MAINTENANCE {
         [*] --> WHarmonogramieKonserwatora
     }
 
-    ASSIGNED_TO_MAINTENANCE --> IN_PROGRESS: Konserwator przystępuje do prac naprawczych (FR-ISSUE-05)
+    ASSIGNED_TO_MAINTENANCE --> IN_PROGRESS: Konserwator przystępuje do prac naprawczych (FR-ISSUE-04)
     ASSIGNED_TO_MAINTENANCE --> REJECTED: Konserwator stwierdza brak usterki / notatka w staff_notes
 
     state IN_PROGRESS {
         [*] --> PraceNaprawcze
     }
 
-    IN_PROGRESS --> PARTS_REQUIRED: Konieczność sprowadzenia części zamiennych / wpisanie informacji w staff_notes (FR-ISSUE-05)
+    IN_PROGRESS --> PARTS_REQUIRED: Konieczność sprowadzenia części zamiennych / wpisanie informacji w staff_notes (FR-ISSUE-04)
     PARTS_REQUIRED --> IN_PROGRESS: Części dostarczone / wznowienie prac naprawczych
 
-    IN_PROGRESS --> RESOLVED: Zakończenie naprawy przez konserwatora / notatka końcowa w staff_notes (FR-ISSUE-05)
+    IN_PROGRESS --> RESOLVED: Zakończenie naprawy przez konserwatora / notatka końcowa w staff_notes (FR-ISSUE-04)
     PARTS_REQUIRED --> RESOLVED: Naprawa zakończona po montażu części
 
     RESOLVED --> [*]
@@ -188,7 +188,7 @@ stateDiagram-v2
 
 ## 6. Maszyna Stanów 5: Cykl Życia Sankcji Regulaminowej (`sanctions`)
 
-Zgodnie z modelem tabeli `sanctions`, sankcja `ROOM_BAN` orzekana na okres od 1 do 3 miesięcy (§6 ust. 2 Regulaminu, `BR-05`) posiada flagę `is_active BOOLEAN` oraz daty `start_date` i `end_date`.
+Zgodnie z modelem tabeli `sanctions`, sankcja `ROOM_BAN` orzekana na okres od 1 do 3 miesięcy (§6 ust. 2 Regulaminu, `BR-05`) posiada flagę `is_active BOOLEAN` oraz daty `start_date` i `end_date`. Stany `AKTYWNA`/`WYGASLA`/`UCHYLONA` są pojęciowe (derywowane z `is_active` i dat, bez osobnej kolumny statusu w DDL).
 
 ```mermaid
 stateDiagram-v2
@@ -210,3 +210,61 @@ stateDiagram-v2
 * Sankcja blokuje rezerwacje salki wtedy i tylko wtedy, gdy:
   `is_active = TRUE AND CURRENT_DATE BETWEEN start_date AND end_date`.
 * Uchylenie kary przez ADS polega na aktualizacji rekordu: `UPDATE sanctions SET is_active = FALSE WHERE id = ...`.
+
+---
+
+## 7. Maszyna Stanów 6: Stan Techniczny Pralki (`laundry_machines.status`)
+
+Status zasobu zgodnie z `CHECK (status IN ('AVAILABLE', 'OUT_OF_ORDER'))`. Kaskada na rezerwacje: wyłącznie przyszłe `CONFIRMED` → `CANCELLED_MACHINE_OUT_OF_ORDER` (`FR-LAUND-06`, `ADR-06`); sloty `KEY_ISSUED` nie są automatycznie anulowane.
+
+```mermaid
+stateDiagram-v2
+    [*] --> AVAILABLE: Dodanie / przywrócenie pralki (UC-ADM-01)
+
+    AVAILABLE --> OUT_OF_ORDER: Awaria / wyłączenie przez Portiera lub ADS / blokada grafiku + kaskada przyszłych CONFIRMED + auto-issue (FR-LAUND-06)
+    OUT_OF_ORDER --> AVAILABLE: Przywrócenie do eksploatacji po naprawie / odblokowanie grafiku
+```
+
+### Reguły przejść:
+* `AVAILABLE` → `OUT_OF_ORDER`: Endpoint awarii; brak nowych rezerwacji; anulowanie przyszłych `CONFIRMED`; auto-zgłoszenie `issues` (`BR-07`).
+* `OUT_OF_ORDER` → `AVAILABLE`: Po usunięciu usterki personel przywraca pralkę do puli (operacja administracyjna).
+
+---
+
+## 8. Maszyna Stanów 7: Dostępność Salki (`thematic_rooms.status`)
+
+Status zasobu zgodnie z `CHECK (status IN ('AVAILABLE', 'MAINTENANCE'))`. Analogicznie do pralek: kaskada dotyczy przyszłych `CONFIRMED` → `CANCELLED_ROOM_MAINTENANCE` (`FR-ROOM-09`, `ADR-06`).
+
+```mermaid
+stateDiagram-v2
+    [*] --> AVAILABLE: Konfiguracja salki (UC-ADM-02)
+
+    AVAILABLE --> MAINTENANCE: Remont / awaria wyposażenia (Portier/ADS) / blokada grafiku + kaskada przyszłych CONFIRMED + auto-issue (FR-ROOM-09)
+    MAINTENANCE --> AVAILABLE: Zakończenie prac / przywrócenie salki do rezerwacji
+```
+
+### Reguły przejść:
+* `AVAILABLE` → `MAINTENANCE`: Blokada nowych rezerwacji; anulowanie przyszłych `CONFIRMED`; auto-issue z `reporter_id` (`BR-07`).
+* `MAINTENANCE` → `AVAILABLE`: Przywrócenie po remoncie/naprawie.
+
+---
+
+## 9. Maszyna Stanów 8: Cykl Życia Ogłoszenia (`posts.status`)
+
+Statusy zgodne z `CHECK (status IN ('ACTIVE', 'RESOLVED', 'REMOVED_MODERATOR'))`. Soft-delete (`is_deleted`) jest niezależną flagą i nie zastępuje statusu moderacji.
+
+```mermaid
+stateDiagram-v2
+    [*] --> ACTIVE: Publikacja ogłoszenia przez mieszkańca (FR-BOARD-01)
+
+    ACTIVE --> RESOLVED: Autor oznacza jako rozwiązane (FR-BOARD-04)
+    ACTIVE --> REMOVED_MODERATOR: Moderacja ADS/AOS (FR-BOARD-06)
+
+    RESOLVED --> [*]
+    REMOVED_MODERATOR --> [*]
+```
+
+### Reguły przejść:
+* `ACTIVE` → `RESOLVED`: Wyłącznie autor posta (`UC-BOARD-04`).
+* `ACTIVE` → `REMOVED_MODERATOR`: Moderacja (`UC-BOARD-05`); treść znika z feedu mieszkańców.
+* Usunięcie przez autora przez `is_deleted = TRUE` nie zmienia słownika statusów DDL (osobna ścieżka soft-delete w `UC-BOARD-04`).

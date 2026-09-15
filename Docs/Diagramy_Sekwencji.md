@@ -24,12 +24,17 @@ Zgodnie z zasadami modelowania dynamiki systemów wielowarstwowych (Multi-tier A
    * Automatyczna numeracja komunikatów ułatwiająca śledzenie sekwencji czasowej.
 5. **Obsługa Wariantów i Błędów (`alt / else`):**
    * Prezentacja głównego przebiegu optymistycznego (Happy Path) oraz kluczowych scenariuszy odmowy biznesowej lub błędów walidacji.
+6. **Konwencja kodów HTTP błędów biznesowych (API REST):**
+   * **`422 Unprocessable Entity`** — walidacja logiczna / reguły formularza (np. horyzont 7 dni i limit 2× `CONFIRMED`/`KEY_ISSUED`/tydzień `BR-01`, pojemność salki, okno godzinowe `BR-03` wg typu salki, niepoprawny przedział przed zapisem).
+   * **`409 Conflict`** — kolizja współbieżna lub naruszenie ograniczenia wykluczającego w PostgreSQL (`chk_laundry_no_overlap` / `chk_room_no_overlap`, SQLSTATE `23P01`).
+   * **`403 Forbidden`** — brak uprawnień / sankcja (`ROOM_BAN`), konto nieaktywne.
+   * **`400 Bad Request`** — błędy składni żądania, MIME/rozmiar pliku, token resetu nieprawidłowy.
 
 ---
 
 ## 2. Sekwencja 1: Dwuetapowa Rejestracja i Aktywacja Meldunku (AUTH & CARD)
 
-Proces obejmuje rejestrację nowego mieszkańca, weryfikację adresu e-mail przez **podpisany, krótkotrwały token w linku** (bez tabeli tokenów aktywacyjnych), przejście konta w stan `PENDING_APPROVAL` oraz zatwierdzenie tożsamości przez Administratora DS wraz z utworzeniem meldunku w `room_assignments`.
+Proces obejmuje rejestrację nowego mieszkańca **w jednym żądaniu HTTP** `multipart/form-data` (pola formularza + wymagane zdjęcie twarzy — `FR-AUTH-01`, `UC-AUTH-01`, analogicznie do uploadu w Sekwencji 4), weryfikację adresu e-mail przez **podpisany, krótkotrwały token w linku** (bez tabeli tokenów aktywacyjnych), przejście konta w stan `PENDING_APPROVAL` oraz zatwierdzenie tożsamości przez Administratora DS wraz z utworzeniem meldunku w `room_assignments`.
 
 ```mermaid
 sequenceDiagram
@@ -37,100 +42,115 @@ sequenceDiagram
     actor M as Mieszkaniec
     participant UI as Frontend (React PWA)
     participant CTL as AuthController
+    participant ADM as AdminController
     participant SVC as AuthService
     participant DB as PostgreSQL (JPA)
     participant S3 as MinIO S3 Storage
     participant MAIL as Mailpit (SMTP)
     actor ADS as Administrator DS
 
-    M->>UI: Wypełnienie formularza rejestracji (dane, pokój, zdjęcie)
+    M->>UI: Wypełnienie formularza rejestracji<br/>(dane, pokój, zdjęcie twarzy JPEG/PNG/WebP)
     activate UI
-    UI->>CTL: POST /api/auth/register (RegisterRequestDTO)
+    UI->>CTL: POST /api/v1/auth/register<br/>(multipart/form-data: RegisterRequestDTO + photo File)
     activate CTL
-    CTL->>SVC: registerResident(dto)
-    activate SVC
 
-    SVC->>DB: findByEmail(dto.email)
-    activate DB
-    DB-->>SVC: Wynik wyszukiwania (brak duplikatu)
-    deactivate DB
+    alt [Zdjęcie nie spełnia wymogów: rozmiar > 5 MB lub MIME ≠ JPEG/PNG/WebP]
+        CTL-->>UI: 400 Bad Request<br/>(Nieobsługiwany format lub plik za duży)
+        UI-->>M: Komunikat o błędzie walidacji załącznika (NFR-SEC-03)
+    else [Plik poprawny — Content-Type: multipart/form-data]
+        CTL->>SVC: registerResident(dto, photoFile)
+        activate SVC
 
-    alt [Adres e-mail jest wolny]
-        SVC->>S3: putObject(bucket="pkampus-avatars", objectKey=UUID.jpg, photoStream)
-        activate S3
-        S3-->>SVC: 200 OK (avatarUrl)
-        deactivate S3
-
-        SVC->>DB: save(nowy użytkownik: PENDING_EMAIL, hash BCrypt, avatar_url, dormitory_id, declared_room_number)
+        SVC->>DB: findByEmail(dto.email)
         activate DB
-        DB-->>SVC: Encja User z wygenerowanym ID
+        DB-->>SVC: Wynik wyszukiwania (brak duplikatu)
         deactivate DB
 
-        SVC-)MAIL: sendVerificationEmail(user.email, signedToken)
-        SVC-->>CTL: Rejestracja powiodła się
-        CTL-->>UI: 201 Created (Komunikat: Sprawdź skrzynkę e-mail)
-        UI-->>M: Wyświetlenie monitu o kliknięcie w link
-    else [Adres e-mail już istnieje w bazie]
-        SVC-->>CTL: throw UserAlreadyExistsException
-        CTL-->>UI: 409 Conflict (Komunikat: E-mail zajęty)
-        UI-->>M: Błąd walidacji formularza
+        alt [Adres e-mail jest wolny]
+            SVC->>S3: putObject(bucket="pkampus-avatars",<br/>objectKey=UUID.jpg, photoStream)
+            activate S3
+            S3-->>SVC: 200 OK (avatarUrl)
+            deactivate S3
+
+            SVC->>DB: save(User: PENDING_EMAIL,<br/>hash BCrypt, avatar_url, pokój)
+            activate DB
+            DB-->>SVC: Encja User z wygenerowanym ID
+            deactivate DB
+
+            SVC-)MAIL: sendVerificationEmail(user.email, signedToken)
+            SVC-->>CTL: Rejestracja powiodła się
+            CTL-->>UI: 201 Created<br/>(Sprawdź skrzynkę e-mail)
+            UI-->>M: Wyświetlenie monitu o kliknięcie w link
+        else [Adres e-mail już istnieje w bazie (Anti-enumeration)]
+            SVC-->>CTL: Rejestracja zignorowana (anti-enumeration)
+            CTL-->>UI: 200 OK<br/>(Jeśli konto istnieje, wysłano link)
+            UI-->>M: Monit: Sprawdź skrzynkę e-mail
+        end
+        deactivate SVC
     end
-    deactivate SVC
     deactivate CTL
     deactivate UI
 
-    %% Etap 2: Potwierdzenie e-mail (token podpisany, bez persystencji w DB)
-    M->>UI: Kliknięcie w link z podpisanym tokenem aktywacyjnym
+    %% Etap 2: Potwierdzenie e-mail
+    M->>UI: Kliknięcie w link z tokenem aktywacyjnym
     activate UI
-    UI->>CTL: GET /api/auth/verify-email?token=xyz
+    UI->>CTL: GET /api/v1/auth/verify-email?token=xyz
     activate CTL
     CTL->>SVC: verifySignedEmailToken(token)
     activate SVC
-    SVC->>SVC: Walidacja podpisu i TTL tokenu (HMAC/JWT)
-    SVC->>DB: update Status = PENDING_APPROVAL
-    activate DB
-    DB-->>SVC: Zaktualizowano status
-    deactivate DB
-    SVC-->>CTL: Token poprawny
-    deactivate SVC
-    CTL-->>UI: 200 OK (Status: PENDING_APPROVAL)
-    deactivate CTL
-    UI-->>M: Ekran blokady: "Konto oczekuje na weryfikację meldunku przez ADS"
-    deactivate UI
+    alt [Token wygasł (>24h) lub nieprawidłowy podpis]
+        SVC-->>CTL: throw EmailVerificationTokenInvalidException
+        deactivate SVC
+        CTL-->>UI: 410 Gone<br/>(Link aktywacyjny wygasł lub jest nieprawidłowy)
+        deactivate CTL
+        UI-->>M: Komunikat: Link nieważny — zleć ponowne wysłanie
+        deactivate UI
+    else [Token HMAC ważny]
+        SVC->>DB: UPDATE users SET status='PENDING_APPROVAL'
+        activate DB
+        DB-->>SVC: Zaktualizowano status
+        deactivate DB
+        SVC-->>CTL: Token poprawny
+        deactivate SVC
+        CTL-->>UI: 200 OK (Status: PENDING_APPROVAL)
+        deactivate CTL
+        UI-->>M: Ekran informacyjny:<br/>"Oczekiwanie na weryfikację meldunku"
+        deactivate UI
+    end
 
-    %% Etap 3: Akceptacja przez ADS
-    ADS->>UI: Przegląd listy niezaakceptowanych meldunków
+    %% Etap 3: Akceptacja przez ADS (AdminController /api/v1/admin/*)
+    ADS->>UI: Przegląd listy meldunków
     activate UI
-    UI->>CTL: GET /api/admin/pending-residents
-    activate CTL
-    CTL->>DB: findAllByStatus(PENDING_APPROVAL)
+    UI->>ADM: GET /api/v1/admin/pending-residents
+    activate ADM
+    ADM->>DB: findAllByStatus(PENDING_APPROVAL)
     activate DB
-    DB-->>CTL: Lista studentów do weryfikacji (dane, akademik, declared_room_number)
+    DB-->>ADM: Lista studentów do weryfikacji
     deactivate DB
-    CTL-->>UI: 200 OK (Lista oczekujących z deklarowanymi numerami pokoi)
-    deactivate CTL
-    UI-->>ADS: Prezentacja listy meldunkowej do weryfikacji
+    ADM-->>UI: 200 OK (Lista oczekujących wniosków)
+    deactivate ADM
+    UI-->>ADS: Prezentacja listy meldunkowej
 
-    ADS->>UI: Weryfikacja z listą uczelnianą i kliknięcie „Zatwierdź meldunek”
-    UI->>CTL: POST /api/admin/residents/{id}/activate
-    activate CTL
-    CTL->>SVC: activateResidentAccount(id)
+    ADS->>UI: Weryfikacja z listą uczelni<br/>i kliknięcie „Zatwierdź meldunek”
+    UI->>ADM: POST /api/v1/admin/residents/{id}/activate
+    activate ADM
+    ADM->>SVC: activateResidentAccount(id)
     activate SVC
-    SVC->>DB: findById(id) -> odczyt dormitory_id i declared_room_number
+    SVC->>DB: findById(id) (odczyt DS i pokoju)
     activate DB
-    DB-->>SVC: Dane użytkownika
-    SVC->>DB: findByDormitoryAndRoomNumber(dormitory_id, declared_room_number)
+    DB-->>SVC: Dane studenta
+    SVC->>DB: findByDormitoryAndRoomNumber(...)
     DB-->>SVC: Encja Room (room_id)
-    SVC->>DB: update Status = ACTIVE
+    SVC->>DB: UPDATE users SET status='ACTIVE'
     DB-->>SVC: Zapisano status ACTIVE
-    SVC->>DB: INSERT INTO room_assignments (user_id, room_id, academic_year, is_active=TRUE, check_in_date=CURRENT_DATE)
-    DB-->>SVC: Utworzono aktywny meldunek mieszkańca
+    SVC->>DB: INSERT INTO room_assignments<br/>(user_id, room_id, is_active=TRUE)
+    DB-->>SVC: Utworzono aktywny meldunek
     deactivate DB
     SVC-)MAIL: sendAccountActivatedNotification(user.email)
-    SVC-->>CTL: Konto aktywowane
+    SVC-->>ADM: Konto aktywowane
     deactivate SVC
-    CTL-->>UI: 200 OK (Konto aktywne)
-    deactivate CTL
+    ADM-->>UI: 200 OK (Konto aktywne)
+    deactivate ADM
     UI-->>ADS: Potwierdzenie aktywacji meldunku
     deactivate UI
 ```
@@ -139,7 +159,7 @@ sequenceDiagram
 
 ## 3. Sekwencja 2: Rezerwacja Pralni z Ochroną Przed Wyścigiem (LAUNDRY & CONCURRENCY)
 
-Proces prezentuje rezerwację slotu czasowego na konkretną pralkę. Zabezpiecza system przed zjawiskiem *Race Condition* za pomocą ograniczenia integralności PostgreSQL `chk_laundry_no_overlap` (`EXCLUDE USING gist`) na przecięciu przedziałów czasowych `tstzrange(start_time, end_time) WITH &&`, odrzucającego równoległe kolizyjne próby rezerwacji kodem błędu SQLSTATE `23P01` (`exclusion_violation`).
+Proces prezentuje rezerwację slotu czasowego na konkretną pralkę. Zabezpiecza system przed zjawiskiem *Race Condition* za pomocą ograniczenia integralności PostgreSQL `chk_laundry_no_overlap` (`EXCLUDE USING gist`) na przecięciu przedziałów czasowych `tstzrange(start_time, end_time) WITH &&`, odrzucającego równoległe kolizyjne próby rezerwacji kodem błędu SQLSTATE `23P01` (`exclusion_violation`) mapowanym na **HTTP 409 Conflict**. Reguły `BR-01` (horyzont max 7 dni w przód oraz limit **2** aktywnych = `CONFIRMED`/`KEY_ISSUED` w tygodniu kalendarzowym pon–niedz. `Europe/Warsaw`) są walidacją logiczną przed INSERT i zwracają **HTTP 422 Unprocessable Entity** (por. §1 pkt 6).
 
 ```mermaid
 sequenceDiagram
@@ -150,39 +170,45 @@ sequenceDiagram
     participant SVC as LaundryBookingService
     participant DB as PostgreSQL (JPA / Transakcja)
 
-    M->>UI: Wybór pralki i slotu czasowego w siatce grafiku
+    M->>UI: Wybór pralki i slotu w siatce grafiku
     activate UI
-    UI->>CTL: POST /api/laundry/bookings (pralkaId, slotStart, slotEnd)
+    UI->>CTL: POST /api/v1/laundry/bookings<br/>(pralkaId, slotStart, slotEnd)
     activate CTL
     CTL->>SVC: bookSlot(userId, pralkaId, slotStart, slotEnd)
     activate SVC
 
-    %% Sprawdzenie reguł biznesowych
-    SVC->>DB: countActiveBookingsInCurrentWeek(userId)
-    activate DB
-    DB-->>SVC: Liczba aktywnych rezerwacji mieszkańca
-    deactivate DB
-
-    alt [Mieszkaniec ma już >= 2 aktywne rezerwacje w tygodniu]
-        SVC-->>CTL: throw BookingLimitExceededException (BR-01)
-        CTL-->>UI: 400 Bad Request (Limit 2 rezerwacji na tydzień wyczerpany)
-        UI-->>M: Wyświetlenie komunikatu o przekroczeniu limitu
-    else [Mieszkaniec spełnia limit tygodniowy]
-        SVC->>DB: INSERT INTO laundry_bookings (machine_id, user_id, start_time, end_time, status='CONFIRMED')
+    %% Sprawdzenie reguł biznesowych BR-01
+    alt [slotStart poza horyzontem > 7 dni w przód (BR-01)]
+        SVC-->>CTL: throw BookingHorizonExceededException
+        CTL-->>UI: 422 Unprocessable Entity<br/>(Rezerwacja tylko do 7 dni w przód)
+        UI-->>M: Komunikat: Slot poza dozwolonym horyzontem
+    else [Horyzont 7 dni OK]
+        SVC->>DB: countActiveBookingsInCurrentWeek(userId)<br/>(status IN CONFIRMED,KEY_ISSUED;<br/>start_time w pon–niedz. Europe/Warsaw)
         activate DB
-
-        alt [Brak kolizji przedziałów czasowych - pomyślna ewaluacja chk_laundry_no_overlap]
-            DB-->>SVC: Zapisano rezerwację (ID, znacznik czasu)
-            SVC-->>CTL: BookingDTO (Potwierdzona rezerwacja)
-            CTL-->>UI: 201 Created (Rezerwacja potwierdzona)
-            UI-->>M: Zielony alert sukcesu + podświetlenie kafelka
-        else [Wykryto kolizję nachodzących slotów - naruszenie chk_laundry_no_overlap]
-            DB-->>SVC: Błąd SQLSTATE 23P01 (exclusion_violation)
-            SVC-->>CTL: throw SlotAlreadyBookedException (Wykryto kolizję współbieżną)
-            CTL-->>UI: 409 Conflict (Ten slot został przed chwilą zarezerwowany)
-            UI-->>M: Odświeżenie siatki i komunikat o kolizji
-        end
+        DB-->>SVC: Liczba aktywnych rezerwacji mieszkańca
         deactivate DB
+
+        alt [Mieszkaniec ma już >= 2 aktywne CONFIRMED/KEY_ISSUED (BR-01)]
+            SVC-->>CTL: throw BookingLimitExceededException
+            CTL-->>UI: 422 Unprocessable Entity<br/>(Wyczerpano limit 2 rezerwacji/tydzień)
+            UI-->>M: Komunikat: Przekroczono limit rezerwacji
+        else [Mieszkaniec spełnia limit tygodniowy]
+            SVC->>DB: INSERT INTO laundry_bookings<br/>(machine_id, user_id, start_time, end_time)
+            activate DB
+
+            alt [Brak kolizji slotów (sukces chk_laundry_no_overlap)]
+                DB-->>SVC: Zapisano rezerwację (ID, znacznik czasu)
+                SVC-->>CTL: BookingDTO (Potwierdzona rezerwacja)
+                CTL-->>UI: 201 Created (Rezerwacja potwierdzona)
+                UI-->>M: Zielony alert sukcesu + podświetlenie kafelka
+            else [Kolizja przedziałów czasowych (błąd chk_laundry_no_overlap)]
+                DB-->>SVC: Błąd SQLSTATE 23P01 (exclusion_violation)
+                SVC-->>CTL: throw SlotAlreadyBookedException
+                CTL-->>UI: 409 Conflict<br/>(Slot został przed chwilą zajęty)
+                UI-->>M: Odświeżenie siatki i komunikat o kolizji
+            end
+            deactivate DB
+        end
     end
     deactivate SVC
     deactivate CTL
@@ -193,7 +219,7 @@ sequenceDiagram
 
 ## 4. Sekwencja 3: Procedura Wydania Klucza i Reguła 15 Minut (LAUNDRY/ROOMS & SCHEDULER)
 
-Zgodnie z §2 ust. 5 Regulaminu korzystania z salek tematycznych (oraz analogiczną decyzją projektową przyjętą dla pralni w celu zapobiegania blokowaniu slotów), mieszkaniec musi odebrać klucz w ciągu 15 minut od startu rezerwacji. Diagram ilustruje dwa alternatywne warianty: pomyślny odbiór klucza na portierni oraz automatyczne zwolnienie zasobu przez harmonogram zadań w tle (`@Scheduled`).
+Zgodnie z §2 ust. 5 Regulaminu korzystania z salek tematycznych (oraz analogiczną decyzją projektową przyjętą dla pralni w celu zapobiegania blokowaniu slotów), mieszkaniec musi odebrać klucz w ciągu 15 minut od startu rezerwacji. Diagram ilustruje trzy warianty: pomyślny odbiór klucza, automatyczne zwolnienie slotu przez scheduler (`AUTO_CANCELLED_15MIN` + e-mail) oraz zwrot klucza z domknięciem do `COMPLETED` (`BR-09` / `FR-PORTAL-02`).
 
 ```mermaid
 sequenceDiagram
@@ -205,19 +231,20 @@ sequenceDiagram
     participant SVC as KeyService
     participant DB as PostgreSQL (JPA)
     participant SCH as Background Scheduler
+    participant MAIL as Mailpit (SMTP)
 
     %% Scenariusz A: Pomyślne wydanie klucza
-    Note over M, P: SCENARIUSZ A: Mieszkaniec przychodzi na czas (< 15 min)
-    M->>P: Pokazanie Wirtualnej Karty Mieszkańca na telefonie
-    P->>UI: Podgląd bieżących rezerwacji na dany slot czasowy
+    Note over M, P: SCENARIUSZ A: Odbiór klucza na czas (< 15 min)
+    M->>P: Okazanie Wirtualnej Karty Mieszkańca
+    P->>UI: Podgląd bieżących rezerwacji na dany slot
     activate UI
-    UI-->>P: Karta aktywna, rezerwacja potwierdzona (Mieszkaniec pok. 312)
+    UI-->>P: Karta aktywna, rezerwacja potwierdzona
     P->>UI: Kliknięcie przycisku „Wydaj klucz”
-    UI->>CTL: POST /api/keys/issue (bookingId)
+    UI->>CTL: POST /api/v1/keys/issue (bookingId)
     activate CTL
     CTL->>SVC: issueKey(bookingId, receptionistId)
     activate SVC
-    SVC->>DB: update Booking SET status='KEY_ISSUED', key_issued_at=NOW()
+    SVC->>DB: UPDATE Booking SET status='KEY_ISSUED',<br/>key_issued_at=NOW()
     activate DB
     DB-->>SVC: Zaktualizowano rezerwację
     deactivate DB
@@ -225,37 +252,58 @@ sequenceDiagram
     deactivate SVC
     CTL-->>UI: 200 OK (Zarejestrowano wydanie klucza)
     deactivate CTL
-    UI-->>P: Zmiana statusu kafelka na zielony ("Klucz wydany")
+    UI-->>P: Zmiana statusu na zielony ("Klucz wydany")
     deactivate UI
     P->>M: Fizyczne wydanie klucza do rąk studenta
 
+    %% Scenariusz A2: Zwrot klucza → COMPLETED
+    Note over M, P: SCENARIUSZ A2: Zwrot klucza (BR-09)
+    M->>P: Zwrot fizycznego klucza
+    P->>UI: Kliknięcie „Odbierz klucz”
+    activate UI
+    UI->>CTL: POST /api/v1/keys/return (bookingId)
+    activate CTL
+    CTL->>SVC: returnKey(bookingId, receptionistId)
+    activate SVC
+    SVC->>DB: UPDATE Booking SET status='COMPLETED',<br/>key_returned_at=NOW()
+    activate DB
+    DB-->>SVC: Domknięto rezerwację
+    deactivate DB
+    SVC-->>CTL: KeyReturnConfirmationDTO
+    deactivate SVC
+    CTL-->>UI: 200 OK (Zwrot zarejestrowany)
+    deactivate CTL
+    UI-->>P: Status COMPLETED
+    deactivate UI
+
     %% Scenariusz B: Minęło 15 minut, brak odbioru klucza
-    Note over P, SCH: SCENARIUSZ B: Minęło 15 minut od startu slotu (Reguła §2 ust. 5)
-    SCH->>SVC: triggerReleaseUnclaimedSlots() [wyzwalany cyklicznie co 1 min]
+    Note over P, SCH: SCENARIUSZ B: Minęło 15 min od startu (Reguła BR-02)
+    SCH->>SVC: triggerReleaseUnclaimedSlots()<br/>(cykl schedulera co 1 min)
     activate SCH
     activate SVC
-    SVC->>DB: findUnclaimedSlotsOlderThan(slotStartTime + 15 min, status='CONFIRMED')
+    SVC->>DB: findUnclaimedSlotsOlderThan<br/>(slotStart + 15 min, CONFIRMED)
     activate DB
     DB-->>SVC: Lista porzuconych rezerwacji (No-Show)
     deactivate DB
 
     loop Dla każdej porzuconej rezerwacji
-        SVC->>DB: update Booking SET status='AUTO_CANCELLED_15MIN'
+        SVC->>DB: UPDATE Booking<br/>SET status='AUTO_CANCELLED_15MIN'
         activate DB
         DB-->>SVC: Slot uwolniony
         deactivate DB
+        SVC-)MAIL: sendAutoCancel15MinEmail(user.email, bookingId)
     end
     SVC-->>SCH: Liczba zwolnionych slotów
     deactivate SVC
     deactivate SCH
 
     %% Odświeżenie na portierni i u mieszkańców
-    UI->>CTL: GET /api/keys/live-status (odpytanie okresowe)
+    UI->>CTL: GET /api/v1/keys/live-status
     activate UI
     activate CTL
     CTL->>DB: pobierz aktualny stan grafiku
     activate DB
-    DB-->>CTL: Slot pralki/salki oznaczony jako WOLNY
+    DB-->>CTL: Slot oznaczony jako WOLNY
     deactivate DB
     CTL-->>UI: 200 OK (Slot dostępny)
     deactivate CTL
@@ -281,40 +329,37 @@ sequenceDiagram
     participant MAIL as Mailpit (SMTP)
     actor P as Recepcjonista (Portier)
 
-    M->>UI: Wybór lokalizacji, opis usterki, załączenie zdjęcia z aparatu
+    M->>UI: Opis usterki + zdjęcie z aparatu
     activate UI
-    UI->>CTL: POST /api/issues (Multipart: IssueFormDTO + photo File)
+    UI->>CTL: POST /api/v1/issues<br/>(Multipart: IssueFormDTO + File)
     activate CTL
 
-    %% Walidacja pliku
-    alt [Zdjęcie nie spełnia wymogów: rozmiar > 5MB lub typ MIME != JPEG/PNG/WebP]
-        CTL-->>UI: 400 Bad Request (Nieobsługiwany format lub plik za duży)
-        UI-->>M: Wyświetlenie komunikatu o błędzie walidacji zdjęcia
+    alt [Plik niepoprawny: rozmiar > 5MB lub zły format MIME]
+        CTL-->>UI: 400 Bad Request<br/>(Nieobsługiwany format lub plik za duży)
+        UI-->>M: Komunikat o błędzie walidacji załącznika
     else [Plik poprawny i kompletny]
         CTL->>SVC: createIssueWithAttachment(dto, file, residentId)
         activate SVC
 
-        %% Przesyłanie do MinIO
-        SVC->>S3: putObject(bucket="pkampus-issues", objectKey=UUID.jpg, stream)
+        SVC->>S3: putObject("pkampus-issues", key=UUID.jpg, stream)
         activate S3
         S3-->>SVC: 200 OK (etag, objectUrl)
         deactivate S3
 
-        %% Zapis w bazie: encja zgłoszenia oraz załącznik 1:N
-        SVC->>DB: INSERT INTO issues (reporter_id, dormitory_id, room_id, category, urgency, description, status='NEW')
+        SVC->>DB: INSERT INTO issues<br/>(reporter_id, dormitory_id, category, urgency, desc)
         activate DB
-        DB-->>SVC: Zapisana encja Issue z wygenerowanym ID
+        DB-->>SVC: Encja Issue z wygenerowanym ID
         deactivate DB
 
-        SVC->>DB: INSERT INTO issue_photos (issue_id, photo_url, file_name, file_size_bytes)
+        SVC->>DB: INSERT INTO issue_photos<br/>(issue_id, photo_url, file_name, file_size)
         activate DB
-        DB-->>SVC: Zapisano rekord załącznika fotograficznego
+        DB-->>SVC: Zapisano załącznik
         deactivate DB
 
         SVC-->>CTL: IssueDetailsDTO
         deactivate SVC
         CTL-->>UI: 201 Created (Zgłoszenie przyjęte)
-        UI-->>M: Informacja o numerze zgłoszenia i statusie „NEW” (Nowe)
+        UI-->>M: Numer zgłoszenia i status NEW
     end
     deactivate CTL
     deactivate UI
@@ -322,29 +367,28 @@ sequenceDiagram
     %% Obsługa zgłoszenia przez portiernię
     P->>UI: Wejście w moduł „Rejestr Usterek”
     activate UI
-    UI->>CTL: GET /api/issues/active
+    UI->>CTL: GET /api/v1/issues/active
     activate CTL
-    CTL->>DB: findAllByStatusIn('NEW', 'ASSIGNED_TO_MAINTENANCE')
+    CTL->>DB: findAllByStatusIn('NEW', 'ASSIGNED_TO_MAINTENANCE',<br/>'IN_PROGRESS', 'PARTS_REQUIRED')
     activate DB
-    DB-->>CTL: Lista awarii z miniaturami zdjęć MinIO
+    DB-->>CTL: Lista otwartych usterek (w toku) z miniaturami MinIO
     deactivate DB
-    CTL-->>UI: 200 OK (Zgłoszenia)
+    CTL-->>UI: 200 OK (Zgłoszenia otwarte / w toku)
     deactivate CTL
     UI-->>P: Prezentacja rejestru spraw
 
-    P->>UI: Zmiana statusu na „ASSIGNED_TO_MAINTENANCE” + notatka
+    P->>UI: Zmiana statusu na<br/>ASSIGNED_TO_MAINTENANCE + notatka
     activate UI
-    UI->>CTL: PATCH /api/issues/{id}/status (status, komentarz)
+    UI->>CTL: PATCH /api/v1/issues/{id}/status<br/>(status, staff_notes)
     activate CTL
     CTL->>SVC: updateIssueStatus(id, newStatus, comment)
     activate SVC
-    SVC->>DB: UPDATE issues SET status='ASSIGNED_TO_MAINTENANCE', staff_notes=comment
+    SVC->>DB: UPDATE issues SET status='ASSIGNED_TO_MAINTENANCE',<br/>staff_notes=comment
     activate DB
     DB-->>SVC: Zapisano zmianę statusu
     deactivate DB
 
-    %% Asynchroniczne powiadomienie e-mail do zgłaszającego mieszkańca
-    SVC-)MAIL: sendIssueStatusChangeEmail(student.email, issue.id, newStatus, comment)
+    SVC-)MAIL: sendIssueStatusChangeEmail<br/>(student.email, issue.id, newStatus)
 
     SVC-->>CTL: Zaktualizowane dane sprawy
     deactivate SVC
@@ -358,62 +402,68 @@ sequenceDiagram
 
 ## 6. Sekwencja 5: Rezerwacja Salki z Weryfikacją Czarnej Listy Kar (ROOMS & SANCTIONS)
 
-Proces weryfikuje uprawnienia mieszkańca do rezerwacji salki tematycznej (cicha nauka „Kujon”, Funzone, Chillout) ze szczególnym uwzględnieniem ewidencji kar dyscyplinarnych (§6 ust. 2 Regulaminu: 1–3 miesiące blokady salek).
+Proces weryfikuje uprawnienia mieszkańca do rezerwacji salki tematycznej (cicha nauka „Kujon”, Funzone, Chillout) ze szczególnym uwzględnieniem ewidencji kar dyscyplinarnych (§6 ust. 2 Regulaminu: 1–3 miesiące blokady salek). Kody HTTP: `403` przy `ROOM_BAN`, `422` przy walidacji pojemności oraz okna `BR-03` (Kujon/std: 06:00–23:30 max 4 h; Chillout: 14:00–02:00 max 12 h), `409` przy kolizji `chk_room_no_overlap` (SQLSTATE `23P01`) — zgodnie z konwencją §1 pkt 6.
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor M as Mieszkaniec (Organizator)
     participant UI as Frontend (React PWA)
-    participant CTL as RoomBookingController
+    participant CTL as RoomController
     participant SVC as RoomBookingService
     participant SANCT as SanctionService
     participant DB as PostgreSQL (JPA)
 
-    M->>UI: Wybór salki (np. Chillout), przedziału godzin i liczby osób
+    M->>UI: Wybór salki (np. Chillout),<br/>przedziału godzin i liczby osób
     activate UI
-    M->>UI: Zaznaczenie akceptacji regulaminu i oświadczenia Organizatora
-    UI->>CTL: POST /api/rooms/bookings (CreateRoomBookingDTO)
+    M->>UI: Akceptacja regulaminu i oświadczenie Organizatora
+    UI->>CTL: POST /api/v1/rooms/bookings<br/>(CreateRoomBookingDTO)
     activate CTL
     CTL->>SVC: reserveRoom(userId, dto)
     activate SVC
 
     %% Krok 1: Weryfikacja czarnej listy kar regulaminowych
-    SVC->>SANCT: checkActiveSanctions(userId, sanctionType='ROOM_BAN')
+    SVC->>SANCT: checkActiveSanctions(userId, 'ROOM_BAN')
     activate SANCT
     SANCT->>DB: findActiveSanction(userId, currentDate)
     activate DB
     DB-->>SANCT: Wynik weryfikacji sankcji
     deactivate DB
-    SANCT-->>SVC: Wynik weryfikacji sankcji (Status kary)
+    SANCT-->>SVC: Wynik weryfikacji (Status kary)
     deactivate SANCT
 
-    alt [Mieszkaniec posiada aktywną karę blokady salek (1-3 mies.)]
-        SVC-->>CTL: throw ResidentSanctionBlockedException (§6 ust. 2)
-        CTL-->>UI: 403 Forbidden (Twoje konto posiada blokadę rezerwacji salek do YYYY-MM-DD)
-        UI-->>M: Czerwony komunikat odmowy z datą wygaśnięcia kary
+    alt [Mieszkaniec posiada aktywną karę ROOM_BAN (1-3 mies.)]
+        SVC-->>CTL: throw ResidentSanctionBlockedException
+        CTL-->>UI: 403 Forbidden<br/>(Blokada rezerwacji salek do YYYY-MM-DD)
+        UI-->>M: Odmowa: Aktywna blokada salek z datą wygaśnięcia
     else [Brak aktywnych kar dyscyplinarnych]
 
-        %% Krok 2: Walidacja pojemności salki (FR-ROOM-03)
-        alt [Liczba uczestników przekracza pojemność: participants_count > room.max_capacity]
+        alt [Przekroczona pojemność salki (uczestnicy > max_capacity)]
             SVC-->>CTL: throw RoomCapacityExceededException
-            CTL-->>UI: 400 Bad Request (Przekroczono limit osób w salce)
-            UI-->>M: Komunikat błędu: Zbyt duża deklarowana liczba uczestników
+            CTL-->>UI: 422 Unprocessable Entity<br/>(Przekroczono limit osób w salce)
+            UI-->>M: Komunikat: Zbyt duża liczba uczestników
         else [Pojemność salki poprawna]
 
-            %% Krok 3: Walidacja reguł czasowych danej salki
-            alt [Przekroczono limit czasu: > 4h dla salki standardowej/Kujon lub poza oknem 14:00-02:00 dla Chillout]
+            alt [Naruszenie BR-03 wg typu salki<br/>(Kujon/std: poza 06:00–23:30 lub >4h;<br/>Chillout: poza 14:00–02:00 lub >12h)]
                 SVC-->>CTL: throw InvalidRoomTimeWindowException
-                CTL-->>UI: 400 Bad Request (Niedozwolony przedział godzinowy dla typu salki)
-                UI-->>M: Komunikat błędu: Maksymalny czas to 4h
-            else [Parametry zgodne z regulaminem i brak kolizji slotu]
-                SVC->>DB: INSERT INTO room_bookings (user_id, room_id, status='CONFIRMED', terms_accepted=TRUE)
+                CTL-->>UI: 422 Unprocessable Entity<br/>(Niedozwolony przedział godzinowy)
+                UI-->>M: Błąd: Przedział niezgodny z regulaminem salki
+            else [Parametry zgodne z BR-03]
+                SVC->>DB: INSERT INTO room_bookings<br/>(user_id, room_id, status='CONFIRMED')
                 activate DB
-                DB-->>SVC: Utworzono rezerwację salki
-                deactivate DB
-                SVC-->>CTL: RoomBookingDetailsDTO
-                CTL-->>UI: 201 Created (Rezerwacja pomyślna)
-                UI-->>M: Potwierdzenie z przypomnieniem o odbiorze klucza w 15 min
+                alt [Brak kolizji (sukces chk_room_no_overlap)]
+                    DB-->>SVC: Utworzono rezerwację salki
+                    deactivate DB
+                    SVC-->>CTL: RoomBookingDetailsDTO
+                    CTL-->>UI: 201 Created (Rezerwacja pomyślna)
+                    UI-->>M: Potwierdzenie z przypomnieniem o odbiorze w 15 min
+                else [Kolizja przedziałów (chk_room_no_overlap / 23P01)]
+                    DB-->>SVC: Błąd SQLSTATE 23P01 (exclusion_violation)
+                    deactivate DB
+                    SVC-->>CTL: throw SlotAlreadyBookedException
+                    CTL-->>UI: 409 Conflict<br/>(Slot salki został przed chwilą zajęty)
+                    UI-->>M: Odświeżenie grafiku i komunikat o kolizji
+                end
             end
         end
     end
@@ -424,30 +474,30 @@ sequenceDiagram
 
 ---
 
-## 7. Sekwencja 6: Publikacja Komunikatu Dyżurnego / Wymiany Pościeli i Odbiór Alertu (BOARD & EVENTS)
+## 7. Sekwencja 6: Publikacja Komunikatu Dyżurnego / Wymiany Pościeli i Odbiór Alertu (EVENTS)
 
 Proces obrazuje publikację ważnego komunikatu technicznego lub organizacyjnego przez personel (portiernię/ADS dla danego DS lub Superadmina AOS o zasięgu ogólnokampusowym, `dormId = NULL`) oraz prezentację banera alertu u mieszkańca dla przypiętych komunikatów `CRITICAL` (bez osobnego potwierdzania odczytu per użytkownik — baner znika po odpięciu/wygaśnięciu).
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor P as Personel (Portier / ADS / Superadmin AOS)
+    actor P as Personel (Portier / ADS / AOS)
     participant UI_P as Panel Personelu (React)
     participant CTL as EventController
     participant SVC as EventService
     participant DB as PostgreSQL (JPA)
-    participant UI_M as Frontend Mieszkańca (React PWA)
+    participant UI_M as Frontend Mieszkańca (PWA)
     actor M as Mieszkaniec
 
-    P->>UI_P: Wprowadzenie komunikatu (Tytuł, Priorytet: CRITICAL, Data, Zasięg: DS lub Kampus)
+    P->>UI_P: Wprowadzenie komunikatu<br/>(Tytuł, CRITICAL, termin, zasięg)
     activate UI_P
-    UI_P->>CTL: POST /api/events/announcements (CreateEventDTO)
+    UI_P->>CTL: POST /api/v1/events/announcements<br/>(CreateEventDTO)
     activate CTL
-    Note over CTL, SVC: dormId = ID_DS (Portier/ADS) lub dormId = null (ogólnokampusowy Superadmina AOS)
+    Note over CTL, SVC: dormId = ID_DS (Portier/ADS)<br/>lub null (Superadmin AOS)
     CTL->>SVC: publishAnnouncement(dto, authorId, dormId)
     activate SVC
 
-    SVC->>DB: INSERT INTO dorm_events (dormitory_id, category, isPinned, priority)
+    SVC->>DB: INSERT INTO dorm_events<br/>(dormitory_id, category, is_pinned, priority)
     activate DB
     DB-->>SVC: Zapisano ogłoszenie urzędowe
     deactivate DB
@@ -456,23 +506,23 @@ sequenceDiagram
     deactivate SVC
     CTL-->>UI_P: 201 Created (Ogłoszenie opublikowane)
     deactivate CTL
-    UI_P-->>P: Potwierdzenie publikacji w kalendarzu i banerze kampusu
+    UI_P-->>P: Potwierdzenie publikacji w kalendarzu i banerze
     deactivate UI_P
 
     %% Odbiór przez mieszkańca
-    Note over UI_M, M: Mieszkaniec uruchamia aplikację na smartfonie lub przechodzi między zakładkami
+    Note over UI_M, M: Otwarcie aplikacji lub przejście między zakładkami
     M->>UI_M: Otwarcie ekranu głównego PKampus
     activate UI_M
-    UI_M->>CTL: GET /api/events/active-alerts?dormId={dormId}
+    UI_M->>CTL: GET /api/v1/events/active-alerts?dormId={dormId}
     activate CTL
-    Note over CTL, DB: Zapytanie uwzględnia (dormitory_id = dormId OR dormitory_id IS NULL)
+    Note over CTL, DB: Zapytanie: dormitory_id = dormId<br/>OR dormitory_id IS NULL
     CTL->>DB: findActivePinnedAlerts(dormId, currentDate)
     activate DB
-    DB-->>CTL: Aktywny komunikat (priorytet CRITICAL: lokalny DS lub ogólnokampusowy)
+    DB-->>CTL: Aktywny komunikat (priorytet CRITICAL)
     deactivate DB
     CTL-->>UI_M: 200 OK (Lista aktywnych alertów)
     deactivate CTL
-    UI_M-->>M: Wyświetlenie przypiętego czerwonego banera ostrzegawczego na samej górze ekranu
+    UI_M-->>M: Czerwony baner ostrzegawczy<br/>przypięty u góry ekranu
     deactivate UI_M
 ```
 
@@ -484,52 +534,53 @@ sequenceDiagram
 
 Proces przedstawia zgłoszenie awarii pralki przez dyżurnego pracownika recepcji (lub ADS), jej natychmiastowe wyłączenie z eksploatacji w bazie danych (`OUT_OF_ORDER`), kaskadowe anulowanie wszystkich zaplanowanych rezerwacji ze statusem `CANCELLED_MACHINE_OUT_OF_ORDER`, asynchroniczną wysyłkę powiadomień e-mail do poszkodowanych studentów oraz automatyczne wygenerowanie powiązanego zgłoszenia usterki w rejestrze warsztatu (`issues`).
 
+> **Adnotacja — analogia dla salek tematycznych (`FR-ROOM-09`, `UC-ROOM-06`, `ADR-06`):** Osobny diagram sekwencji dla wyłączenia salki nie jest wymagany w MVP. Przebieg jest **izomorficzny** z poniższą Sekwencją 7, z podstawieniami: zasób `thematic_rooms` zamiast `laundry_machines`; status zasobu `MAINTENANCE` zamiast `OUT_OF_ORDER`; kaskada `room_bookings.status = 'CANCELLED_ROOM_MAINTENANCE'` zamiast `CANCELLED_MACHINE_OUT_OF_ORDER` (tylko przyszłe `CONFIRMED`); endpoint `POST /api/v1/rooms/{id}/maintenance` (RoomController / RoomBookingService) zamiast `POST /api/v1/laundry/machines/{id}/breakdown`; treść auto-zgłoszenia w `issues` dotyczy salki (część wspólna). Powiadomienia e-mail do Organizatorów oraz utrwalenie `reporter_id` personelu (`BR-07`) pozostają bez zmian. Stany i reguły przejść: `Diagramy_Maszyny_Stanow.md` (MS-3 rezerwacje, MS-7 status salki) oraz ERD (`thematic_rooms.status`, `room_bookings`).
+
 ```mermaid
 sequenceDiagram
     autonumber
     actor ACT as Portier / Admin DS
     participant UI as Frontend (React Desktop/PWA)
     participant CTL as LaundryController
-    participant SVC as LaundryService
+    participant SVC as LaundryBookingService
     participant ISS as IssueService
     participant DB as PostgreSQL (JPA)
     participant MAIL as Mailpit (SMTP)
 
-    ACT->>UI: Wybór pralki i kliknięcie „Zgłoś awarię / Wyłącz pralkę” (powód: np. Wyciek wody)
+    ACT->>UI: Kliknięcie „Zgłoś awarię / Wyłącz pralkę”<br/>(powód: np. Wyciek wody)
     activate UI
-    UI->>CTL: POST /api/laundry/machines/{id}/breakdown (MachineBreakdownDTO)
+    UI->>CTL: POST /api/v1/laundry/machines/{id}/breakdown<br/>(MachineBreakdownDTO)
     activate CTL
 
-    CTL->>SVC: reportMachineBreakdown(machineId, dto, reporterId)
+    CTL->>SVC: reportMachineBreakdown(id, dto, reporterId)
     activate SVC
 
-    %% Rozpoczęcie transakcji bazodanowej
     rect rgb(240, 245, 255)
-        note over SVC,DB: Transakcja biznesowa (@Transactional)
+        Note over SVC,DB: Transakcja biznesowa (@Transactional)
         
         %% 1. Zmiana statusu pralki
-        SVC->>DB: UPDATE laundry_machines SET status='OUT_OF_ORDER', notes=dto.reason WHERE id=machineId
+        SVC->>DB: UPDATE laundry_machines<br/>SET status='OUT_OF_ORDER', notes=dto.reason
         activate DB
-        DB-->>SVC: Zaktualizowano stan pralki (OUT_OF_ORDER)
+        DB-->>SVC: Zaktualizowano stan (OUT_OF_ORDER)
         deactivate DB
 
         %% 2. Pobranie przyszłych rezerwacji
-        SVC->>DB: findFutureConfirmedBookings(machineId, NOW())
+        SVC->>DB: findFutureConfirmedBookings(id, NOW())
         activate DB
-        DB-->>SVC: Lista aktywnych rezerwacji do anulowania (List<Booking>)
+        DB-->>SVC: Lista aktywnych rezerwacji (List[Booking])
         deactivate DB
 
         %% 3. Kaskadowe anulowanie rezerwacji
-        SVC->>DB: UPDATE laundry_bookings SET status='CANCELLED_MACHINE_OUT_OF_ORDER' WHERE machine_id=machineId AND start_time >= NOW() AND status='CONFIRMED'
+        SVC->>DB: UPDATE laundry_bookings<br/>SET status='CANCELLED_MACHINE_OUT_OF_ORDER'
         activate DB
         DB-->>SVC: Zaktualizowano rezerwacje
         deactivate DB
 
         %% 4. Automatyczne utworzenie zgłoszenia w module ISSUES
-        Note over SVC, ISS: reporterId pracownika personelu (Portier/ADS) jest utrwalany jako reporter_id w issues (zgodnie z BR-07)
-        SVC->>ISS: createAutomatedBreakdownIssue(machine, dto.reason, reporterId)
+        Note over SVC, ISS: Identyfikator personelu (reporterId)<br/>utrwalany w issues (zgodnie z BR-07)
+        SVC->>ISS: createAutomatedBreakdownIssue(machine, reason, reporterId)
         activate ISS
-        ISS->>DB: INSERT INTO issues (reporter_id, dormitory_id, common_area_name, category='OTHER', urgency='URGENT', description='Awaria pralki...', status='NEW')
+        ISS->>DB: INSERT INTO issues<br/>(reporter_id, common_area, urgency='URGENT')
         activate DB
         DB-->>ISS: Zapisano usterkę (issue_id)
         deactivate DB
@@ -539,18 +590,16 @@ sequenceDiagram
 
     %% Asynchroniczna wysyłka powiadomień e-mail
     loop Dla każdego poszkodowanego mieszkańca
-        SVC-)MAIL: sendBreakdownNotificationEmail(student.email, machine.identifier, booking.startTime)
+        SVC-)MAIL: sendBreakdownNotificationEmail<br/>(student.email, machineId, startTime)
     end
 
-    SVC-->>CTL: BreakdownReportResponseDTO(machineId, cancelledCount, issueId)
+    SVC-->>CTL: BreakdownReportResponseDTO<br/>(machineId, cancelledCount, issueId)
     deactivate SVC
-    CTL-->>UI: 200 OK (Podsumowanie wyłączenia zasobu)
+    CTL-->>UI: 200 OK (Podsumowanie wyłączenia)
     deactivate CTL
-    UI-->>ACT: Wyświetlenie potwierdzenia: wyłączono pralkę, anulowano rezerwacje, zarejestrowano usterkę
+    UI-->>ACT: Potwierdzenie: pralka wyłączona,<br/>rezerwacje anulowane, usterka zgłoszona
     deactivate UI
 ```
-
----
 
 ---
 
@@ -569,9 +618,9 @@ sequenceDiagram
     participant MAIL as Mailpit (SMTP)
 
     %% Krok 1: Żądanie zresetowania hasła
-    M->>UI: Wybór opcji „Zapomniałem hasła” i podanie adresu e-mail
+    M->>UI: Wybór „Zapomniałem hasła”<br/>i podanie adresu e-mail
     activate UI
-    UI->>CTL: POST /api/auth/forgot-password (ForgotPasswordDTO: email)
+    UI->>CTL: POST /api/v1/auth/forgot-password<br/>(ForgotPasswordDTO)
     activate CTL
     CTL->>SVC: initiatePasswordReset(email)
     activate SVC
@@ -582,8 +631,8 @@ sequenceDiagram
     deactivate DB
 
     alt [Użytkownik istnieje w systemie]
-        SVC->>SVC: Wygenerowanie bezpiecznego tokenu (SecureRandom / UUID)
-        SVC->>DB: INSERT INTO password_reset_tokens (user_id, token_hash, expires_at=NOW()+15min)
+        SVC->>SVC: Wygenerowanie tokenu kryptograficznego
+        SVC->>DB: INSERT INTO password_reset_tokens<br/>(user_id, token_hash, expires_at=NOW()+15m)
         activate DB
         DB-->>SVC: Zapisano rekord tokenu
         deactivate DB
@@ -593,44 +642,44 @@ sequenceDiagram
 
     SVC-->>CTL: Procedura zainicjowana
     deactivate SVC
-    CTL-->>UI: 200 OK (Komunikat ogólny: Jeśli e-mail istnieje, wysłano link)
+    CTL-->>UI: 200 OK<br/>(Jeśli konto istnieje, wysłano link)
     deactivate CTL
     UI-->>M: Informacja: Sprawdź skrzynkę pocztową
     deactivate UI
 
     %% Krok 2: Otwarcie linku i zmiana hasła
-    M->>MAIL: Otwarcie wiadomości i kliknięcie linku resetującego (/reset-password?token=XYZ)
+    M->>MAIL: Otwarcie wiadomości i kliknięcie linku<br/>(/reset-password?token=XYZ)
     activate MAIL
-    MAIL-->>UI: Przekierowanie do formularza nowego hasła z tokenem
+    MAIL-->>UI: Otwarcie formularza nowego hasła
     deactivate MAIL
     activate UI
 
     M->>UI: Wprowadzenie nowego hasła i zatwierdzenie
-    UI->>CTL: POST /api/auth/reset-password (ResetPasswordDTO: token, newPassword)
+    UI->>CTL: POST /api/v1/auth/reset-password<br/>(ResetPasswordDTO: token, newPassword)
     activate CTL
     CTL->>SVC: completePasswordReset(dto)
     activate SVC
 
     SVC->>SVC: hashToken = SHA-256(dto.token)
-    SVC->>DB: findValidTokenByHash(hashToken, NOW()) WHERE used_at IS NULL
+    SVC->>DB: findValidTokenByHash(hashToken, NOW())<br/>WHERE used_at IS NULL
     activate DB
-    DB-->>SVC: Rekord tokenu (status poprawny) / pusty wynik
+    DB-->>SVC: Rekord tokenu (status poprawny)
     deactivate DB
 
-    alt [Token poprawny i aktywny: used_at IS NULL oraz expires_at > NOW]
+    alt [Token poprawny i aktywny (used_at IS NULL, expires_at ważny)]
         SVC->>SVC: Hash nowego hasła (BCrypt z soleniem)
-        SVC->>DB: UPDATE users (hash) oraz UPDATE password_reset_tokens (used_at=NOW)
+        SVC->>DB: UPDATE users (hash)<br/>oraz UPDATE password_reset_tokens (used_at=NOW)
         activate DB
-        DB-->>SVC: Zaktualizowano poświadczenia i unieważniono token (atomowo)
+        DB-->>SVC: Zaktualizowano poświadczenia i unieważniono token
         deactivate DB
 
         SVC-->>CTL: Hasło pomyślnie zmienione
         CTL-->>UI: 200 OK
-        UI-->>M: Wyświetlenie potwierdzenia i przekierowanie do logowania
+        UI-->>M: Potwierdzenie zmiany i przekierowanie do logowania
     else [Token niepoprawny, wygasły lub już wykorzystany]
-        SVC-->>CTL: 400 Bad Request (Nieprawidłowy lub wygasły token)
-        CTL-->>UI: 400 Bad Request
-        UI-->>M: Komunikat błędu: Link wygasł, wygeneruj nowe żądanie
+        SVC-->>CTL: 400 Bad Request
+        CTL-->>UI: 400 Bad Request<br/>(Link wygasł lub jest nieprawidłowy)
+        UI-->>M: Komunikat: Link wygasł, wygeneruj nowe żądanie
     end
     deactivate SVC
     deactivate CTL
@@ -639,13 +688,75 @@ sequenceDiagram
 
 ---
 
+## 9. Sekwencja 9: Wyświetlenie i Weryfikacja Karty Mieszkańca On-line (CARD & ANTI-FRAUD)
+
+Proces przedstawia pobranie dynamicznej karty mieszkańca (`FR-CARD-01..04`, `UC-CARD-01/02`): weryfikację JWT i statusu konta w `users`, derywację kodu/koloru dnia (HMAC bez tabeli), renderowanie zegara serwera i hologramu CSS oraz interaktywny test dotykowy przeciw screenshotom i nagraniom. Weryfikacja wzrokowa na portierni (2–3 s) bez obsługi komputera.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor M as Mieszkaniec
+    participant UI as Frontend (React PWA)
+    participant CTL as ProfileController
+    participant SVC as AuthService
+    participant DB as PostgreSQL (JPA)
+    participant S3 as MinIO S3 Storage
+    actor P as Recepcjonista (Portier)
+
+    M->>UI: Zakładka „Karta Mieszkańca”
+    activate UI
+    UI->>CTL: GET /api/v1/profile/card<br/>(Authorization: Bearer JWT)
+    activate CTL
+    CTL->>SVC: getResidentCard(userId)
+    activate SVC
+    SVC->>SVC: Weryfikacja podpisu JWT + blacklist Caffeine
+    SVC->>DB: findUserWithAssignment(userId)<br/>WHERE status='ACTIVE'
+    activate DB
+    DB-->>SVC: User + dormitory + room_number
+    deactivate DB
+
+    alt [Status konta ACTIVE]
+        SVC->>SVC: Derywacja kodu/koloru dnia<br/>HMAC(SECRET, date)
+        SVC->>S3: getPresignedUrl("pkampus-avatars", key)
+        activate S3
+        S3-->>SVC: Krótkotrwały URL zdjęcia
+        deactivate S3
+        SVC-->>CTL: CardDTO (dane, zdjęcie, kolor dnia)
+        deactivate SVC
+        CTL-->>UI: 200 OK (CardDTO)
+        deactivate CTL
+        UI-->>M: Zielona karta „AKTYWNA / MIESZKANIEC”<br/>+ zegar + hologram + ripple on-tap
+        deactivate UI
+        M->>P: Okazanie dynamicznej karty na smartfonie
+        P->>P: Weryfikacja wzrokowa (2-3 s):<br/>zdjęcie, zegar, animacja, kolor dnia
+        opt [Podejrzenie nagrania wideo ekranu]
+            P->>M: Żądanie dotknięcia ekranu (test ripple)
+            M->>UI: Tapnięcie w ekran karty
+            UI-->>P: Dynamiczna fala ripple ze znacznikiem czasu
+        end
+    else [Status BLOCKED / CHECKED_OUT lub token unieważniony]
+        activate CTL
+        activate SVC
+        SVC-->>CTL: throw AccountNotActiveException
+        deactivate SVC
+        CTL-->>UI: 403 Forbidden<br/>(Konto zablokowane lub wygasłe)
+        deactivate CTL
+        activate UI
+        UI-->>M: Czerwona plansza blokady (FR-CARD-03)
+        deactivate UI
+    end
+```
+
+---
+
 ### 10. Podsumowanie Pokrycia Dynamiki
 
-Zaprojektowane diagramy sekwencji pokrywają **kluczowe** zachowania dynamiczne systemu PKampus (ścieżki krytyczne MVP), a nie pełną listę wszystkich FR:
+Zaprojektowane diagramy sekwencji pokrywają **kluczowe** zachowania dynamiczne systemu PKampus (ścieżki krytyczne MVP):
 1. **Asynchroniczność i integracja e-mail:** Zastosowanie kolejki zadań asynchronicznych w Spring Boot dla Mailpit (aktywacja konta, usterki, awarie sprzętu, reset hasła).
 2. **Bezpieczeństwo transakcyjne:** Blokady bazodanowe i ograniczenia `EXCLUDE USING gist` wykluczające nakładające się rezerwacje w pralniach i salkach.
 3. **Automatyzacja procesów w tle:** Dedykowany Spring Scheduler realizujący regułę 15 minut (§2 ust. 5 Regulaminu salek oraz analogiczną zasadę dla pralni).
 4. **Zarządzanie mediami:** Bezpośrednia integracja backendu z magazynem obiektowym MinIO (S3) przy obsłudze usterek i zdjęć profilowych.
 5. **Egzekwowanie prawa wewnętrznego PK:** Walidacja czarnej listy kar dyscyplinarnych (§6 ust. 2) przed dopuszczeniem do zasobów.
-6. **Kaskadowa reakcja na awarie zasobów:** Automatyczne wyłączenie sprzętu, anulowanie rezerwacji, dyspozycja naprawy i powiadomienia mieszkańców.
+6. **Kaskadowa reakcja na awarie zasobów:** Automatyczne wyłączenie sprzętu, anulowanie **przyszłych** rezerwacji `CONFIRMED`, dyspozycja naprawy i powiadomienia mieszkańców (Sekwencja 7 dla pralek; **identyczny przebieg dla salek** wg adnotacji przy Sekwencji 7 / `FR-ROOM-09`: `MAINTENANCE` → `CANCELLED_ROOM_MAINTENANCE` + auto-issue).
 7. **Bezpieczne zarządzanie tożsamością (IdM):** Dwuetapowa weryfikacja meldunku przez ADS oraz jednorazowe kryptograficzne tokeny resetu hasła (TTL 15 min).
+8. **Weryfikacja anty-fraud karty:** Dynamiczna karta on-line z zegarem serwera, testem dotykowym i kodem/kolorem dnia (bez trybu offline).

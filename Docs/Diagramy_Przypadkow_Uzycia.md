@@ -12,27 +12,30 @@
 
 ### 1.1. Hierarchia i Generalizacja Aktorów (UML Actor Generalization)
 
-Zgodnie z notacją UML przypadków użycia, aktorzy personelu oraz mieszkańcy dzielą wspólne cechy użytkownika uwierzytelnionego, a uprawnienia zarządcze personelu tworzą jednoznaczną hierarchię generalizacji (`--|>`):
+Zgodnie z notacją UML przypadków użycia, aktorzy personelu oraz mieszkańcy dzielą wspólne cechy użytkownika uwierzytelnionego, a uprawnienia zarządcze personelu tworzą jednoznaczną hierarchię generalizacji:
 
 ```mermaid
-flowchart BT
-    classDef actorStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
-    classDef abstractStyle fill:#4a5568,stroke:#718096,stroke-width:2px,color:#fff,stroke-dasharray: 4 4;
-    classDef systemStyle fill:#1a365d,stroke:#2b6cb0,stroke-width:2px,color:#fff;
+%%{init: {'flowchart': {'curve': 'basis', 'nodeSpacing': 35, 'rankSpacing': 40}}}%%
+flowchart TD
+    classDef actor fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
+    classDef uc fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
+    classDef inc fill:#edf2f7,stroke:#718096,stroke-width:1px,stroke-dasharray:3 3,color:#2d3748;
+    classDef sys fill:#1a365d,stroke:#2b6cb0,stroke-width:2px,color:#fff;
+    classDef abs fill:#4a5568,stroke:#718096,stroke-width:2px,color:#fff,stroke-dasharray:4 4;
+    classDef lane fill:transparent,stroke:#cbd5e1,stroke-width:1px,color:#64748b;
+    User["«abstract» Użytkownik Systemu"]:::abs
+    Student["Mieszkaniec"]:::actor
+    Staff["«abstract» Pracownik OS PK"]:::abs
+    Portier["Recepcjonista"]:::actor
+    AdminDS["Administrator DS"]:::actor
+    SuperAdmin["Superadmin AOS"]:::actor
+    Sys["«system» Scheduler"]:::sys
 
-    User["<<abstract>><br/>Użytkownik Systemu"]:::abstractStyle
-    Student["Mieszkaniec<br/>(Student)"]:::actorStyle
-    Staff["<<abstract>><br/>Pracownik Uczelni / OS PK"]:::abstractStyle
-    Portier["Recepcjonista<br/>(Portier)"]:::actorStyle
-    AdminDS["Administrator DS<br/>(ADS / Kierownik DS)"]:::actorStyle
-    SuperAdmin["Superadministrator<br/>(AOS / Kierownik OS)"]:::actorStyle
-    Sys["<<system>><br/>System (Spring Scheduler)"]:::systemStyle
-
-    Student --|> User
-    Staff --|> User
-    Portier --|> Staff
-    AdminDS --|> Staff
-    SuperAdmin --|> Staff
+    User --- Student
+    User --- Staff
+    Staff --- Portier
+    Staff --- AdminDS
+    Staff --- SuperAdmin
 ```
 
 ---
@@ -40,49 +43,25 @@ flowchart BT
 ## 2. Diagram Ogólny Architektury Przypadków Użycia (High-Level)
 
 ```mermaid
-%%{init: {'flowchart': {'curve': 'stepBefore'}}}%%
-flowchart LR
-    classDef studentStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
-    classDef staffStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
-    classDef moduleStyle fill:#edf2f7,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
+%%{init: {'flowchart': {'curve': 'stepBefore', 'nodeSpacing': 25, 'rankSpacing': 40}}}%%
+flowchart TB
+    classDef uc fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
 
-    Student["Mieszkaniec<br/>(Student)"]:::studentStyle
-
-    subgraph Granica_Systemu ["SYSTEM PKAMPUS - PODSYSTEMY"]
+    subgraph SYS["SYSTEM PKAMPUS — podsystemy"]
         direction TB
-        M1["Moduł 1: AUTH & CARD<br/>(Karta Mieszkańca)"]:::moduleStyle
-        M2["Moduł 2: LAUNDRY & ROOMS<br/>(Pralnie i Salki)"]:::moduleStyle
-        M3["Moduł 3: ISSUES<br/>(Obsługa Usterek)"]:::moduleStyle
-        M4["Moduł 4: BOARD & EVENTS<br/>(Życie Kampusu i Tablica)"]:::moduleStyle
-        M5["Moduł 5: ADMIN<br/>(Konfiguracja i Kary)"]:::moduleStyle
+        M1["M1 · AUTH & CARD"]:::uc
+        M2["M2 · LAUNDRY & ROOMS"]:::uc
+        M3["M3 · ISSUES"]:::uc
+        M4["M4 · BOARD & EVENTS"]:::uc
+        M5["M5 · ADMIN"]:::uc
+        M1 --- M2
+        M2 --- M3
+        M3 --- M4
+        M4 --- M5
     end
-
-    Portier["Recepcjonista<br/>(Portier)"]:::staffStyle
-    AdminDS["Administrator DS<br/>(ADS)"]:::staffStyle
-    SuperAdmin["Superadmin<br/>(AOS)"]:::staffStyle
-
-    %% Relacje Mieszkańca (lewa strona)
-    Student --- M1
-    Student --- M2
-    Student --- M3
-    Student --- M4
-
-    %% Relacje Portiera (prawa strona - operacje codzienne i dyżurne)
-    M1 --- Portier
-    M2 --- Portier
-    M3 --- Portier
-    M4 --- Portier
-
-    %% Relacje Administracji (prawa strona - nadzór i konfiguracja)
-    M1 --- AdminDS
-    M1 --- SuperAdmin
-    M2 --- AdminDS
-    M3 --- AdminDS
-    M4 --- AdminDS
-    M4 --- SuperAdmin
-    M5 --- AdminDS
-    M5 --- SuperAdmin
 ```
+
+> Asocjacje aktor ↔ podsystem: wyłącznie w macierzy §2.1 (brak krzyżujących linii na diagramie).
 
 ### 2.1. Macierz Asocjacji: Aktorzy a Podsystemy
 
@@ -90,7 +69,7 @@ flowchart LR
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Mieszkaniec (Student)** | Dostęp (Karta, profil) | Dostęp (Rezerwacje) | Dostęp (Zgłoszenia) | Dostęp (Tablica, kalendarz) | Brak dostępu |
 | **Recepcjonista (Portier)** | Dostęp (Weryfikacja karty) | Dostęp (Klucze, blokada awaryjna) | Rejestr napraw i zgłaszanie awarii | Dostęp (Komunikaty dyżurne, pościel) | Brak dostępu |
-| **Administrator DS (ADS)** | Weryfikacja meldunku | Wyłączenie awaryjne (Nadzór) | Zgłoszenia części wspólnych i auto-awaria (FR-LAUND-06) | Komunikaty i moderacja | Konfiguracja i kary |
+| **Administrator DS (ADS)** | Weryfikacja meldunku i blokada konta | Wyłączenie awaryjne (Nadzór) | Zgłoszenia części wspólnych, rejestr i statusy napraw (nadzór) | Komunikaty i moderacja | Konfiguracja i kary |
 | **Superadmin (AOS)** | Zarządzanie kontami ADS (`DORM_ADMIN`) | Brak operacji | Brak operacji | Komunikaty kampusowe i moderacja CAMPUS | Zarządzanie osiedlem i kontami ADS |
 
 ---
@@ -98,41 +77,42 @@ flowchart LR
 ## 3. Pakiet 1: Uwierzytelnianie i Wirtualna Karta Mieszkańca (AUTH & CARD)
 
 ```mermaid
-%%{init: {'flowchart': {'curve': 'stepBefore'}}}%%
-flowchart LR
-    classDef actorStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
-    classDef ucStyle fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
-    classDef subUcStyle fill:#edf2f7,stroke:#4a5568,stroke-width:1px,stroke-dasharray: 3 3,color:#2d3748;
-
-    Student["Mieszkaniec"]:::actorStyle
-
-    subgraph System_Auth ["SYSTEM PKAMPUS: AUTH & CARD"]
+%%{init: {'flowchart': {'curve': 'basis', 'nodeSpacing': 35, 'rankSpacing': 40}}}%%
+flowchart TB
+    classDef actor fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
+    classDef uc fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
+    classDef inc fill:#edf2f7,stroke:#718096,stroke-width:1px,stroke-dasharray:3 3,color:#2d3748;
+    classDef sys fill:#1a365d,stroke:#2b6cb0,stroke-width:2px,color:#fff;
+    classDef abs fill:#4a5568,stroke:#718096,stroke-width:2px,color:#fff,stroke-dasharray:4 4;
+    classDef lane fill:transparent,stroke:#cbd5e1,stroke-width:1px,color:#64748b;
+    subgraph AUTH["SYSTEM · AUTH & CARD"]
         direction TB
-        UC_AUTH_01(["UC-AUTH-01: Rejestracja konta"]):::ucStyle
-        UC_INC_TOKEN(["<<include>><br/>Generowanie tokenu HMAC (24h)"]):::subUcStyle
-        UC_AUTH_02(["UC-AUTH-02: Logowanie do systemu"]):::ucStyle
-        UC_INC_PWD(["<<include>><br/>Weryfikacja BCrypt i JWT"]):::subUcStyle
-        UC_AUTH_03(["UC-AUTH-03: Aktywacja meldunku"]):::ucStyle
-        UC_AUTH_04(["UC-AUTH-04: Edycja profilu i hasła"]):::ucStyle
-        UC_AUTH_05(["UC-AUTH-05: Reset hasła (link e-mail)"]):::ucStyle
-        UC_CARD_01(["UC-CARD-01: Wyświetlenie karty mieszkańca"]):::ucStyle
-        UC_CARD_02(["UC-CARD-02: Weryfikacja wizualna karty"]):::ucStyle
 
-        UC_AUTH_01 -.->|"<<include>>"| UC_INC_TOKEN
-        UC_AUTH_02 -.->|"<<include>>"| UC_INC_PWD
+        subgraph L1["Mieszkaniec"]
+            direction LR
+            S["Mieszkaniec"]:::actor --- U01(["UC-AUTH-01 Rejestracja"]):::uc
+            S --- U02(["UC-AUTH-02 Logowanie"]):::uc
+            S --- U04(["UC-AUTH-04 Profil / hasło"]):::uc
+            S --- U05(["UC-AUTH-05 Reset hasła"]):::uc
+            S --- UC1(["UC-CARD-01 Karta"]):::uc
+            U01 -.-> I01["«include» HMAC"]:::inc
+            U02 -.-> I02["«include» BCrypt/JWT"]:::inc
+        end
+
+        subgraph L2["Administrator DS"]
+            direction LR
+            A["Administrator DS"]:::actor --- U03(["UC-AUTH-03 Meldunek / blokada"]):::uc
+        end
+
+        subgraph L3["Recepcjonista"]
+            direction LR
+            P["Recepcjonista"]:::actor --- UC2(["UC-CARD-02 Weryfikacja karty"]):::uc
+        end
     end
 
-    AdminDS["Administrator DS"]:::actorStyle
-    Portier["Recepcjonista"]:::actorStyle
-
-    Student --- UC_AUTH_01
-    Student --- UC_AUTH_02
-    Student --- UC_AUTH_04
-    Student --- UC_AUTH_05
-    Student --- UC_CARD_01
-
-    AdminDS --- UC_AUTH_03
-    Portier --- UC_CARD_02
+    style L1 fill:transparent,stroke:#94a3b8
+    style L2 fill:transparent,stroke:#94a3b8
+    style L3 fill:transparent,stroke:#94a3b8
 ```
 
 ---
@@ -140,44 +120,46 @@ flowchart LR
 ## 4. Pakiet 2A: Rezerwacja Pralni (LAUNDRY)
 
 ```mermaid
-%%{init: {'flowchart': {'curve': 'stepBefore'}}}%%
-flowchart LR
-    classDef actorStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
-    classDef ucStyle fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
-    classDef subUcStyle fill:#edf2f7,stroke:#4a5568,stroke-width:1px,stroke-dasharray: 3 3,color:#2d3748;
-
-    Student["Mieszkaniec"]:::actorStyle
-
-    subgraph System_Laundry ["SYSTEM PKAMPUS: REZERWACJA PRALNI"]
+%%{init: {'flowchart': {'curve': 'basis', 'nodeSpacing': 35, 'rankSpacing': 40}}}%%
+flowchart TB
+    classDef actor fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
+    classDef uc fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
+    classDef inc fill:#edf2f7,stroke:#718096,stroke-width:1px,stroke-dasharray:3 3,color:#2d3748;
+    classDef sys fill:#1a365d,stroke:#2b6cb0,stroke-width:2px,color:#fff;
+    classDef abs fill:#4a5568,stroke:#718096,stroke-width:2px,color:#fff,stroke-dasharray:4 4;
+    classDef lane fill:transparent,stroke:#cbd5e1,stroke-width:1px,color:#64748b;
+    subgraph LAU["SYSTEM · REZERWACJA PRALNI"]
         direction TB
-        UC_LAUND_01(["UC-LAUND-01: Przeglądanie grafiku pralek"]):::ucStyle
-        UC_LAUND_02(["UC-LAUND-02: Rezerwacja slotu pralki"]):::ucStyle
-        UC_INC_BR01(["<<include>><br/>Walidacja max 2 rezerwacji/tydz. (BR-01)"]):::subUcStyle
-        UC_LAUND_03(["UC-LAUND-03: Anulowanie rezerwacji pralki"]):::ucStyle
-        UC_LAUND_04(["UC-LAUND-04: Wydanie i zwrot klucza pralni"]):::ucStyle
-        UC_LAUND_05(["UC-LAUND-05: Ręczne zwolnienie slotu (Portier 15 min)"]):::ucStyle
-        UC_LAUND_06(["UC-LAUND-06: Awaryjne wyłączenie pralki"]):::ucStyle
-        UC_SYS_01(["UC-SYS-01: Automatyczne zwolnienie slotu (Scheduler 15 min)"]):::ucStyle
 
-        UC_LAUND_02 -.->|"<<include>>"| UC_INC_BR01
-        UC_LAUND_03 -.->|"<<extend>>"| UC_LAUND_02
-        UC_LAUND_05 -.->|"<<extend>>"| UC_LAUND_04
-        UC_SYS_01 -.->|"<<extend>>"| UC_LAUND_04
+        subgraph L1["Mieszkaniec"]
+            direction LR
+            S["Mieszkaniec"]:::actor --- U01(["UC-LAUND-01 Grafik"]):::uc
+            S --- U02(["UC-LAUND-02 Rezerwacja"]):::uc
+            S --- U03(["UC-LAUND-03 Anulowanie<br/>«extend» → UC-LAUND-02"]):::uc
+            U02 -.-> I01["«include» BR-01"]:::inc
+        end
+
+        subgraph L2["Recepcjonista"]
+            direction LR
+            P["Recepcjonista"]:::actor --- U04(["UC-LAUND-04 Klucz"]):::uc
+            P --- U05(["UC-LAUND-05 Zwolnienie ręczne<br/>«extend» → UC-LAUND-04"]):::uc
+        end
+
+        subgraph L3["Scheduler"]
+            direction LR
+            Sy["Scheduler"]:::sys --- U06(["UC-SYS-01 Auto 15 min<br/>«extend» → UC-LAUND-04"]):::uc
+        end
+
+        subgraph L4["Portier / ADS"]
+            direction LR
+            St["Portier / ADS"]:::actor --- U07(["UC-LAUND-06 Awaria pralki"]):::uc
+        end
     end
 
-    Portier["Recepcjonista"]:::actorStyle
-    AdminDS["Administrator DS"]:::actorStyle
-    Sys["System (Scheduler)"]:::actorStyle
-
-    Student --- UC_LAUND_01
-    Student --- UC_LAUND_02
-    Student --- UC_LAUND_03
-
-    Portier --- UC_LAUND_04
-    Portier --- UC_LAUND_05
-    Portier --- UC_LAUND_06
-    AdminDS --- UC_LAUND_06
-    Sys --- UC_SYS_01
+    style L1 fill:transparent,stroke:#94a3b8
+    style L2 fill:transparent,stroke:#94a3b8
+    style L3 fill:transparent,stroke:#94a3b8
+    style L4 fill:transparent,stroke:#94a3b8
 ```
 
 ---
@@ -185,97 +167,90 @@ flowchart LR
 ## 5. Pakiet 2B: Rezerwacja Salek Tematycznych (ROOMS)
 
 ```mermaid
-%%{init: {'flowchart': {'curve': 'stepBefore'}}}%%
-flowchart LR
-    classDef actorStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
-    classDef ucStyle fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
-    classDef subUcStyle fill:#edf2f7,stroke:#4a5568,stroke-width:1px,stroke-dasharray: 3 3,color:#2d3748;
-
-    Student["Mieszkaniec"]:::actorStyle
-
-    subgraph System_Rooms ["SYSTEM PKAMPUS: SALKI TEMATYCZNE"]
+%%{init: {'flowchart': {'curve': 'basis', 'nodeSpacing': 35, 'rankSpacing': 40}}}%%
+flowchart TB
+    classDef actor fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
+    classDef uc fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
+    classDef inc fill:#edf2f7,stroke:#718096,stroke-width:1px,stroke-dasharray:3 3,color:#2d3748;
+    classDef sys fill:#1a365d,stroke:#2b6cb0,stroke-width:2px,color:#fff;
+    classDef abs fill:#4a5568,stroke:#718096,stroke-width:2px,color:#fff,stroke-dasharray:4 4;
+    classDef lane fill:transparent,stroke:#cbd5e1,stroke-width:1px,color:#64748b;
+    subgraph RMS["SYSTEM · SALKI TEMATYCZNE"]
         direction TB
-        UC_ROOM_01(["UC-ROOM-01: Rezerwacja salki tematycznej"]):::ucStyle
-        UC_INC_SANCTION(["<<include>><br/>Weryfikacja braku ROOM_BAN (BR-05)"]):::subUcStyle
-        UC_INC_CAPACITY(["<<include>><br/>Walidacja pojemności i czasu (BR-03)"]):::subUcStyle
-        UC_ROOM_02(["UC-ROOM-02: Anulowanie rezerwacji salki"]):::ucStyle
-        UC_ROOM_03(["UC-ROOM-03: Przedłużenie rezerwacji salki (COULD)"]):::ucStyle
-        UC_ROOM_04(["UC-ROOM-04: Wydanie i zwrot klucza salki"]):::ucStyle
-        UC_ROOM_05(["UC-ROOM-05: Ręczne zwolnienie slotu (Portier 15 min)"]):::ucStyle
-        UC_ROOM_06(["UC-ROOM-06: Wyłączenie salki z eksploatacji (Remont/Awaria)"]):::ucStyle
-        UC_ADM_03(["UC-ADM-03: Blokada salek (kara 1-3 mies.)"]):::ucStyle
-        UC_SYS_02(["UC-SYS-02: Automatyczne zwolnienie slotu (Scheduler 15 min)"]):::ucStyle
 
-        UC_ROOM_01 -.->|"<<include>>"| UC_INC_SANCTION
-        UC_ROOM_01 -.->|"<<include>>"| UC_INC_CAPACITY
-        UC_ROOM_02 -.->|"<<extend>>"| UC_ROOM_01
-        UC_ROOM_03 -.->|"<<extend>>"| UC_ROOM_01
-        UC_ROOM_05 -.->|"<<extend>>"| UC_ROOM_04
-        UC_SYS_02 -.->|"<<extend>>"| UC_ROOM_04
+        subgraph L1["Mieszkaniec"]
+            direction LR
+            S["Mieszkaniec"]:::actor --- U01(["UC-ROOM-01 Rezerwacja"]):::uc
+            S --- U02(["UC-ROOM-02 Anulowanie<br/>«extend» → UC-ROOM-01"]):::uc
+            S --- U03(["UC-ROOM-03 Przedłużenie<br/>«extend» → UC-ROOM-01"]):::uc
+            U01 -.-> I01["«include» BAN / pojemność"]:::inc
+        end
+
+        subgraph L2["Recepcjonista"]
+            direction LR
+            P["Recepcjonista"]:::actor --- U04(["UC-ROOM-04 Klucz"]):::uc
+            P --- U05(["UC-ROOM-05 Zwolnienie ręczne<br/>«extend» → UC-ROOM-04"]):::uc
+        end
+
+        subgraph L3["Scheduler"]
+            direction LR
+            Sy["Scheduler"]:::sys --- U06(["UC-SYS-02 Auto 15 min<br/>«extend» → UC-ROOM-04"]):::uc
+        end
+
+        subgraph L4["Portier / ADS"]
+            direction LR
+            St["Portier / ADS"]:::actor --- U07(["UC-ROOM-06 Wyłączenie salki"]):::uc
+        end
+
+        subgraph L5["Administrator DS"]
+            direction LR
+            A["Administrator DS"]:::actor --- U08(["UC-ADM-03 Blokada salek"]):::uc
+        end
     end
 
-    Portier["Recepcjonista"]:::actorStyle
-    AdminDS["Administrator DS"]:::actorStyle
-    Sys["System (Scheduler)"]:::actorStyle
-
-    Student --- UC_ROOM_01
-    Student --- UC_ROOM_02
-    Student --- UC_ROOM_03
-
-    Portier --- UC_ROOM_04
-    Portier --- UC_ROOM_05
-    Portier --- UC_ROOM_06
-    AdminDS --- UC_ROOM_06
-    AdminDS --- UC_ADM_03
-    Sys --- UC_SYS_02
+    style L1 fill:transparent,stroke:#94a3b8
+    style L2 fill:transparent,stroke:#94a3b8
+    style L3 fill:transparent,stroke:#94a3b8
+    style L4 fill:transparent,stroke:#94a3b8
+    style L5 fill:transparent,stroke:#94a3b8
 ```
+
+> **Uwaga:** `UC-ADM-03` kanonicznie w Pakiecie 5; tu referencja `ROOM_BAN`.
 
 ---
 
 ## 6. Pakiet 3: Ewidencja i Obsługa Usterek (ISSUES)
 
 ```mermaid
-%%{init: {'flowchart': {'curve': 'stepBefore'}}}%%
-flowchart LR
-    classDef studentStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
-    classDef staffStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
-    classDef ucStyle fill:#edf2f7,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
-    classDef subUcStyle fill:#edf2f7,stroke:#4a5568,stroke-width:1px,stroke-dasharray: 3 3,color:#2d3748;
-
-    Student["Mieszkaniec<br/>(Student)"]:::studentStyle
-
-    subgraph System_Issues ["SYSTEM PKAMPUS: OBSŁUGA USTEREK"]
+%%{init: {'flowchart': {'curve': 'basis', 'nodeSpacing': 35, 'rankSpacing': 40}}}%%
+flowchart TB
+    classDef actor fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
+    classDef uc fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
+    classDef inc fill:#edf2f7,stroke:#718096,stroke-width:1px,stroke-dasharray:3 3,color:#2d3748;
+    classDef sys fill:#1a365d,stroke:#2b6cb0,stroke-width:2px,color:#fff;
+    classDef abs fill:#4a5568,stroke:#718096,stroke-width:2px,color:#fff,stroke-dasharray:4 4;
+    classDef lane fill:transparent,stroke:#cbd5e1,stroke-width:1px,color:#64748b;
+    subgraph ISS["SYSTEM · OBSŁUGA USTEREK"]
         direction TB
-        subgraph Strefa_Zgloszen ["Zgłaszanie Usterek (Mieszkaniec / Personel)"]
-            UC_ISSUE_01(["UC-ISSUE-01<br/>Zgłoszenie usterki / auto-awaria"]):::ucStyle
-            UC_INC_PHOTO(["<<include>><br/>Przesłanie zdjęcia do MinIO S3"]):::subUcStyle
-            UC_ISSUE_05(["UC-ISSUE-05<br/>Podgląd własnych spraw"]):::ucStyle
 
-            UC_ISSUE_01 -.->|"<<include>>"| UC_INC_PHOTO
+        subgraph L1["Mieszkaniec"]
+            direction LR
+            S["Mieszkaniec"]:::actor --- U05(["UC-ISSUE-05 Moje sprawy"]):::uc
+            S --- U01(["UC-ISSUE-01 Zgłoszenie"]):::uc
+            U01 -.-> I01["«include» MinIO"]:::inc
         end
 
-        subgraph Strefa_Warsztatu ["Portiernia i Warsztat Konserwatora"]
-            UC_ISSUE_02(["UC-ISSUE-02<br/>Rejestr awarii w DS"]):::ucStyle
-            UC_ISSUE_03(["UC-ISSUE-03<br/>Zamknięcie / status naprawy"]):::ucStyle
-            UC_ISSUE_04(["UC-ISSUE-04<br/>Lista dla konserwatora"]):::ucStyle
-
-            UC_ISSUE_04 -.->|"<<extend>>"| UC_ISSUE_02
+        subgraph L2["Portier / ADS"]
+            direction LR
+            St["Portier / ADS"]:::actor --- U01b(["UC-ISSUE-01 Zgłoszenie"]):::uc
+            St --- U02(["UC-ISSUE-02 Rejestr awarii"]):::uc
+            St --- U03(["UC-ISSUE-03 Status naprawy"]):::uc
+            St --- U04(["UC-ISSUE-04 Lista konserwatora<br/>«extend» → UC-ISSUE-02"]):::uc
         end
     end
 
-    Portier["Recepcjonista<br/>(Portier)"]:::staffStyle
-    AdminDS["Administrator DS<br/>(ADS)"]:::staffStyle
-
-    %% Relacje mieszkańca po lewej stronie
-    Student --- UC_ISSUE_01
-    Student --- UC_ISSUE_05
-
-    %% Relacje personelu po prawej stronie (warsztat oraz zgłaszanie awarii części wspólnych / auto-zgłoszenie)
-    UC_ISSUE_01 --- Portier
-    UC_ISSUE_01 --- AdminDS
-    UC_ISSUE_02 --- Portier
-    UC_ISSUE_03 --- Portier
-    UC_ISSUE_04 --- Portier
+    style L1 fill:transparent,stroke:#94a3b8
+    style L2 fill:transparent,stroke:#94a3b8
 ```
 
 ---
@@ -283,32 +258,34 @@ flowchart LR
 ## 7. Pakiet 4A: Tablica Ogłoszeń Sąsiedzkich (BOARD)
 
 ```mermaid
-%%{init: {'flowchart': {'curve': 'stepBefore'}}}%%
-flowchart LR
-    classDef actorStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
-    classDef ucStyle fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
-
-    Student["Mieszkaniec"]:::actorStyle
-
-    subgraph System_Board ["SYSTEM PKAMPUS: TABLICA SĄSIEDZKA"]
+%%{init: {'flowchart': {'curve': 'basis', 'nodeSpacing': 35, 'rankSpacing': 40}}}%%
+flowchart TB
+    classDef actor fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
+    classDef uc fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
+    classDef inc fill:#edf2f7,stroke:#718096,stroke-width:1px,stroke-dasharray:3 3,color:#2d3748;
+    classDef sys fill:#1a365d,stroke:#2b6cb0,stroke-width:2px,color:#fff;
+    classDef abs fill:#4a5568,stroke:#718096,stroke-width:2px,color:#fff,stroke-dasharray:4 4;
+    classDef lane fill:transparent,stroke:#cbd5e1,stroke-width:1px,color:#64748b;
+    subgraph BRD["SYSTEM · TABLICA SĄSIEDZKA"]
         direction TB
-        UC_BOARD_01(["UC-BOARD-01: Publikacja nowego ogłoszenia"]):::ucStyle
-        UC_BOARD_02(["UC-BOARD-02: Przeglądanie feedu tablicy i filtrowanie"]):::ucStyle
-        UC_BOARD_03(["UC-BOARD-03: Dodanie komentarza w wątku"]):::ucStyle
-        UC_BOARD_04(["UC-BOARD-04: Oznaczenie ogłoszenia jako rozwiązane (RESOLVED)"]):::ucStyle
-        UC_BOARD_05(["UC-BOARD-05: Moderacja i usuwanie wpisów (ADS/AOS)"]):::ucStyle
+
+        subgraph L1["Mieszkaniec"]
+            direction LR
+            S["Mieszkaniec"]:::actor --- U01(["UC-BOARD-01 Publikacja"]):::uc
+            S --- U02(["UC-BOARD-02 Feed / filtr"]):::uc
+            S --- U03(["UC-BOARD-03 Komentarz"]):::uc
+            S --- U04(["UC-BOARD-04 Rozwiązane"]):::uc
+        end
+
+        subgraph L2["ADS / AOS"]
+            direction LR
+            M["ADS / AOS"]:::actor --- U02b(["UC-BOARD-02 Feed / filtr"]):::uc
+            M --- U05(["UC-BOARD-05 Moderacja"]):::uc
+        end
     end
 
-    AdminDS["Administrator DS"]:::actorStyle
-    SuperAdmin["Superadmin (AOS)"]:::actorStyle
-
-    Student --- UC_BOARD_01
-    Student --- UC_BOARD_02
-    Student --- UC_BOARD_03
-    Student --- UC_BOARD_04
-
-    AdminDS --- UC_BOARD_05
-    SuperAdmin --- UC_BOARD_05
+    style L1 fill:transparent,stroke:#94a3b8
+    style L2 fill:transparent,stroke:#94a3b8
 ```
 
 ---
@@ -316,30 +293,37 @@ flowchart LR
 ## 8. Pakiet 4B: Kalendarz i Komunikaty Dyżurne (EVENTS)
 
 ```mermaid
-%%{init: {'flowchart': {'curve': 'stepBefore'}}}%%
-flowchart LR
-    classDef actorStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
-    classDef ucStyle fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
-
-    Student["Mieszkaniec"]:::actorStyle
-
-    subgraph System_Events ["SYSTEM PKAMPUS: KALENDARZ I KOMUNIKATY"]
+%%{init: {'flowchart': {'curve': 'basis', 'nodeSpacing': 35, 'rankSpacing': 40}}}%%
+flowchart TB
+    classDef actor fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
+    classDef uc fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
+    classDef inc fill:#edf2f7,stroke:#718096,stroke-width:1px,stroke-dasharray:3 3,color:#2d3748;
+    classDef sys fill:#1a365d,stroke:#2b6cb0,stroke-width:2px,color:#fff;
+    classDef abs fill:#4a5568,stroke:#718096,stroke-width:2px,color:#fff,stroke-dasharray:4 4;
+    classDef lane fill:transparent,stroke:#cbd5e1,stroke-width:1px,color:#64748b;
+    subgraph EVT["SYSTEM · KALENDARZ I KOMUNIKATY"]
         direction TB
-        UC_EVT_01(["UC-EVT-01: Przeglądanie kalendarza i alertów"]):::ucStyle
-        UC_EVT_02(["UC-EVT-02: Utworzenie wydarzenia integracyjnego"]):::ucStyle
-        UC_EVT_03(["UC-EVT-03: Publikacja komunikatu / terminu pościeli"]):::ucStyle
+
+        subgraph L1["Mieszkaniec"]
+            direction LR
+            S["Mieszkaniec"]:::actor --- U02(["UC-EVT-02 Wydarzenie"]):::uc
+            S --- U01(["UC-EVT-01 Kalendarz / alerty"]):::uc
+        end
+
+        subgraph L2["Recepcjonista"]
+            direction LR
+            P["Recepcjonista"]:::actor --- U01b(["UC-EVT-01 Kalendarz / alerty"]):::uc
+        end
+
+        subgraph L3["Portier / ADS / AOS"]
+            direction LR
+            St["Portier / ADS / AOS"]:::actor --- U03(["UC-EVT-03 Publikacja komunikatu"]):::uc
+        end
     end
 
-    Portier["Recepcjonista"]:::actorStyle
-    AdminDS["Administrator DS"]:::actorStyle
-    SuperAdmin["Superadmin (AOS)"]:::actorStyle
-
-    Student --- UC_EVT_01
-    Student --- UC_EVT_02
-
-    Portier --- UC_EVT_03
-    AdminDS --- UC_EVT_03
-    SuperAdmin --- UC_EVT_03
+    style L1 fill:transparent,stroke:#94a3b8
+    style L2 fill:transparent,stroke:#94a3b8
+    style L3 fill:transparent,stroke:#94a3b8
 ```
 
 ---
@@ -347,32 +331,34 @@ flowchart LR
 ## 9. Pakiet 5: Administracja Zasobami i Nadzór (ADMIN)
 
 ```mermaid
-%%{init: {'flowchart': {'curve': 'stepBefore'}}}%%
-flowchart LR
-    classDef actorStyle fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
-    classDef ucStyle fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
-
-    AdminDS["Administrator DS<br/>(ADS)"]:::actorStyle
-
-    subgraph System_Admin ["SYSTEM PKAMPUS: ADMINISTRACJA I NADZÓR"]
+%%{init: {'flowchart': {'curve': 'basis', 'nodeSpacing': 35, 'rankSpacing': 40}}}%%
+flowchart TB
+    classDef actor fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff;
+    classDef uc fill:#fff,stroke:#2b6cb0,stroke-width:2px,color:#1a202c;
+    classDef inc fill:#edf2f7,stroke:#718096,stroke-width:1px,stroke-dasharray:3 3,color:#2d3748;
+    classDef sys fill:#1a365d,stroke:#2b6cb0,stroke-width:2px,color:#fff;
+    classDef abs fill:#4a5568,stroke:#718096,stroke-width:2px,color:#fff,stroke-dasharray:4 4;
+    classDef lane fill:transparent,stroke:#cbd5e1,stroke-width:1px,color:#64748b;
+    subgraph ADM["SYSTEM · ADMINISTRACJA"]
         direction TB
-        UC_ADM_01(["UC-ADM-01: Konfiguracja pralek i parametrów slotów per DS"]):::ucStyle
-        UC_ADM_02(["UC-ADM-02: Konfiguracja salek tematycznych"]):::ucStyle
-        UC_ADM_03(["UC-ADM-03: Nałożenie kary blokady salek (1-3 mies.)"]):::ucStyle
-        UC_ADM_04(["UC-ADM-04: Zarządzanie kontami portierów"]):::ucStyle
-        UC_ADM_05(["UC-ADM-05: Zarządzanie obiektami akademików"]):::ucStyle
-        UC_ADM_06(["UC-ADM-06: Zarządzanie kontami Administratorów DS"]):::ucStyle
+
+        subgraph L1["Administrator DS"]
+            direction LR
+            A["Administrator DS"]:::actor --- U01(["UC-ADM-01 Pralki / sloty"]):::uc
+            A --- U02(["UC-ADM-02 Salki"]):::uc
+            A --- U03(["UC-ADM-03 Kara salek"]):::uc
+            A --- U04(["UC-ADM-04 Konta portierów"]):::uc
+        end
+
+        subgraph L2["Superadmin AOS"]
+            direction LR
+            Su["Superadmin AOS"]:::actor --- U05(["UC-ADM-05 Obiekty DS"]):::uc
+            Su --- U06(["UC-ADM-06 Konta ADS"]):::uc
+        end
     end
 
-    SuperAdmin["Superadmin<br/>(AOS)"]:::actorStyle
-
-    AdminDS --- UC_ADM_01
-    AdminDS --- UC_ADM_02
-    AdminDS --- UC_ADM_03
-    AdminDS --- UC_ADM_04
-
-    SuperAdmin --- UC_ADM_05
-    SuperAdmin --- UC_ADM_06
+    style L1 fill:transparent,stroke:#94a3b8
+    style L2 fill:transparent,stroke:#94a3b8
 ```
 
 ---
@@ -381,18 +367,18 @@ flowchart LR
 
 | Wymaganie FR | Identyfikator Use Case | Nazwa przypadku użycia | Główny Aktor |
 | :--- | :--- | :--- | :--- |
-| **FR-AUTH-01, FR-AUTH-02** | **UC-AUTH-01, UC-AUTH-03** | Rejestracja konta i aktywacja meldunku przez ADS | Mieszkaniec, Admin DS |
+| **FR-AUTH-01, FR-AUTH-02** | **UC-AUTH-01, UC-AUTH-03** | Rejestracja konta, aktywacja meldunku i blokada konta przez ADS | Mieszkaniec, Admin DS |
 | **FR-AUTH-03, FR-AUTH-04** | **UC-AUTH-02** | Logowanie i autoryzacja bezstanowa JWT (RBAC) | Wszyscy |
 | **FR-AUTH-05** | **UC-ADM-04** | Zarządzanie kontami personelu portierni | Admin DS |
 | **FR-AUTH-06** | **UC-AUTH-04** | Edycja profilu i zmiana hasła (BCrypt) | Mieszkaniec |
 | **FR-AUTH-07** | **UC-AUTH-05** | Procedura resetowania hasła przez link e-mail | Mieszkaniec, System |
 | **FR-AUTH-08** | **UC-ADM-06** | Zarządzanie kontami Administratorów DS (AOS) | Superadmin (AOS) |
 | **FR-CARD-01 .. FR-CARD-04** | **UC-CARD-01, UC-CARD-02** | Karta mieszkańca i weryfikacja wzrokowa (anty-screenshot) | Mieszkaniec, Portier |
-| **FR-LAUND-01** | **UC-ADM-01** | Konfiguracja pralek i parametrów slotów per DS | Admin DS |
+| **FR-LAUND-01** | **UC-ADM-01** | Konfiguracja pralek i parametrów slotów per DS (SHOULD / seed w MVP) | Admin DS |
 | **FR-LAUND-02 .. FR-LAUND-04** | **UC-LAUND-01, UC-LAUND-02, UC-LAUND-03** | Harmonogram, rezerwacja pralki i anulowanie slotu przed startem | Mieszkaniec |
 | **FR-LAUND-05** | **UC-LAUND-04, UC-LAUND-05, UC-SYS-01** | Odbiór i zwrot klucza pralni, ręczne i automatyczne zwalnianie slotu po 15 min | Portier, System (Scheduler) |
 | **FR-LAUND-06** | **UC-LAUND-06** | Awaryjne wyłączenie pralki (OUT_OF_ORDER) i auto-zgłoszenie naprawy | Portier, Admin DS |
-| **FR-ROOM-01, FR-ROOM-02** | **UC-ADM-02** | Katalog i parametryzacja salek per DS (Kujon, Chillout) | Admin DS |
+| **FR-ROOM-01, FR-ROOM-02** | **UC-ADM-02, UC-ROOM-01** | Parametryzacja salek przez ADS oraz katalog/reguły przy rezerwacji mieszkańca | Admin DS, Mieszkaniec |
 | **FR-ROOM-03, FR-ROOM-04** | **UC-ROOM-01** | Rezerwacja salki (formularz organizatora, regulamin, brak ROOM_BAN) | Mieszkaniec |
 | **FR-ROOM-05** | **UC-ROOM-04, UC-ROOM-05, UC-SYS-02** | Odbiór i zwrot klucza salki, ręczne i automatyczne zwalnianie slotu po 15 min | Portier, System (Scheduler) |
 | **FR-ROOM-06** | **UC-ROOM-03** | Wniosek o przedłużenie rezerwacji salki w oknie slotu (COULD) | Mieszkaniec |
@@ -405,14 +391,18 @@ flowchart LR
 | **FR-ISSUE-05** | **UC-ISSUE-05** | Śledzenie stanu zgłoszenia przez mieszkańca (historia i ostatnia notatka) | Mieszkaniec |
 | **FR-ISSUE-06** | **UC-ISSUE-04** | Generowanie listy zadań dla konserwatora (widok/wydruk zadań na dyżur) | Portier, Admin DS |
 | **FR-BOARD-01** | **UC-BOARD-01** | Publikacja nowego ogłoszenia sąsiedzkiego | Mieszkaniec |
-| **FR-BOARD-02** | **UC-BOARD-02** | Przeglądanie i filtrowanie feedu ogłoszeń | Mieszkaniec |
+| **FR-BOARD-02** | **UC-BOARD-02** | Przeglądanie i filtrowanie feedu ogłoszeń | Mieszkaniec, Admin DS, Superadmin (AOS) |
 | **FR-BOARD-03** | **UC-BOARD-03** | Dodanie komentarza w wątku ogłoszenia | Mieszkaniec |
-| **FR-BOARD-04, FR-BOARD-05** | **UC-BOARD-04** | Oznaczenie jako rozwiązane (RESOLVED) oraz usunięcie przez autora | Mieszkaniec |
+| **FR-BOARD-04** | **UC-BOARD-04** | Oznaczenie jako rozwiązane (RESOLVED) oraz usunięcie przez autora | Mieszkaniec |
+| **FR-BOARD-05** | **UC-BOARD-01, UC-BOARD-02, UC-BOARD-03** | Identyfikowalność autora i ochrona prywatności (maskowanie pokoju w widoku CAMPUS) | Mieszkaniec, System |
 | **FR-BOARD-06** | **UC-BOARD-05** | Moderacja i usuwanie wpisów na tablicy (REMOVED_MODERATOR) | Admin DS, Superadmin (AOS) |
 | **FR-EVENT-01, FR-EVENT-02** | **UC-EVT-03, UC-EVT-01** | Publikacja oficjalnych komunikatów + baner przypiętych CRITICAL | Portier, Admin DS, Superadmin (AOS), Mieszkaniec |
 | **FR-EVENT-03** | **UC-EVT-01** | Kalendarz oficjalnych terminów kampusu (pościel, wyłączenia) | Mieszkaniec |
 | **FR-EVENT-04** | **UC-EVT-02** | Wydarzenia mieszkańców (COULD) | Mieszkaniec |
-| **FR-PORTAL-01 .. FR-PORTAL-04** | **UC-LAUND-04, UC-ROOM-04, UC-ADM-01 .. UC-ADM-04** | Dashboard recepcji, obieg kluczy, konfiguracja i meldunki | Portier, Admin DS |
+| **FR-PORTAL-01** | **UC-LAUND-04, UC-ROOM-04, UC-ISSUE-02** | Pulpit dyżurnego recepcji (Dashboard Portiera: bieżące sloty, obieg kluczy, licznik usterek) | Portier |
+| **FR-PORTAL-02** | **UC-LAUND-04, UC-LAUND-05, UC-ROOM-04, UC-ROOM-05** | Obsługa wydawania i zwrotu kluczy (statusy KEY_ISSUED, COMPLETED) | Portier |
+| **FR-PORTAL-03** | **UC-ADM-02** | Konfiguracja salek i parametrów slotów salek przez ADS (MUST); pralki = seed / `FR-LAUND-01` SHOULD | Admin DS |
+| **FR-PORTAL-04** | **UC-AUTH-03 (blokady), UC-ADM-03, UC-ADM-04** | Blokady kont i sankcje ROOM_BAN (SHOULD); meldunek MUST = `FR-AUTH-02` | Admin DS |
 | **FR-PORTAL-05** | **UC-ADM-05, UC-ADM-06, UC-EVT-03, UC-BOARD-05** | Zarządzanie akademikami, kontami ADS, komunikacja kampusowa i moderacja | Superadmin (AOS) |
 
 ---
@@ -427,24 +417,25 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
 
 #### UC-AUTH-01: Rejestracja konta studenta
 * **Aktor główny:** Mieszkaniec (nowy student)
-* **Aktorzy pomocniczy:** Uczelniany serwer pocztowy (SMTP / Mailpit)
+* **Aktorzy pomocniczy:** Uczelniany serwer pocztowy (SMTP / Mailpit), Magazyn obiektowy MinIO S3 (`pkampus-avatars`)
 * **Warunki początkowe (Preconditions):** Użytkownik posiada aktywny adres e-mail i nie posiada zarejestrowanego konta w systemie.
 * **Warunki końcowe (Postconditions):**
-  * *Sukces:* W bazie utworzono rekord użytkownika w stanie `PENDING_APPROVAL` (po potwierdzeniu e-maila podpisanym linkiem z tokenem HMAC ważnym 24h wg `FR-AUTH-01`), oczekujący na zatwierdzenie meldunku przez ADS (`FR-AUTH-02`). Zgodnie z `BR-06` konto w stanie `PENDING_APPROVAL` nie może tworzyć rezerwacji ani zgłaszać usterek.
+  * *Sukces:* W bazie utworzono rekord użytkownika w stanie `PENDING_EMAIL` (krok 4), a po potwierdzeniu e-maila podpisanym linkiem HMAC ważnym 24h (`FR-AUTH-01`) konto przechodzi w `PENDING_APPROVAL` z zapisanym numerem telefonu, deklarowanym numerem pokoju oraz zdjęciem w `pkampus-avatars`, oczekujące na zatwierdzenie meldunku przez ADS (`FR-AUTH-02`). Zgodnie z `BR-06` konto w `PENDING_APPROVAL` nie może tworzyć rezerwacji ani zgłaszać usterek.
   * *Porażka:* Brak konta lub odrzucenie formularza z komunikatem błędu.
 * **Scenariusz główny (Główny ciąg akcji):**
   1. Student otwiera formularz rejestracji w portalu/aplikacji PKampus.
-  2. Student podaje: imię, nazwisko, e-mail, hasło (min. 8 znaków, duża litera, cyfra, znak specjalny wg `NFR-SEC-02`), wybiera akademik oraz wskazuje przydzielony pokój.
-  3. System waliduje unikalność adresu e-mail oraz siłę hasła.
-  4. System tworzy rekord w tabeli `users` ze statusem `PENDING_EMAIL`, haszuje hasło algorytmem **BCrypt** (12 rund soli) i generuje kryptograficznie podpisany token weryfikacyjny HMAC-SHA256 (TTL: 24h wg `FR-AUTH-01`).
+  2. Student podaje: imię, nazwisko, e-mail, numer telefonu (`phone_number`), hasło (min. 8 znaków, duża litera, cyfra, znak specjalny wg `NFR-SEC-02`), wybiera akademik oraz wskazuje przydzielony pokój (`declared_room_number`), a także wgrywa zdjęcie twarzy (format JPEG/PNG/WebP, max 5 MB wg `NFR-SEC-03`).
+  3. System waliduje unikalność adresu e-mail, format numeru telefonu oraz siłę hasła.
+  4. System przesyła plik zdjęcia do prywatnego bucketu MinIO `pkampus-avatars`, pobiera wygenerowany identyfikator obiektu (`avatar_url`), tworzy rekord w tabeli `users` ze statusem `PENDING_EMAIL`, haszuje hasło algorytmem **BCrypt** (12 rund soli) i generuje kryptograficznie podpisany token weryfikacyjny HMAC-SHA256 (TTL: 24h wg `FR-AUTH-01`).
   5. System wysyła wiadomość e-mail z linkiem aktywacyjnym na podany adres (`FR-AUTH-01`).
   6. Student odbiera pocztę i klika link aktywacyjny w ciągu 24h.
   7. System weryfikuje podpis tokenu, po czym zmienia status konta na `PENDING_APPROVAL`.
   8. System wyświetla informację o pomyślnej weryfikacji e-mail oraz oczekiwaniu na weryfikację meldunku przez administrację DS.
 * **Rozszerzenia (Ścieżki alternatywne i obsługa błędów):**
-  * **3a. Adres e-mail istnieje już w systemie:** System zwraca neutralną informację o wysłaniu instrukcji (ochrona przed enumeracją użytkowników).
+  * **3a. Adres e-mail istnieje już w systemie:** System zwraca neutralną informację o wysłaniu instrukcji (ochrona przed enumeracją użytkowników / anti-enumeration).
+  * **3b. Błędny format pliku lub rozmiar zdjęcia >5 MB:** Komunikat o błędzie walidacji załącznika graficznego (`NFR-SEC-03`).
   * **6a. Token weryfikacyjny wygasł (>24h):** System odrzuca żądanie (HTTP 410 Gone) i umożliwia ponowne wygenerowanie i wysłanie linku aktywacyjnego.
-* **Powiązane wymagania:** `FR-AUTH-01`, `FR-AUTH-02`, `NFR-SEC-01`, `NFR-SEC-02`, `BR-06`.
+* **Powiązane wymagania:** `FR-AUTH-01`, `FR-AUTH-02`, `NFR-SEC-01`, `NFR-SEC-02`, `NFR-SEC-03`, `BR-06`.
 
 #### UC-AUTH-02: Logowanie i autoryzacja (RBAC)
 * **Aktor główny:** Wszyscy aktorzy (Mieszkaniec, Portier, ADS, AOS)
@@ -454,41 +445,49 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
   * *Porażka:* Brak dostępu; zarejestrowanie nieudanej próby uwierzytelnienia.
 * **Scenariusz główny:**
   1. Użytkownik wprowadza adres e-mail i hasło.
-  2. System weryfikuje istnienie konta, sprawdza zgodność hasła funkcją **BCrypt** (`NFR-SEC-02`) oraz sprawdza czy status konta to `ACTIVE`.
-  3. System generuje bezstanowy token JWT zawierający claims: `sub` (userId), `role`, `dormitoryId` (czas życia: 15 minut).
+  2. System weryfikuje istnienie konta, sprawdza zgodność hasła funkcją **BCrypt** (`NFR-SEC-02`) oraz weryfikuje, czy status konta to `ACTIVE`.
+  3. System generuje bezstanowy token JWT (czas życia TTL: 15 minut) zawierający claims: `sub` (userId), `email`, `role`, `dormitory_id` oraz `room_number` (pobrany z aktywnego rekordu w `room_assignments`).
   4. System zwraca token i przekierowuje użytkownika do dedykowanego widoku roli.
+* **Mechanizm unieważniania tokenów (Revocation / Invalidation):**
+  * Sam bezstanowy token JWT nie może być unieważniony po stronie klienta. W architekturze PKampus filtr autoryzacyjny backendu (Spring Security Filter) weryfikuje status konta (`status = 'ACTIVE'`, tj. odrzuca m.in. `BLOCKED` i `CHECKED_OUT`) oraz spójność roli przy każdym żądaniu za pomocą szybkiej pamięci podręcznej (Caffeine cache / in-memory blacklist z TTL = 15 min).
+  * W momencie nałożenia blokady konta (`status = 'BLOCKED'`), wymeldowania (`CHECKED_OUT`) lub zmiany roli użytkownika przez ADS/AOS, system natychmiast rejestruje identyfikator użytkownika w in-memory blacklist revocation cache, dzięki czemu wszystkie istniejące tokeny zostają odrzucone (HTTP 401/403) natychmiast, bez czekania na upływ ich 15-minutowego TTL.
 * **Rozszerzenia:**
   * **2a. Niepoprawne hasło lub e-mail:** System zwraca błąd HTTP 401. Aplikacyjny mechanizm rate-limitingu (in-memory Bucket4j) ogranicza liczbę prób z danego adresu IP.
   * **2b. Konto w stanie `PENDING_EMAIL`:** Komunikat: „Potwierdź swój adres e-mail klikając w link przesłany na pocztę”.
   * **2c. Konto w stanie `PENDING_APPROVAL`:** Komunikat: „Twoje konto oczekuje na weryfikację meldunku przez Administrację DS”.
-  * **2d. Konto w stanie `BLOCKED`:** Komunikat: „Konto zostało zablokowane administracyjnie. Skontaktuj się z kierownikiem DS” (`FR-PORTAL-04`).
+  * **2d. Konto w stanie `BLOCKED`:** Komunikat: „Konto zostało zablokowane administracyjnie. Skontaktuj się z kierownikiem DS” (`FR-PORTAL-04`, HTTP 403).
+  * **2e. Konto w stanie `CHECKED_OUT`:** Komunikat: „Konto wygasło (wymeldowanie). Skontaktuj się z administracją DS” (`FR-AUTH-03`, HTTP 403).
 * **Powiązane wymagania:** `FR-AUTH-03`, `FR-AUTH-04`, `FR-PORTAL-04`, `NFR-SEC-01`, `NFR-SEC-02`.
 
-#### UC-AUTH-03: Weryfikacja meldunku przez ADS
+#### UC-AUTH-03: Weryfikacja meldunku i blokowanie konta przez ADS
 * **Aktor główny:** Administrator Domu Studenckiego (ADS / Kierownik DS)
 * **Warunki początkowe:** ADS zalogowany z uprawnieniem `DORM_ADMIN` do swojego DS; w kolejce oczekują konta ze statusem `PENDING_APPROVAL`.
-* **Warunki końcowe:** Konto przechodzi w stan `ACTIVE` lub zostaje odrzucone.
-* **Scenariusz główny:**
-  1. ADS otwiera zakładkę weryfikacji meldunków w portalu administracyjnym (`FR-PORTAL-03`).
-  2. System wyświetla listę oczekujących wniosków przypisanych do danego akademika.
+* **Warunki końcowe:** Konto przechodzi w stan `ACTIVE`, zostaje odrzucone albo (ścieżka SHOULD) zablokowane/odblokowane (`BLOCKED`/`ACTIVE`).
+* **Scenariusz główny (MUST — `FR-AUTH-02`):**
+  1. ADS otwiera zakładkę weryfikacji meldunków w panelu administracyjnym (wymagana w MVP jako realizacja `FR-AUTH-02`, niezależnie od `FR-PORTAL-04` SHOULD).
+  2. System wyświetla listę oczekujących wniosków przypisanych do danego akademika wraz ze zdjęciem twarzy i deklarowanym numerem pokoju.
   3. ADS weryfikuje dane studenta z uczelnianą listą kwaterunkową.
-  4. ADS zatwierdza konto wybranego studenta.
-  5. System aktualizuje status użytkownika na `ACTIVE` i wysyła e-mail informujący o aktywacji (`FR-AUTH-02`).
+  4. ADS zatwierdza konto wybranego studenta i potwierdza przydział pokoju.
+  5. System aktualizuje status użytkownika na `ACTIVE`, tworzy rekord meldunku w `room_assignments` i wysyła e-mail informujący o aktywacji (`FR-AUTH-02`).
 * **Rozszerzenia:**
-  * **4a. Brak studenta na liście kwaterunkowej:** ADS klika „Odrzuć wniosek” z podaniem przyczyny. System usuwa konto tymczasowe i powiadamia aplikanta e-mailem.
-* **Powiązane wymagania:** `FR-AUTH-02`, `FR-PORTAL-03`, `FR-PORTAL-04`.
-
+  * **4a. Brak studenta na liście kwaterunkowej (MUST):** ADS klika „Odrzuć wniosek” z podaniem przyczyny. System usuwa konto tymczasowe oraz awatar z MinIO i powiadamia aplikanta e-mailem (`FR-AUTH-02`).
+  * **5a. Blokada konta mieszkańca (SHOULD — `FR-PORTAL-04`):** ADS wyszukuje aktywnego mieszkańca i klika „Zablokuj konto” z uzasadnieniem. System ustawia `status='BLOCKED'`, wpisuje użytkownika do blacklist JWT (natychmiastowe unieważnienie tokenów, `NFR-SEC-01`) i wysyła powiadomienie e-mail.
+  * **5b. Odblokowanie konta (SHOULD — `FR-PORTAL-04`):** ADS klika „Odblokuj konto”. System przywraca `status='ACTIVE'` i czyści wpis blacklist.
+* **Powiązane wymagania:** `FR-AUTH-02` (MUST meldunek), `FR-PORTAL-04` (SHOULD blokady), `BR-06`.
 #### UC-AUTH-04: Edycja profilu i zmiana hasła
 * **Aktor główny:** Zalogowany użytkownik
 * **Warunki początkowe:** Aktywna sesja użytkownika.
-* **Warunki końcowe:** Hasło zaktualizowane w bazie danych.
+* **Warunki końcowe:** Dane kontaktowe lub hasło zaktualizowane w bazie danych (`updated_at`).
 * **Scenariusz główny:**
-  1. Użytkownik przechodzi do widoku ustawień profilu.
-  2. Wprowadza bieżące hasło oraz dwukrotnie nowe hasło.
-  3. System weryfikuje poprawność bieżącego hasła (BCrypt) oraz sprawdza spełnienie polityki złożoności nowego hasła (`NFR-SEC-02`).
-  4. System haszuje nowe hasło algorytmem BCrypt i aktualizuje pole `password_hash` w tabeli `users` (`FR-AUTH-06`).
+  1. Użytkownik przechodzi do widoku ustawień profilu (`FR-AUTH-06`).
+  2. Użytkownik ma możliwość:
+     * **Aktualizacji danych kontaktowych:** edycji numeru telefonu (`phone_number`),
+     * **Zmiany hasła:** wprowadzenia bieżącego hasła oraz dwukrotnie nowego hasła.
+  3. W przypadku chęci zmiany przypisanego pokoju lub akademika system wyświetla informację: „Zmiana pokoju wymaga formalnego aneksu do meldunku i jest dokonywana wyłącznie przez Administrację DS”.
+  4. System weryfikuje poprawność bieżącego hasła (BCrypt) oraz sprawdza spełnienie polityki złożoności nowego hasła (`NFR-SEC-02`).
+  5. System haszuje nowe hasło algorytmem BCrypt, aktualizuje pola w tabeli `users` (`FR-AUTH-06`) oraz ustawia `updated_at = CURRENT_TIMESTAMP`.
 * **Rozszerzenia:**
-  * **3a. Błędne hasło bieżące:** System odrzuca operację (HTTP 400 Bad Request).
+  * **4a. Błędne hasło bieżące:** System odrzuca operację (HTTP 400 Bad Request).
 * **Powiązane wymagania:** `FR-AUTH-06`, `NFR-SEC-02`.
 
 #### UC-AUTH-05: Resetowanie hasła przez e-mail
@@ -507,34 +506,35 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
   * **4a. Token wygasł (>15 min) lub został już zużyty:** System wyświetla błąd i uniemożliwia zmianę hasła.
 * **Powiązane wymagania:** `FR-AUTH-07`, `NFR-SEC-02`, `ADR-07`.
 
-#### UC-CARD-01: Wyświetlenie Cyfrowej Karty Mieszkańca (Weryfikacja on-line)
+#### UC-CARD-01: Wyświetlenie Cyfrowej Karty Mieszkańca (Weryfikacja on-line i test dotykowy)
 * **Aktor główny:** Mieszkaniec (Student)
 * **Warunki początkowe:** Mieszkaniec zalogowany w aplikacji mobilnej/PWA z aktywnym połączeniem sieciowym; konto w stanie `ACTIVE`.
-* **Warunki końcowe:** Dynamiczna karta mieszkańca wyrenderowana na ekranie urządzenia z bieżącym statusem i czasem serwera.
+* **Warunki końcowe:** Dynamiczna karta mieszkańca wyrenderowana na ekranie urządzenia z bieżącym statusem, czasem serwera, animacją tła oraz aktywnym testem dotykowym.
 * **Scenariusz główny:**
   1. Mieszkaniec wybiera zakładkę „Karta Mieszkańca”.
   2. Aplikacja wysyła zapytanie do endpointu weryfikacyjnego backendu (`/api/v1/profile/card`).
   3. Serwer weryfikuje token JWT oraz aktualny status użytkownika w bazie danych (`users.status = 'ACTIVE'`).
-  4. System zwraca dane profilowe (imię, nazwisko, nazwa akademika, numer pokoju, zdjęcie profilowe, pieczęć graficzną) (`FR-CARD-01`).
+  4. System zwraca dane profilowe: imię, nazwisko, nazwa akademika, numer pokoju, rok akademicki, URL zdjęcia twarzy z MinIO, oficjalną pieczęć graficzną oraz **dynamiczny kolor dnia i kod autoryzacyjny** ważny w danej dobie (`FR-CARD-01`, `FR-CARD-02`).
   5. Aplikacja renderuje pełnoekranową kartę z zielonym oznaczeniem „AKTYWNA / MIESZKANIEC” (`FR-CARD-03`), działającym na żywo zegarem serwera (godzina, minuta, sekundy) oraz animowanym hologramem wizualnym (płynny gradient CSS) uniemożliwiającym fałszerstwa (`FR-CARD-02`, `FR-CARD-04`).
+  6. **Interaktywny test dotykowy (Touch Challenge):** Dotknięcie karty w dowolnym miejscu wywołuje natychmiastowy dynamiczny efekt fali (ripple effect) ze znacznikiem mikrosekund serwera, uniemożliwiając posłużenie się nagraniem wideo ekranu (screen recording playback).
 * **Rozszerzenia:**
   * **2a. Brak połączenia sieciowego (Tryb offline):** Dynamiczna weryfikacja anty-fraud bezwzględnie wymaga łączności z serwerem. W przypadku braku sieci aplikacja blokuje prezentację karty i wyświetla komunikat ostrzegawczy: „Brak połączenia sieciowego — weryfikacja dynamiczna karty wymaga połączenia z serwerem. Zgodnie z regulaminem okazanie karty offline lub zrzutu ekranu jest nieważne”.
   * **3a. Status konta uległ zmianie na `BLOCKED` lub `CHECKED_OUT` w trakcie trwania sesji:** Serwer zwraca zaktualizowany status, a aplikacja natychmiast blokuje widok karty mieszkańca i wyświetla pełnoekranowy czerwony baner ostrzegawczy: „KONTO ZABLOKOWANE ADMINISTRACYJNIE” lub „KONTO WYGASŁE (WYMELDOWANY)” (`FR-CARD-03`). Użytkownik nieposiadający aktywnej sesji nie może zalogować się do systemu (kod błędu HTTP 403 Forbidden wg `UC-AUTH-02`).
 * **Powiązane wymagania:** `FR-CARD-01`, `FR-CARD-02`, `FR-CARD-03`, `FR-CARD-04`.
 
-#### UC-CARD-02: Wzrokowa weryfikacja karty (anty-screenshot)
+#### UC-CARD-02: Wzrokowa i interaktywna weryfikacja karty (anty-screenshot / anty-recording)
 * **Aktor główny:** Recepcjonista (Portier)
 * **Aktorzy pomocniczy:** Mieszkaniec
 * **Warunki początkowe:** Mieszkaniec wchodzi do akademika i okazuje kartę na smartfonie.
 * **Warunki końcowe:** Mieszkaniec wpuszczony do obiektu lub skierowany do weryfikacji tożsamości.
 * **Scenariusz główny:**
   1. Portier sprawdza zgodność wizerunku na zdjęciu z twarzą wchodzącego studenta.
-  2. Portier weryfikuje ruchomy element animacji tła oraz płynnie idący zegar serwerowy w celu wykluczenia statycznego zrzutu ekranu (`FR-CARD-02`).
+  2. Portier weryfikuje ruchomy element animacji tła, płynnie idący zegar serwerowy oraz **zgodność wyświetlanego koloru/kodu dnia** z bieżącym kolorem widocznym na monitorze dyżurnym portierni (`FR-CARD-02`, `FR-CARD-04`).
   3. Portier weryfikuje zielony wskaźnik „AKTYWNA / MIESZKANIEC” (`FR-CARD-03`) oraz zgodność nazwy akademika.
   4. Portier zezwala na wejście do budynku w 2-3 sekundy bez konieczności obsługi komputera (`FR-CARD-04`).
 * **Rozszerzenia:**
-  * **2a. Wykryto statyczny screenshot lub brak animacji:** Portier żąda interakcji z aplikacją (przewinięcie, kliknięcie) lub okazania fizycznej legitymacji studenckiej.
-  * **3a. Wyświetlona czerwona plansza blokady/wygaszenia:** Portier odmawia wpuszczenia do akademika i kieruje studenta do kierownika DS.
+  * **2a. Podejrzenie statycznego screenshotu lub nagrania wideo:** Portier prosi mieszkańca o dotknięcie ekranu smartfona. Obserwuje wyzwolenie efektu ripple z dynamicznym znacznikiem czasu. W przypadku odmowy lub braku reakcji odmawia wstępu i żąda fizycznej legitymacji studenckiej.
+  * **3a. Wyświetlona czerwona plansza blokady/wygaszenia:** Portier bezwzględnie odmawia wpuszczenia do akademika i kieruje studenta do kierownika DS.
 * **Powiązane wymagania:** `FR-CARD-02`, `FR-CARD-03`, `FR-CARD-04`.
 
 ---
@@ -544,7 +544,7 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
 #### UC-LAUND-01: Przeglądanie harmonogramu pralek
 * **Aktor główny:** Mieszkaniec
 * **Warunki początkowe:** Mieszkaniec zalogowany i przypisany do danego akademika.
-* **Warunki końcowe:** Prezentacja graficznej siatki dostępności pralek i slotów czasowych.
+* **Warunki końcowe:** Prezentacja graficznej siatki dostępności pralek i slotów czasowych (z podglądem do 7 dni w przód, `FR-LAUND-02`).
 * **Scenariusz główny:**
   1. Mieszkaniec otwiera moduł „Pralnia”.
   2. System pobiera listę pralek (`laundry_machines`) w akademiku użytkownika oraz parametry harmonogramu z tabeli `dormitories` (`laundry_slot_duration_minutes`: domyślnie 90 minut, godziny otwarcia/zamknięcia pralni, `FR-LAUND-01`).
@@ -564,14 +564,16 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
   2. System otwiera okno podsumowania rezerwacji (identyfikator pralki, data, godziny slotu, przypomnienie o regule 15 minut na odbiór klucza wg `BR-02`).
   3. Mieszkaniec klika „Potwierdzam rezerwację”.
   4. System weryfikuje w transakcji bazodanowej:
-     * czy użytkownik posiada mniej niż **2 aktywne rezerwacje pralki w bieżącym tygodniu** (`BR-01`),
+     * czy `slotStart` mieści się w horyzoncie maksymalnie **7 dni w przód** (`BR-01`),
+     * czy użytkownik posiada mniej niż **2 aktywne** rezerwacje pralki w bieżącym tygodniu kalendarzowym (pon–niedz., `Europe/Warsaw`), gdzie aktywne = `status IN ('CONFIRMED', 'KEY_ISSUED')` i `start_time` w tym tygodniu (`BR-01`),
      * czy slot nie koliduje z inną rezerwacją (ochrona klauzulą `EXCLUDE USING gist` w PostgreSQL),
      * czy pralka ma status `AVAILABLE`.
   5. System zapisuje rezerwację ze statusem `CONFIRMED` (`FR-LAUND-02`, `FR-LAUND-03`).
   6. Interfejs aktualizuje widok siatki.
 * **Rozszerzenia:**
-  * **4a. Przekroczono limit rezerwacji (`BR-01`):** System odrzuca żądanie z komunikatem: „Osiągnięto limit 2 aktywnych rezerwacji pralki w tym tygodniu” (HTTP 409 Conflict).
-  * **4b. Kolizja rezerwacji (wyścig wątków):** Błąd ograniczenia integralności; system informuje o zajętości slotu i odświeża siatkę.
+  * **4a. Slot poza horyzontem 7 dni (`BR-01`):** System odrzuca żądanie z komunikatem: „Rezerwacja możliwa tylko do 7 dni w przód” (**HTTP 422 Unprocessable Entity**).
+  * **4b. Przekroczono limit rezerwacji (`BR-01`):** System odrzuca żądanie z komunikatem: „Osiągnięto limit 2 aktywnych rezerwacji pralki (`CONFIRMED`/`KEY_ISSUED`) w tym tygodniu” (**HTTP 422 Unprocessable Entity** — walidacja logiczna reguły biznesowej).
+  * **4c. Kolizja rezerwacji (wyścig wątków / `chk_laundry_no_overlap`):** Błąd ograniczenia integralności PostgreSQL (SQLSTATE `23P01`); system zwraca **HTTP 409 Conflict**, informuje o zajętości slotu i odświeża siatkę.
 * **Powiązane wymagania:** `FR-LAUND-02`, `FR-LAUND-03`, `BR-01`.
 
 #### UC-LAUND-03: Anulowanie rezerwacji pralni
@@ -666,10 +668,11 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
      * czy salka ma status `AVAILABLE`.
   7. System zapisuje rezerwację ze statusem `CONFIRMED`.
 * **Rozszerzenia:**
-  * **6a. Użytkownik posiada aktywną sankcję `ROOM_BAN`:** System odrzuca żądanie (HTTP 403 Forbidden) z informacją o terminie obowiązywania kary nałożonej przez ADS.
-  * **6b. Liczba uczestników przewyższa limit:** Komunikat błędu HTTP 422: „Przekroczono limit osób w salce”.
-  * **6c. Czas trwania niezgodny z regulaminem:** Odrzucenie formularza z informacją o przekroczeniu maksymalnego czasu rezerwacji.
-* **Powiązane wymagania:** `FR-ROOM-01`, `FR-ROOM-03`, `FR-ROOM-04`, `BR-03`, `BR-05`.
+  * **6a. Użytkownik posiada aktywną sankcję `ROOM_BAN`:** System odrzuca żądanie (**HTTP 403 Forbidden**) z informacją o terminie obowiązywania kary nałożonej przez ADS.
+  * **6b. Liczba uczestników przewyższa limit:** Komunikat błędu **HTTP 422 Unprocessable Entity**: „Przekroczono limit osób w salce” (walidacja logiczna formularza).
+  * **6c. Czas trwania / okno godzinowe niezgodne z regulaminem:** Odrzucenie formularza (**HTTP 422 Unprocessable Entity**) z informacją o naruszeniu limitu czasu lub okna `BR-03`.
+  * **6d. Kolizja slotu (`chk_room_no_overlap`):** Naruszenie ograniczenia wykluczającego w bazie (SQLSTATE `23P01`) → **HTTP 409 Conflict**; odświeżenie grafiku.
+* **Powiązane wymagania:** `FR-ROOM-01`, `FR-ROOM-02`, `FR-ROOM-03`, `FR-ROOM-04`, `BR-03`, `BR-05`.
 
 #### UC-ROOM-02: Anulowanie rezerwacji salki przed startem
 * **Aktor główny:** Mieszkaniec (organizator)
@@ -753,7 +756,7 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
 ### 11.4. Pakiet 3: Obsługa Usterek i Zgłoszeń Technicznych (ISSUES)
 
 #### UC-ISSUE-01: Zgłoszenie usterki ze zdjęciem
-* **Aktor główny:** Mieszkaniec, Administrator DS
+* **Aktor główny:** Mieszkaniec, Recepcjonista (Portier), Administrator DS
 * **Aktorzy pomocniczy:** Magazyn obiektowy MinIO (S3)
 * **Warunki początkowe:** Użytkownik uwierzytelniony; wystąpiła awaria w pokoju lub przestrzeni wspólnej.
 * **Warunki końcowe:** Utworzony rekord w tabeli `issues` ze statusem `NEW` i opcjonalnym załącznikiem w `issue_photos`.
@@ -767,7 +770,7 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
   7. Zgłoszenie pojawia się w rejestrze personelu DS.
 * **Rozszerzenia:**
   * **4a. Plik przekracza rozmiar 5 MB lub niedozwolony format:** System odrzuca plik z komunikatem błędu (`NFR-SEC-03`).
-* **Powiązane wymagania:** `FR-ISSUE-01`, `FR-ISSUE-02`, `NFR-SEC-03`.
+* **Powiązane wymagania:** `FR-ISSUE-01`, `FR-ISSUE-02`, `NFR-SEC-03`, `BR-07`.
 
 #### UC-ISSUE-02: Przeglądanie i obsługa rejestru awarii w DS (Personel)
 * **Aktor główny:** Portier, Administrator DS (ADS)
@@ -776,7 +779,7 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
 * **Scenariusz główny:**
   1. Personel otwiera cyfrowy rejestr awarii (`FR-ISSUE-03`, `FR-PORTAL-01`).
   2. System pobiera listę zgłoszeń powiązanych z danym akademikiem.
-  3. Personel filtruje zgłoszenia wg statusu (`NEW`, `ASSIGNED_TO_MAINTENANCE`, `IN_PROGRESS`, `RESOLVED`, `REJECTED`, `PARTS_REQUIRED`), kategorii i pilności (`urgency`).
+  3. Personel filtruje zgłoszenia wg statusu (`NEW`, `ASSIGNED_TO_MAINTENANCE`, `IN_PROGRESS`, `RESOLVED`, `REJECTED`, `PARTS_REQUIRED`), kategorii, pilności (`urgency`), daty, numeru pokoju i piętra (`FR-ISSUE-03`).
   4. Kliknięcie w zgłoszenie otwiera szczegóły wraz ze zdjęciem MinIO i bieżącą notatką personelu (`staff_notes`).
 * **Powiązane wymagania:** `FR-ISSUE-03`, `FR-PORTAL-01`.
 
@@ -830,18 +833,18 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
   2. Wprowadza tytuł, treść ogłoszenia, wybiera kategorię ze słownika DDL (`BORROW_HELP`, `BUY_SELL`, `LOST_FOUND`, `GENERAL`) oraz określa zasięg (`scope`: `DORMITORY` lub `CAMPUS`) (`FR-BOARD-01`).
   3. System waliduje poprawność pól i zapisuje ogłoszenie ze statusem `ACTIVE`.
   4. Post pojawia się na tablicy mieszkańców.
-* **Powiązane wymagania:** `FR-BOARD-01`, `FR-BOARD-02`.
+* **Powiązane wymagania:** `FR-BOARD-01`, `FR-BOARD-05`, `BR-07`.
 
 #### UC-BOARD-02: Przeglądanie feedu tablicy i filtrowanie
 * **Aktor główny:** Mieszkaniec, Administrator DS, Superadmin (AOS)
 * **Warunki początkowe:** Użytkownik zalogowany.
-* **Warunki końcowe:** Prezentacja chronologicznej listy aktywnych postów.
+* **Warunki końcowe:** Prezentacja chronologicznej listy postów zgodnych z filtrami.
 * **Scenariusz główny:**
   1. Użytkownik przechodzi do widoku „Tablica ogłoszeń”.
-  2. System pobiera aktywne posty (`status = 'ACTIVE' AND is_deleted = FALSE`) dla akademika mieszkańca oraz posty o zasięgu kampusowym (`CAMPUS`).
-  3. Użytkownik może filtrować listę wg kategorii (`BORROW_HELP`, `BUY_SELL`, `LOST_FOUND`, `GENERAL`) oraz zasięgu (`FR-BOARD-02`).
+  2. System pobiera domyślnie aktywne posty (`status = 'ACTIVE' AND is_deleted = FALSE`) dla akademika mieszkańca oraz posty o zasięgu kampusowym (`CAMPUS`).
+  3. Użytkownik może filtrować listę wg kategorii (`BORROW_HELP`, `BUY_SELL`, `LOST_FOUND`, `GENERAL`), zasięgu oraz statusu (`ACTIVE` vs `RESOLVED`) (`FR-BOARD-02`).
   4. System renderuje przefiltrowany feed ogłoszeń posortowany od najnowszych.
-* **Powiązane wymagania:** `FR-BOARD-02`.
+* **Powiązane wymagania:** `FR-BOARD-02`, `FR-BOARD-05`, `BR-07`.
 
 #### UC-BOARD-03: Dodanie komentarza w wątku
 * **Aktor główny:** Mieszkaniec
@@ -852,17 +855,17 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
   2. Wprowadza treść komentarza i klika „Wyślij”.
   3. System waliduje treść i zapisuje rekord w tabeli `comments` z powiązaniem do `post_id` i `author_id` (`FR-BOARD-03`).
   4. Komentarz pojawia się w wątku dyskusyjnym.
-* **Powiązane wymagania:** `FR-BOARD-03`.
+* **Powiązane wymagania:** `FR-BOARD-03`, `FR-BOARD-05`, `BR-07`.
 
-#### UC-BOARD-04: Oznaczenie ogłoszenia jako rozwiązane (RESOLVED)
+#### UC-BOARD-04: Oznaczenie ogłoszenia jako rozwiązane (RESOLVED) lub usunięcie przez autora
 * **Aktor główny:** Mieszkaniec (autor posta)
 * **Warunki początkowe:** Post jest własnością zalogowanego użytkownika.
 * **Warunki końcowe:** Status posta zmieniony na `RESOLVED` lub rekord oznaczony jako Soft Delete (`is_deleted = TRUE`).
 * **Scenariusz główny:**
   1. Autor otwiera swoje ogłoszenie i wybiera opcję „Oznacz jako rozwiązane” (np. po sprzedaży przedmiotu lub znalezieniu zguby).
   2. System aktualizuje status posta na `RESOLVED` (`FR-BOARD-04`).
-  3. W przypadku wybrania opcji usunięcia wpisu, system ustawia `is_deleted = TRUE` i `deleted_at = CURRENT_TIMESTAMP` (`FR-BOARD-05`).
-* **Powiązane wymagania:** `FR-BOARD-04`, `FR-BOARD-05`.
+  3. W przypadku wybrania opcji usunięcia wpisu, system ustawia `is_deleted = TRUE` i `deleted_at = CURRENT_TIMESTAMP` (`FR-BOARD-04`).
+* **Powiązane wymagania:** `FR-BOARD-04`.
 
 #### UC-BOARD-05: Moderacja i usuwanie wpisów (ADS / AOS)
 * **Aktor główny:** Administrator DS (ADS), Superadmin (AOS)
@@ -885,9 +888,9 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
 * **Warunki końcowe:** Prezentacja komunikatów priorytetowych oraz widoku kalendarza.
 * **Scenariusz główny:**
   1. Użytkownik otwiera moduł „Kalendarz i Komunikaty”.
-  2. Jeśli w tabeli `dorm_events` istnieje aktywny wpis o priorytecie `CRITICAL` z flagą `is_pinned = TRUE`, system wyświetla go jako wyróżniony czerwony baner na górze ekranu (`FR-EVENT-01`).
+  2. Jeśli w tabeli `dorm_events` istnieje aktywny wpis o priorytecie `CRITICAL` z flagą `is_pinned = TRUE`, system wyświetla go jako wyróżniony czerwony baner na górze ekranu (`FR-EVENT-02`).
   3. W siatce kalendarza prezentowane są terminy wymiany pościeli (`category = 'BED_LINEN'`), przerwy techniczne (`TECHNICAL_OUTAGE`), komunikaty administracji (`ADMIN_NOTICE`) oraz wydarzenia studenckie (`STUDENT_EVENT`) (`FR-EVENT-03`).
-* **Powiązane wymagania:** `FR-EVENT-01`, `FR-EVENT-03`.
+* **Powiązane wymagania:** `FR-EVENT-01`, `FR-EVENT-02`, `FR-EVENT-03`.
 
 #### UC-EVT-02: Utworzenie wydarzenia integracyjnego
 * **Aktor główny:** Mieszkaniec
@@ -916,16 +919,17 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
 
 ### 11.7. Pakiet 5: Administracja Zasobami i Nadzór (ADMIN)
 
-#### UC-ADM-01: Konfiguracja pralek i parametrów slotów per DS
+#### UC-ADM-01: Konfiguracja pralek i parametrów slotów per DS (SHOULD / poza jądrem MUST MVP)
 * **Aktor główny:** Administrator DS (ADS)
-* **Warunki początkowe:** ADS zalogowany do panelu zarządczego swojego DS.
+* **Priorytet:** SHOULD (`FR-LAUND-01`) — w MVP MUST pralki i parametry slotów pochodzą ze **seedu/migracji** bazy; ten UC opisuje pełny UI edycji etapu 2. Nie jest wymagany do domknięcia `FR-PORTAL-03` MUST (sale).
+* **Warunki początkowe:** ADS zalogowany do panelu zarządczego swojego DS; wdrożony interfejs edycji pralni (etap 2).
 * **Warunki końcowe:** Rekordy w `laundry_machines` lub parametry konfiguracji w `dormitories` zaktualizowane.
 * **Scenariusz główny:**
-  1. ADS otwiera panel zarządzania pralnią (`FR-PORTAL-03`).
-  2. ADS może dodać nową pralkę do tabeli `laundry_machines` (oznaczenie fizyczne `machine_identifier`, lokalizacja `floor_location`, status `AVAILABLE`) lub edytować istniejącą (`FR-LAUND-01`).
+  1. ADS otwiera panel zarządzania pralnią (`FR-LAUND-01`).
+  2. ADS może dodać nową pralkę do tabeli `laundry_machines` (oznaczenie fizyczne `machine_identifier`, lokalizacja `floor_location`, status `AVAILABLE`) lub edytować istniejącą.
   3. ADS konfiguruje parametry w tabeli `dormitories`: długość slotu w minutach (`laundry_slot_duration_minutes`, domyślnie 90 min) oraz godziny otwarcia i zamknięcia pralni (`laundry_opening_time`, `laundry_closing_time`).
   4. System waliduje i zapisuje dane w bazie PostgreSQL.
-* **Powiązane wymagania:** `FR-LAUND-01`, `FR-PORTAL-03`.
+* **Powiązane wymagania:** `FR-LAUND-01` (SHOULD).
 
 #### UC-ADM-02: Konfiguracja salek tematycznych
 * **Aktor główny:** Administrator DS (ADS)
@@ -935,11 +939,11 @@ Zgodnie ze standardem inżynierii oprogramowania (warsztat wykładowy: uczestnic
   1. ADS otwiera moduł zarządzania salkami tematycznymi.
   2. ADS dodaje lub edytuje salkę: określa nazwę, typ (`room_type`: `STANDARD`, `QUIET_STUDY_KUJON`, `CHILLOUT`), limit osób `max_capacity`, godziny otwarcia i zamknięcia, flagę `spans_midnight` oraz `max_duration_hours` (standard/Kujon: 4h; Chillout: 12h wg `BR-03`, §5 ust. 1 i 8 Regulaminu).
   3. System zapisuje konfigurację w tabeli `thematic_rooms` (`FR-ROOM-01`, `FR-ROOM-02`).
-* **Powiązane wymagania:** `FR-ROOM-01`, `FR-ROOM-02`, `BR-03`.
+* **Powiązane wymagania:** `FR-ROOM-01`, `FR-ROOM-02`, `BR-03`, `BR-08`.
 
 #### UC-ADM-03: Nałożenie kary blokady salek (1-3 mies.)
 * **Aktor główny:** Administrator DS (ADS)
-* **Warunki początkowe:** Prawomocna decyzja administracyjna orzeczona po procedurze regulaminowej z §6 ust. 2 Regulaminu salek; ADS zalogowany.
+* **Warunki początkowe:** Prawomocna decyzja administracyjna orzeczona po procedurze regulaminowej z §6 ust. 2 Regulaminu salek (wniosek ADS/KOS i porozumienie z KOS oraz Koordynatorem ds. bezpieczeństwa w trybie kancelaryjnym poza systemem); ADS zalogowany.
 * **Warunki końcowe:** Rekord w tabeli `sanctions` z `sanction_type = 'ROOM_BAN'`, `is_active = TRUE`; natychmiastowa kampusowa blokada rezerwacji salek dla ukaranego studenta (`BR-05`).
 * **Scenariusz główny:**
   1. ADS wyszukuje studenta w rejestrze mieszkańców swojego DS.

@@ -39,13 +39,15 @@ flowchart TB
 ## 2. Poziom 2: Diagram Kontenerów (C4 Containers)
 
 Diagram dekomponuje system PKampus na odrębne jednostki oprogramowania i magazyny danych zgodnie z modelem C4. W architekturze systemu wyróżnia się:
-1. **Kontener kliencki (PWA SPA):** Aplikacja React / TypeScript wykonywana bezpośrednio w silniku przeglądarki internetowej lub jako aplikacja PWA zainstalowana na urządzeniu użytkownika (smartfon / komputer).
-2. **Kontenery serwerowe (Docker Host: VPS PK w profilu produkcyjnym lub stacja robocza w profilu demonstracyjnym):** Zespół 5 kontenerów usługowych zarządzanych przez Docker Compose w odizolowanej sieci mostkowej `pkampus-net` (oraz opcjonalny kontener `pkampus-certbot` w profilu produkcyjnym):
-   - `pkampus-proxy` (Nginx Alpine) – brama wejściowa serwera, terminacja TLS 1.3, serwowanie skompilowanych plików statycznych PWA (`/usr/share/nginx/html` montowane z wolumenu `./frontend/dist`) oraz reverse proxy dla ścieżek `/api/*`,
+1. **Kontener kliencki (PWA SPA):** Aplikacja React / TypeScript + Tailwind CSS (komponenty funkcyjne, RWD Mobile-First) wykonywana w przeglądarce lub jako zainstalowane PWA (smartfon / komputer).
+2. **Kontenery serwerowe (Docker Host: VPS PK w profilu produkcyjnym lub stacja robocza w profilu demonstracyjnym):** Zespół 5 długowiecznych kontenerów usługowych zarządzanych przez Docker Compose w odizolowanej sieci mostkowej `pkampus-net` (plus job inicjalizacyjny `pkampus-minio-init` oraz opcjonalny `pkampus-certbot` w profilu produkcyjnym — łącznie 7 serwisów w `docker-compose.yml`):
+   - `pkampus-proxy` (Nginx Alpine z wieloetapowym buildem z `node:20-alpine`) – brama wejściowa serwera, terminacja TLS 1.3, serwowanie wbudowanych skompilowanych zasobów statycznych PWA (`/usr/share/nginx/html`) oraz reverse proxy dla ścieżek `/api/*` (prefiks obejmujący `/api/v1/*`),
    - `pkampus-backend` (Spring Boot) – warstwa logiki biznesowej REST API,
    - `pkampus-db` (PostgreSQL) – relacyjna baza danych,
    - `pkampus-minio` (MinIO S3) – magazyn obiektowy na zdjęcia usterek i awatary,
-   - `pkampus-mailpit` (Mailpit) – lokalny serwer SMTP na potrzeby deweloperskie i testowe.
+   - `pkampus-mailpit` (Mailpit) – lokalny serwer SMTP na potrzeby deweloperskie i testowe,
+   - `pkampus-minio-init` (job one-shot `minio/mc`) – inicjalizacja bucketów i użytkownika aplikacyjnego (bez `restart`, poza `NFR-REL-01`),
+   - `pkampus-certbot` (profil `production`) – odnawianie TLS Let's Encrypt na VPS PK.
 
 ```mermaid
 %%{init: {'flowchart': {'curve': 'stepBefore'}}}%%
@@ -100,25 +102,27 @@ flowchart TD
 
     subgraph API_Controllers ["Warstwa Kontrolerów REST (Web Layer)"]
         direction LR
-        C_AUTH["AuthController<br/>/api/auth/*"]:::ctrlStyle
-        C_LAUND["LaundryController<br/>/api/laundry/*"]:::ctrlStyle
-        C_ROOM["RoomController<br/>/api/rooms/*"]:::ctrlStyle
-        C_KEY["KeyManagementController<br/>/api/keys/*"]:::ctrlStyle
-        C_ISSUE["IssueController<br/>/api/issues/*"]:::ctrlStyle
-        C_BOARD["BoardController<br/>/api/board/*"]:::ctrlStyle
-        C_EVENT["EventController<br/>/api/events/*"]:::ctrlStyle
-        C_ADMIN["AdminController<br/>/api/admin/*"]:::ctrlStyle
+        C_AUTH["AuthController<br/>/api/v1/auth/*"]:::ctrlStyle
+        C_PROFILE["ProfileController<br/>/api/v1/profile/*"]:::ctrlStyle
+        C_LAUND["LaundryController<br/>/api/v1/laundry/*"]:::ctrlStyle
+        C_ROOM["RoomController<br/>/api/v1/rooms/*"]:::ctrlStyle
+        C_KEY["KeyManagementController<br/>/api/v1/keys/*"]:::ctrlStyle
+        C_ISSUE["IssueController<br/>/api/v1/issues/*"]:::ctrlStyle
+        C_BOARD["BoardController<br/>/api/v1/board/*"]:::ctrlStyle
+        C_EVENT["EventController<br/>/api/v1/events/*"]:::ctrlStyle
+        C_ADMIN["AdminController<br/>/api/v1/admin/*"]:::ctrlStyle
     end
 
     subgraph Business_Services ["Warstwa Logiki Biznesowej (Service Layer)"]
         direction TB
-        S_AUTH["AuthService & Security<br/>(JWT, BCrypt, Token Reset)"]:::svcStyle
-        S_LAUND["LaundryService<br/>(Rezerwacje, Sloty, Awaria)"]:::svcStyle
-        S_ROOM["RoomService<br/>(Rezerwacje salek, Regulamin PK)"]:::svcStyle
+        S_AUTH["AuthService & Security<br/>(JWT 15min, Caffeine blacklist, Bucket4j, BCrypt, Token Reset)"]:::svcStyle
+        S_LAUND["LaundryBookingService<br/>(LaundryService: Rezerwacje, Sloty, Awaria)"]:::svcStyle
+        S_ROOM["RoomBookingService<br/>(RoomService: Rezerwacje salek, Regulamin PK)"]:::svcStyle
         S_KEY["KeyService<br/>(Wydawanie i zwrot kluczy, reguła 15 min)"]:::svcStyle
         S_SANC["SanctionService<br/>(Weryfikacja kar, nakładanie blokad)"]:::svcStyle
         S_ISSUE["IssueService<br/>(Rejestr usterek, Koordynacja)"]:::svcStyle
-        S_COMM["CommunicationService<br/>(Tablica, Kalendarz, Pościel)"]:::svcStyle
+        S_BOARD["BoardService<br/>(Tablica ogłoszeń, komentarze)"]:::svcStyle
+        S_EVENT["EventService<br/>(Kalendarz, komunikaty, pościel)"]:::svcStyle
         S_SCHED["ReservationScheduler<br/>(@Scheduled - reguła 15 min)"]:::svcStyle
         S_MAIL["EmailNotificationService<br/>(@Async - integracja SMTP)"]:::svcStyle
         S_S3["S3StorageService<br/>(MinIO Client - upload zdjęć)"]:::svcStyle
@@ -126,12 +130,12 @@ flowchart TD
 
     subgraph Data_Layer ["Warstwa Repozytoriów (Spring Data JPA)"]
         direction LR
-        R_USER["UserRepository"]:::repoStyle
-        R_LAUND["LaundryRepository"]:::repoStyle
-        R_ROOM["RoomRepository"]:::repoStyle
-        R_ISSUE["IssueRepository"]:::repoStyle
-        R_POST["PostRepository"]:::repoStyle
-        R_EVENT["EventRepository"]:::repoStyle
+        R_USER["UserRepository + RoomAssignmentRepository"]:::repoStyle
+        R_LAUND["LaundryMachineRepository + LaundryBookingRepository"]:::repoStyle
+        R_ROOM["ThematicRoomRepository + RoomBookingRepository"]:::repoStyle
+        R_ISSUE["IssueRepository + IssuePhotoRepository"]:::repoStyle
+        R_POST["PostRepository + CommentRepository"]:::repoStyle
+        R_EVENT["EventRepository (dorm_events)"]:::repoStyle
         R_SANC["SanctionRepository"]:::repoStyle
     end
 
@@ -141,12 +145,13 @@ flowchart TD
 
     %% Powiązania kontrolerów z serwisami
     C_AUTH --> S_AUTH
+    C_PROFILE --> S_AUTH
     C_LAUND --> S_LAUND
     C_ROOM --> S_ROOM
     C_KEY --> S_KEY
     C_ISSUE --> S_ISSUE
-    C_BOARD --> S_COMM
-    C_EVENT --> S_COMM
+    C_BOARD --> S_BOARD
+    C_EVENT --> S_EVENT
     C_ADMIN --> S_AUTH
     C_ADMIN --> S_LAUND
     C_ADMIN --> S_ROOM
@@ -155,6 +160,7 @@ flowchart TD
     %% Koordynacja między serwisami
     S_ROOM --> S_SANC
     S_LAUND --> S_ISSUE
+    S_ROOM --> S_ISSUE
     S_LAUND --> S_MAIL
     S_ROOM --> S_MAIL
     S_ISSUE --> S_S3
@@ -173,8 +179,8 @@ flowchart TD
     S_KEY --> R_ROOM
     S_SANC --> R_SANC
     S_ISSUE --> R_ISSUE
-    S_COMM --> R_POST
-    S_COMM --> R_EVENT
+    S_BOARD --> R_POST
+    S_EVENT --> R_EVENT
 
     %% Wyjście do bazy i usług
     R_USER --> DB_EXT
@@ -202,7 +208,7 @@ Poniższa tabela zbiera najważniejsze uzgodnienia projektowe podjęte podczas a
 | **ADR-03** | Architektura mobilna interfejsu | Progressive Web App (PWA) | Umożliwia instalację aplikacji na ekranie głównym smartfona bez opłat licencyjnych i procedur publikacji w sklepach Apple/Google. Zapewnia natywny dostęp do kamery urządzenia (Media Capture API) na potrzeby dokumentowania usterek. |
 | **ADR-04** | Magazyn plików multimedialnych | MinIO S3 (Buckety: `pkampus-issues`, `pkampus-avatars`) | Odciąża bazę od BLOB. Env: `MINIO_BUCKET_ISSUES` / `MINIO_BUCKET_AVATARS`. Buckety prywatne; upload z `AuthService` (awatar) i `IssueService` (usterki) przez `S3StorageService`. |
 | **ADR-05** | Asynchroniczna dystrybucja powiadomień | Spring `@Async` + Mailpit (SMTP) | Wysyłka powiadomień e-mail (aktywacja konta, reset hasła, zmiana statusu naprawy usterki, awaria pralki) nie blokuje wątków obsługi żądań HTTP użytkownika. Mailpit zapewnia bezpieczne testowanie bez ryzyka SPAM-u. |
-| **ADR-06** | Procedura wyłączenia pralki z eksploatacji | Kaskadowe anulowanie + auto-issue | Oznaczenie pralki jako `OUT_OF_ORDER` (dostępne dla Portiera i ADS) natychmiast blokuje grafik, anuluje aktywne rezerwacje ze statusem `CANCELLED_MACHINE_OUT_OF_ORDER`, powiadamia studentów e-mailem i automatycznie generuje zlecenie w rejestrze usterek dla konserwatora (zapisując `reporter_id` pracownika wyłączającego urządzenie, co spełnia `BR-07` i eliminuje potrzebę manualnego tworzenia zgłoszenia). |
+| **ADR-06** | Procedura wyłączenia zasobu z eksploatacji (pralka / salka) | Kaskadowe anulowanie + auto-issue | Oznaczenie pralki jako `OUT_OF_ORDER` (`FR-LAUND-06`) lub salki jako `MAINTENANCE` (`FR-ROOM-09`, analogicznie ze statusem `CANCELLED_ROOM_MAINTENANCE`) przez Portiera/ADS natychmiast blokuje grafik, anuluje **aktywne przyszłe** rezerwacje w stanie `CONFIRMED` (bez kaskady na sloty już w `KEY_ISSUED`), powiadamia studentów e-mailem i generuje zlecenie w rejestrze usterek (zapisując `reporter_id` pracownika, co spełnia `BR-07`). |
 | **ADR-07** | Procedura odzyskiwania dostępu | Jednorazowy e-mail token kryptograficzny w DB (TTL: 15 min) | Hasła są haszowane BCrypt. Reset hasła używa tabeli `password_reset_tokens`. **Weryfikacja e-mail przy rejestracji** stosuje osobny wzorzec: podpisany token w linku (HMAC/JWT) bez tabeli w bazie. |
 | **ADR-08** | Baner alertów CRITICAL | Widoczność wg `is_pinned` + daty (bez ACK per user) | Potwierdzanie odczytu wymagałoby osobnej tabeli i UI; w MVP baner znika po odpięciu/wygaśnięciu komunikatu przez personel. |
 | **ADR-09** | Notatki przy usterkach | Jedno pole `staff_notes` (ostatnia notatka) | Pełny dziennik zmian statusu odroczony poza MVP; mieszkaniec widzi bieżący status + ostatnią odpowiedź portiera oraz dostaje e-mail przy zmianie statusu. |

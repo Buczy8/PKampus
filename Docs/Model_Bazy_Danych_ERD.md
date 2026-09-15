@@ -19,10 +19,14 @@
    * Posty i komentarze na tablicy sąsiedzkiej podlegają mechanizmowi miękkiego usuwania (`is_deleted BOOLEAN`, `deleted_at TIMESTAMPTZ`), co zapewnia ślad audytowy moderacji dla Administratora DS.
 7. **Zasady Retencji Danych i Ochrona Prywatności (RODO / Data Retention):**
    * **Konta wymeldowanych (`CHECKED_OUT`):** Przechowywane do końca roku akademickiego + 30 dni na rozliczenie kaucji, po czym dane osobowe podlegają anonimizacji (zastąpienie imienia/nazwiska ciągiem zanonimizowanym, wyczyszczenie telefonu i e-maila).
+   * **Zdjęcia profilowe mieszkańców (`pkampus-avatars`):** Pliki awatarów usuwane z prywatnego bucketu MinIO natychmiast po formalnym wymeldowaniu studenta lub w ramach procedury rocznej anonimizacji konta (`CHECKED_OUT`), zgodnie z zasadą minimalizacji danych (art. 5 ust. 1 lit. c RODO).
    * **Zrealizowane i anulowane rezerwacje:** Retencja przez 90 dni dla celów ewentualnych postępowań dyscyplinarnych, po czym następuje czyszczenie rekordów lub agregacja statystyczna.
    * **Zdjęcia usterek w MinIO (`issue_photos`):** Pliki binarne zdjęć usuwane z bucketu MinIO po 30 dniach od przejścia usterki w stan `RESOLVED` lub `REJECTED`. Rekord tekstowy usterki w PostgreSQL zachowywany przez 12 miesięcy dla celów analizy technicznej.
    * **Ochrona prywatności na tablicy (Pokoje):** Przy zasięgu kampusowym (`scope = 'CAMPUS'`) DTO widoku ukrywa numer pokoju (autor prezentowany jako `Jan Kowalski (DS-1)`), natomiast pełny numer pokoju ujawniany jest wyłącznie dla sąsiadów z tego samego budynku (`scope = 'DORMITORY'`).
    * **Wpisy na tablicy i komentarze:** Wpisy `RESOLVED` usuwane po 30 dniach; wpisy miękko usunięte (`is_deleted = TRUE` / `REMOVED_MODERATOR`) usuwane trwale przez scheduler po 14 dniach.
+   * **Tokeny bezpieczeństwa (`password_reset_tokens`):** TTL 15 minut; natychmiast unieważniane po użyciu (`used_at IS NOT NULL`) i usuwane z bazy przez scheduler po 24 godzinach.
+   * **Kopie zapasowe bazy danych i storage (Backup Retention):** Pliki kopii zapasowych szyfrowane symetrycznie AES-256 (GPG) i rotowane zgodnie z polityką: kopie dzienne przez 14 dni, tygodniowe przez 8 tygodni, miesięczne przez 12 miesięcy, po czym bezpowrotnie niszczone.
+8. **Dynamiczny kod/kolor dnia karty (`FR-CARD-02`) bez tabeli:** Kod i kolor dnia derywowane są bezstanowo w backendzie jako `HMAC_SHA256(JWT_SECRET, current_date)` mapowany na paletę 7 kolorów + 6-znakowy kod, ważne od północy do północy czasu lokalnego akademika. Brak osobnej tabeli — portiernia i aplikacja wyliczają tę samą wartość z tego samego sekretu i daty; endpoint `/api/v1/profile/card` zwraca bieżącą wartość wraz z czasem serwera.
 
 ---
 
@@ -183,7 +187,7 @@ Przechowuje obiekty akademików wchodzących w skład Osiedla Studenckiego Polit
 | `laundry_opening_time` | `TIME` | `NOT NULL, DEFAULT '07:00:00'` | Godzina otwarcia pralni w danym DS |
 | `laundry_closing_time` | `TIME` | `NOT NULL, DEFAULT '23:00:00'` | Godzina zamknięcia pralni w danym DS |
 | `laundry_slot_duration_minutes` | `INT` | `NOT NULL, DEFAULT 90, CHECK (laundry_slot_duration_minutes > 0)` | Długość slotu prania w min (np. 90, 120) |
-| `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data dodania obiektu do systemu |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data dodania obiektu do systemu |
 
 ---
 
@@ -197,7 +201,7 @@ Fizyczne pokoje w danym akademiku. Trwałe obiekty niezmieniające się co roku.
 | `room_number` | `VARCHAR(10)` | `NOT NULL` | Numer pokoju (np. "204", "12B") |
 | `floor` | `INT` | `NOT NULL` | Piętro (np. 2) |
 | `capacity` | `INT` | `NOT NULL, DEFAULT 2` | Pojemność osobowa (np. 1, 2, 3) |
-| `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu |
 
 *Ograniczenie unikalności:* `UNIQUE(dormitory_id, room_number)` – w ramach jednego DS numer pokoju jest unikalny.
 
@@ -217,10 +221,10 @@ Główna tabela użytkowników systemu (studenci, recepcjoniści, kierownicy DS,
 | `avatar_url` | `VARCHAR(500)` | `NULLABLE` | Ścieżka do zdjęcia w MinIO S3 (karta) |
 | `role` | `VARCHAR(30)` | `NOT NULL, CHECK (role IN ('RESIDENT', 'RECEPTIONIST', 'DORM_ADMIN', 'SUPER_ADMIN'))` | Rola w systemie (RBAC) |
 | `status` | `VARCHAR(30)` | `NOT NULL, CHECK (status IN ('PENDING_EMAIL', 'PENDING_APPROVAL', 'ACTIVE', 'BLOCKED', 'CHECKED_OUT'))` | Status cyklu życia konta |
-| `dormitory_id` | `UUID` | `FK -> dormitories(id), NULLABLE` | Przypisany akademik (dla Portiera/ADS lub wybrany przy rejestracji mieszkańca) |
+| `dormitory_id` | `UUID` | `FK -> dormitories(id), NULLABLE + CHECK chk_user_dormitory_scope` | Przypisany akademik (wymagany dla `RESIDENT`/`RECEPTIONIST`/`DORM_ADMIN`; NULL wyłącznie dla `SUPER_ADMIN` kampusowego) |
 | `declared_room_number` | `VARCHAR(10)` | `NULLABLE` | Deklarowany numer pokoju z formularza rejestracji (do weryfikacji i przydziału przez ADS) |
-| `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data rejestracji |
-| `updated_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data ostatniej edycji |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data rejestracji |
+| `updated_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data ostatniej edycji |
 
 ---
 
@@ -231,12 +235,12 @@ Obsługuje cykl życia studenta w akademiku oraz coroczną rotację pod koniec r
 | :--- | :--- | :--- | :--- |
 | `id` | `UUID` | `PK, DEFAULT gen_random_uuid()` | Identyfikator rekordu meldunku |
 | `user_id` | `UUID` | `FK -> users(id), NOT NULL` | Zameldowany student |
-| `room_id` | `UUID` | `FK -> rooms(id), NOT NULL` | Przydzielony pokój |
+| `room_id` | `UUID` | `FK -> rooms(id), NOT NULL` | Przypisany pokój |
 | `academic_year` | `VARCHAR(9)` | `NOT NULL` | Rok akademicki (np. "2025/2026") |
 | `is_active` | `BOOLEAN` | `NOT NULL, DEFAULT TRUE` | Flaga bieżącego aktywnego kwaterunku |
 | `check_in_date` | `DATE` | `NOT NULL` | Data zameldowania |
 | `check_out_date` | `DATE` | `NULLABLE` | Data wymeldowania (wypełniana na koniec roku) |
-| `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu meldunku |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu meldunku |
 
 *Ograniczenie unikalności częściowej:* `CREATE UNIQUE INDEX idx_active_user_assignment ON room_assignments (user_id) WHERE is_active = TRUE;` – student może posiadać tylko jeden aktywny meldunek naraz.
 
@@ -253,7 +257,7 @@ Zasoby pralnicze definiowane per akademik.
 | `floor_location` | `VARCHAR(50)` | `NOT NULL` | Lokalizacja pralni (np. "Piwnica / Sektor A") |
 | `status` | `VARCHAR(20)` | `NOT NULL, CHECK (status IN ('AVAILABLE', 'OUT_OF_ORDER'))` | Stan techniczny |
 | `notes` | `TEXT` | `NULLABLE` | Informacja o awarii lub serwisie |
-| `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu |
 
 ---
 
@@ -270,7 +274,7 @@ Rezerwacje slotów pralki z zabezpieczeniem współbieżności.
 | `status` | `VARCHAR(30)` | `NOT NULL, CHECK (status IN ('CONFIRMED', 'KEY_ISSUED', 'COMPLETED', 'CANCELLED_USER', 'AUTO_CANCELLED_15MIN', 'CANCELLED_MACHINE_OUT_OF_ORDER'))` | Status cyklu życia rezerwacji |
 | `key_issued_at` | `TIMESTAMPTZ` | `NULLABLE` | Czas fizycznego wydania klucza |
 | `key_returned_at` | `TIMESTAMPTZ` | `NULLABLE` | Czas zwrotu klucza na portiernię |
-| `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu złożenia rezerwacji |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu złożenia rezerwacji |
 
 *Kluczowe ograniczenie integralności (Anti-Overlap):*
 `ALTER TABLE laundry_bookings ADD CONSTRAINT chk_laundry_no_overlap EXCLUDE USING gist (machine_id WITH =, tstzrange(start_time, end_time) WITH &&) WHERE (status IN ('CONFIRMED', 'KEY_ISSUED'));` — gwarantuje na poziomie silnika PostgreSQL brak jakichkolwiek nachodzących na siebie przedziałów czasowych rezerwacji dla tej samej pralki.
@@ -293,7 +297,7 @@ Pomieszczenia wspólne zgodnie z Zarządzeniem Rektora PK ws. salek tematycznych
 | `max_duration_hours`| `INT` | `NOT NULL, DEFAULT 4` | Max czas jednorazowej rezerwacji (standard/Kujon: 4h, Chillout: 12h) |
 | `description` | `TEXT` | `NULLABLE` | Wyposażenie i regulamin salki |
 | `status` | `VARCHAR(20)` | `NOT NULL, CHECK (status IN ('AVAILABLE', 'MAINTENANCE'))` | Dostępność |
-| `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu |
 
 *Specyfika salki Chillout (§5 ust. 8 Regulaminu salek):* Dla salki typu `CHILLOUT` parametry konfiguracyjne wynoszą: `opening_time = '14:00:00'`, `closing_time = '02:00:00'`, `spans_midnight = TRUE` oraz `max_duration_hours = 12`. Flaga `spans_midnight = TRUE` jednoznacznie definiuje, że `closing_time < opening_time` oznacza przejście przez północ (koniec rezerwacji w dobie kolejnej), a dozwolony czas trwania rezerwacji wynosi do 12 godzin.
 
@@ -315,7 +319,7 @@ Rezerwacje salek z oświadczeniem Organizatora (§2 ust. 2 Regulaminu).
 | `terms_accepted` | `BOOLEAN` | `NOT NULL, CHECK (terms_accepted = TRUE)` | Zgoda na regulamin i odpowiedzialność |
 | `key_issued_at` | `TIMESTAMPTZ` | `NULLABLE` | Godzina odbioru klucza |
 | `key_returned_at` | `TIMESTAMPTZ` | `NULLABLE` | Godzina zwrotu klucza |
-| `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data rezerwacji |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data rezerwacji |
 
 *Kluczowe ograniczenie integralności (Anti-Overlap):*
 `ALTER TABLE room_bookings ADD CONSTRAINT chk_room_no_overlap EXCLUDE USING gist (room_id WITH =, tstzrange(start_time, end_time) WITH &&) WHERE (status IN ('CONFIRMED', 'KEY_ISSUED'));` — gwarantuje wykluczenie nakładających się rezerwacji salki w bazie.
@@ -339,8 +343,8 @@ Cyfrowy zeszyt napraw na portierni.
 | `description` | `TEXT` | `NOT NULL` | Szczegółowy opis usterki |
 | `status` | `VARCHAR(30)` | `NOT NULL, CHECK (status IN ('NEW', 'ASSIGNED_TO_MAINTENANCE', 'IN_PROGRESS', 'RESOLVED', 'REJECTED', 'PARTS_REQUIRED'))` | Status realizacji (w UI: Nowe, Przekazane konserwatorowi, W trakcie naprawy, Naprawione, Odrzucone, Wymaga części) |
 | `staff_notes` | `TEXT` | `NULLABLE` | Bieżąca (ostatnia) notatka portiera dla studenta — nadpisywana przy kolejnej aktualizacji; brak tabeli historii komentarzy w MVP |
-| `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data zgłoszenia |
-| `updated_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data aktualizacji |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data zgłoszenia |
+| `updated_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data aktualizacji |
 
 *Więz integralności lokalizacji:* `CONSTRAINT chk_issue_location CHECK ((room_id IS NOT NULL AND common_area_name IS NULL) OR (room_id IS NULL AND common_area_name IS NOT NULL))` – gwarantuje, że usterka dotyczy dokładnie jednego miejsca (albo pokoju, albo części wspólnej).
 
@@ -356,7 +360,7 @@ Dokumentacja fotograficzna przechowywana w MinIO S3.
 | `photo_url` | `VARCHAR(500)` | `NOT NULL` | Klucz obiektu / URL w MinIO S3 |
 | `file_name` | `VARCHAR(255)` | `NOT NULL` | Oryginalna nazwa pliku |
 | `file_size_bytes`| `INT` | `NOT NULL` | Rozmiar pliku w bajtach |
-| `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu |
 
 ---
 
@@ -374,9 +378,9 @@ Wpisy na tablicy studenckiej z podziałem na zasięg (mój DS / cały kampus).
 | `scope` | `VARCHAR(20)` | `NOT NULL, CHECK (scope IN ('DORMITORY', 'CAMPUS'))` | Zasięg widoczności |
 | `status` | `VARCHAR(20)` | `NOT NULL, DEFAULT 'ACTIVE', CHECK (status IN ('ACTIVE', 'RESOLVED', 'REMOVED_MODERATOR'))` | Stan ogłoszenia |
 | `is_deleted` | `BOOLEAN` | `NOT NULL, DEFAULT FALSE` | Flaga miękkiego usunięcia (Soft Delete) |
-| `deleted_at` | `TIMESTAMP` | `NULLABLE` | Czas usunięcia wpisu |
-| `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data dodania |
-| `updated_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data modyfikacji |
+| `deleted_at` | `TIMESTAMPTZ` | `NULLABLE` | Czas usunięcia wpisu |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data dodania |
+| `updated_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data modyfikacji |
 
 ---
 
@@ -390,8 +394,8 @@ Wątki dyskusyjne pod postami sąsiedzkimi.
 | `author_id` | `UUID` | `FK -> users(id), NOT NULL` | Autor wypowiedzi |
 | `content` | `TEXT` | `NOT NULL` | Treść komentarza |
 | `is_deleted` | `BOOLEAN` | `NOT NULL, DEFAULT FALSE` | Flaga Soft Delete |
-| `deleted_at` | `TIMESTAMP` | `NULLABLE` | Czas usunięcia komentarza |
-| `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu |
+| `deleted_at` | `TIMESTAMPTZ` | `NULLABLE` | Czas usunięcia komentarza |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu |
 
 ---
 
@@ -410,7 +414,7 @@ Ogłoszenia techniczno-organizacyjne (wymiana pościeli, przerwa w dostawie wody
 | `is_pinned` | `BOOLEAN` | `NOT NULL, DEFAULT FALSE` | Czy wyświetlać jako czerwony baner u góry |
 | `event_date` | `TIMESTAMPTZ` | `NOT NULL` | Data rozpoczęcia / termin wymiany |
 | `end_date` | `TIMESTAMPTZ` | `NULLABLE` | Data zakończenia akcji |
-| `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu publikacji |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu publikacji |
 
 ---
 
@@ -428,7 +432,7 @@ Ewidencja prawomocnych sankcji rejestrowanych przez Administratora Domu Studenck
 | `start_date` | `DATE` | `NOT NULL` | Data początkowa kary |
 | `end_date` | `DATE` | `NOT NULL` | Data końcowa (1–3 mies. od startu) |
 | `is_active` | `BOOLEAN` | `NOT NULL, DEFAULT TRUE` | Status obowiązywania kary |
-| `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu nałożenia |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Znacznik czasu nałożenia |
 
 *Zasięg sankcji i rezerwacji salek:* Sankcja `ROOM_BAN` ma charakter globalny na terenie całego Osiedla Studenckiego PK (§6 ust. 2 Regulaminu) — aktywny rekord dla danego `user_id` wyklucza możliwość dokonania rezerwacji salki w całym systemie (klucz `dormitory_id` ma charakter audytowy). Z kolei samo prawo rezerwacji salek w fazie MVP jest ograniczone do mieszkańców zameldowanych w danym akademiku (`user.dormitory_id == thematic_rooms.dormitory_id`) ze względów logistycznych i operacyjnych portierni.
 
@@ -444,13 +448,13 @@ Tymczasowe tokeny kryptograficzne do bezpiecznej procedury odzyskiwania hasła p
 | `token_hash` | `VARCHAR(255)` | `NOT NULL, UNIQUE` | Skrót kryptograficzny tokenu wysłanego w linku |
 | `expires_at` | `TIMESTAMPTZ` | `NOT NULL` | Data i czas wygaśnięcia tokenu (15 minut od wygenerowania) |
 | `used_at` | `TIMESTAMPTZ` | `NULLABLE` | Znacznik czasu wykorzystania tokenu (unieważnienie) |
-| `created_at` | `TIMESTAMP` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Czas wygenerowania żądania |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Czas wygenerowania żądania |
 
 ---
 
 ## 4. Skrypt DDL SQL (PostgreSQL 16)
 
-Poniższy skrypt DDL jest w 100% gotowy do uruchomienia przy inicjalizacji kontenera bazy danych PostgreSQL poprzez mechanizm montowania wolumenu (`/docker-entrypoint-initdb.d/01_init.sql`). W fazie MVP zrezygnowano ze stosowania zewnętrznych narzędzi migracji schematu (takich jak Flyway czy Liquibase) na rzecz bezpośredniego wykonywania skryptu inicjalizującego `01_init.sql` przez oficjalny obraz PostgreSQL.
+Poniższy skrypt DDL stanowi wersjonowaną migrację początkową Flyway (`V1__init_schema.sql` w katalogu `backend/src/main/resources/db/migration/`, kopiowaną do obrazu jako `01_init.sql` dla czystej inicjalizacji kontenera przez `/docker-entrypoint-initdb.d/`). Zgodnie z dobrymi praktykami schemat nie jest modyfikowany przez Hibernate (`spring.jpa.hibernate.ddl-auto=validate`), a ewolucja modelu odbywa się wyłącznie przez kolejne migracje Flyway (`V2__seed_dormitories_and_rooms.sql`, `V3__...` — por. `Diagram_Wdrozenia.md` §6.2).
 
 ```sql
 -- Włączenie rozszerzenia do generowania UUID oraz indeksowania przedziałów czasowych GiST
@@ -467,7 +471,7 @@ CREATE TABLE dormitories (
     laundry_opening_time TIME NOT NULL DEFAULT '07:00:00',
     laundry_closing_time TIME NOT NULL DEFAULT '23:00:00',
     laundry_slot_duration_minutes INT NOT NULL DEFAULT 90 CHECK (laundry_slot_duration_minutes > 0),
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 2. TABELA POKOI
@@ -477,7 +481,7 @@ CREATE TABLE rooms (
     room_number VARCHAR(10) NOT NULL,
     floor INT NOT NULL,
     capacity INT NOT NULL DEFAULT 2 CHECK (capacity > 0),
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_dormitory_room UNIQUE (dormitory_id, room_number)
 );
 
@@ -494,8 +498,11 @@ CREATE TABLE users (
     status VARCHAR(30) NOT NULL CHECK (status IN ('PENDING_EMAIL', 'PENDING_APPROVAL', 'ACTIVE', 'BLOCKED', 'CHECKED_OUT')),
     dormitory_id UUID REFERENCES dormitories(id) ON DELETE SET NULL,
     declared_room_number VARCHAR(10),
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_user_dormitory_scope CHECK (
+        (role = 'SUPER_ADMIN') OR (dormitory_id IS NOT NULL)
+    )
 );
 
 -- 4. TABELA HISTORII KWATERUNKU (MELDUNKI)
@@ -507,7 +514,7 @@ CREATE TABLE room_assignments (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     check_in_date DATE NOT NULL,
     check_out_date DATE,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Tylko jeden aktywny pokój dla studenta naraz
@@ -521,7 +528,7 @@ CREATE TABLE laundry_machines (
     floor_location VARCHAR(50) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE' CHECK (status IN ('AVAILABLE', 'OUT_OF_ORDER')),
     notes TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 6. TABELA REZERWACJI PRALNI
@@ -534,7 +541,7 @@ CREATE TABLE laundry_bookings (
     status VARCHAR(30) NOT NULL DEFAULT 'CONFIRMED' CHECK (status IN ('CONFIRMED', 'KEY_ISSUED', 'COMPLETED', 'CANCELLED_USER', 'AUTO_CANCELLED_15MIN', 'CANCELLED_MACHINE_OUT_OF_ORDER')),
     key_issued_at TIMESTAMPTZ,
     key_returned_at TIMESTAMPTZ,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_laundry_time CHECK (end_time > start_time)
 );
 
@@ -559,7 +566,7 @@ CREATE TABLE thematic_rooms (
     max_duration_hours INT NOT NULL DEFAULT 4 CHECK (max_duration_hours > 0),
     description TEXT,
     status VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE' CHECK (status IN ('AVAILABLE', 'MAINTENANCE')),
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_thematic_hours CHECK (
         (spans_midnight = FALSE AND closing_time > opening_time) OR
         (spans_midnight = TRUE AND closing_time < opening_time)
@@ -579,7 +586,7 @@ CREATE TABLE room_bookings (
     terms_accepted BOOLEAN NOT NULL CHECK (terms_accepted = TRUE),
     key_issued_at TIMESTAMPTZ,
     key_returned_at TIMESTAMPTZ,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_room_time CHECK (end_time > start_time)
 );
 
@@ -603,8 +610,8 @@ CREATE TABLE issues (
     description TEXT NOT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'NEW' CHECK (status IN ('NEW', 'ASSIGNED_TO_MAINTENANCE', 'IN_PROGRESS', 'RESOLVED', 'REJECTED', 'PARTS_REQUIRED')),
     staff_notes TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_issue_location CHECK (
         (room_id IS NOT NULL AND common_area_name IS NULL) OR
         (room_id IS NULL AND common_area_name IS NOT NULL)
@@ -618,7 +625,7 @@ CREATE TABLE issue_photos (
     photo_url VARCHAR(500) NOT NULL,
     file_name VARCHAR(255) NOT NULL,
     file_size_bytes INT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 11. TABELA POSTÓW SĄSIEDZKICH
@@ -632,9 +639,9 @@ CREATE TABLE posts (
     scope VARCHAR(20) NOT NULL DEFAULT 'DORMITORY' CHECK (scope IN ('DORMITORY', 'CAMPUS')),
     status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'RESOLVED', 'REMOVED_MODERATOR')),
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
-    deleted_at TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    deleted_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 12. TABELA KOMENTARZY
@@ -644,8 +651,8 @@ CREATE TABLE comments (
     author_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
-    deleted_at TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    deleted_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 13. TABELA WYDARZEŃ I OFICJALNYCH KOMUNIKATÓW
@@ -660,7 +667,7 @@ CREATE TABLE dorm_events (
     is_pinned BOOLEAN NOT NULL DEFAULT FALSE,
     event_date TIMESTAMPTZ NOT NULL,
     end_date TIMESTAMPTZ,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 14. TABELA SANKCJI REGULAMINOWYCH (CZARNA LISTA SALEK)
@@ -674,7 +681,7 @@ CREATE TABLE sanctions (
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_sanction_dates CHECK (end_date >= start_date)
 );
 
@@ -688,7 +695,7 @@ CREATE TABLE password_reset_tokens (
     token_hash VARCHAR(255) NOT NULL UNIQUE,
     expires_at TIMESTAMPTZ NOT NULL,
     used_at TIMESTAMPTZ,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Indeks wyszukiwania aktywnego tokenu
