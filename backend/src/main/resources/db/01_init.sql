@@ -1,14 +1,14 @@
 -- ==============================================================================
--- PKampus - Schemat Bazy Danych PostgreSQL 16 (01_init.sql / Flyway V1 Baseline)
--- Zgodny z dokumentacją Model_Bazy_Danych_ERD.md
+-- PKampus - PostgreSQL 16 Database Schema (01_init.sql / Flyway V1 Baseline)
+-- Conforming to Model_Bazy_Danych_ERD.md
 -- ==============================================================================
 
--- Włączenie rozszerzenia do generowania UUID oraz indeksowania przedziałów czasowych GiST
+-- Enable extensions for UUID generation and GiST temporal range indexing
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "btree_gist";
 
 -- ------------------------------------------------------------------------------
--- 1. TABELA DOMÓW STUDENCKICH (Dormitories)
+-- 1. DORMITORIES TABLE
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS dormitories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS dormitories (
 );
 
 -- ------------------------------------------------------------------------------
--- 2. TABELA POKOI (Rooms)
+-- 2. ROOMS TABLE
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS rooms (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS rooms (
 );
 
 -- ------------------------------------------------------------------------------
--- 3. TABELA UŻYTKOWNIKÓW (Users)
+-- 3. USERS TABLE
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- ------------------------------------------------------------------------------
--- 4. TABELA HISTORII KWATERUNKU (Room Assignments)
+-- 4. ROOM ASSIGNMENTS TABLE (ACADEMIC YEAR HOUSING ROTATION)
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS room_assignments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -71,11 +71,11 @@ CREATE TABLE IF NOT EXISTS room_assignments (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Tylko jeden aktywny pokój dla studenta naraz
+-- Only one active room per resident at any time
 CREATE UNIQUE INDEX IF NOT EXISTS idx_active_user_assignment ON room_assignments (user_id) WHERE is_active = TRUE;
 
 -- ------------------------------------------------------------------------------
--- 5. TABELA PRALEK (Laundry Machines)
+-- 5. LAUNDRY MACHINES TABLE
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS laundry_machines (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS laundry_machines (
 );
 
 -- ------------------------------------------------------------------------------
--- 6. TABELA REZERWACJI PRALNI (Laundry Bookings)
+-- 6. LAUNDRY BOOKINGS TABLE
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS laundry_bookings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS laundry_bookings (
     CONSTRAINT chk_laundry_time CHECK (end_time > start_time)
 );
 
--- Ochrona przed nakładaniem przedziałów czasowych w pralni (PostgreSQL btree_gist)
+-- Anti-race-condition exclusion constraint for laundry machines (PostgreSQL btree_gist)
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -119,7 +119,7 @@ BEGIN
 END $$;
 
 -- ------------------------------------------------------------------------------
--- 7. TABELA SALEK TEMATYCZNYCH (Thematic Rooms)
+-- 7. THEMATIC ROOMS TABLE
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS thematic_rooms (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -141,7 +141,7 @@ CREATE TABLE IF NOT EXISTS thematic_rooms (
 );
 
 -- ------------------------------------------------------------------------------
--- 8. TABELA REZERWACJI SALEK TEMATYCZNYCH (Room Bookings)
+-- 8. THEMATIC ROOM BOOKINGS TABLE
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS room_bookings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -159,7 +159,7 @@ CREATE TABLE IF NOT EXISTS room_bookings (
     CONSTRAINT chk_room_time CHECK (end_time > start_time)
 );
 
--- Ochrona przed nakładaniem przedziałów czasowych w salkach (PostgreSQL btree_gist)
+-- Anti-race-condition exclusion constraint for thematic rooms (PostgreSQL btree_gist)
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -175,7 +175,7 @@ BEGIN
 END $$;
 
 -- ------------------------------------------------------------------------------
--- 9. TABELA USTEREK (Issues)
+-- 9. MAINTENANCE ISSUES TABLE
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS issues (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -197,7 +197,7 @@ CREATE TABLE IF NOT EXISTS issues (
 );
 
 -- ------------------------------------------------------------------------------
--- 10. TABELA ZDJĘĆ USTEREK (Issue Photos)
+-- 10. ISSUE ATTACHED PHOTOS TABLE (MINIO S3)
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS issue_photos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -209,7 +209,7 @@ CREATE TABLE IF NOT EXISTS issue_photos (
 );
 
 -- ------------------------------------------------------------------------------
--- 11. TABELA POSTÓW SĄSIEDZKICH (Posts)
+-- 11. COMMUNITY POSTS TABLE
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS posts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -227,7 +227,7 @@ CREATE TABLE IF NOT EXISTS posts (
 );
 
 -- ------------------------------------------------------------------------------
--- 12. TABELA KOMENTARZY (Comments)
+-- 12. POST COMMENTS TABLE
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS comments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -240,7 +240,7 @@ CREATE TABLE IF NOT EXISTS comments (
 );
 
 -- ------------------------------------------------------------------------------
--- 13. TABELA WYDARZEŃ I OFICJALNYCH KOMUNIKATÓW (Dorm Events)
+-- 13. DORMITORY EVENTS AND ANNOUNCEMENTS TABLE
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS dorm_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -257,7 +257,7 @@ CREATE TABLE IF NOT EXISTS dorm_events (
 );
 
 -- ------------------------------------------------------------------------------
--- 14. TABELA SANKCJI REGULAMINOWYCH (Sanctions)
+-- 14. SANCTIONS / ROOM BLACKLIST TABLE
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sanctions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -273,11 +273,11 @@ CREATE TABLE IF NOT EXISTS sanctions (
     CONSTRAINT chk_sanction_dates CHECK (end_date >= start_date)
 );
 
--- Indeks przyspieszający sprawdzanie aktywnych sankcji przy rezerwacji
+-- Index for fast sanction check during booking
 CREATE INDEX IF NOT EXISTS idx_active_sanctions ON sanctions (user_id, end_date) WHERE is_active = TRUE;
 
 -- ------------------------------------------------------------------------------
--- 15. TABELA TOKENÓW RESETOWANIA HASŁA (Password Reset Tokens)
+-- 15. PASSWORD RESET TOKENS TABLE
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -288,5 +288,5 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Indeks wyszukiwania aktywnego tokenu
+-- Index for searching active password reset tokens
 CREATE INDEX IF NOT EXISTS idx_pwd_reset_token ON password_reset_tokens (token_hash) WHERE used_at IS NULL;

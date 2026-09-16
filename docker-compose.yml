@@ -1,14 +1,13 @@
 # ==============================================================================
-# PKampus - System Zarządzania Domami Studenckimi Politechniki Krakowskiej
-# Docker Compose - Środowisko Developerskie (Compose Spec v2)
+# PKampus - Development Infrastructure (Docker Compose)
+# ==============================================================================
+# Starts local backing services: PostgreSQL, MinIO S3, and Mailpit SMTP.
+# The backend and frontend run directly on the host machine (IntelliJ / Vite).
 # ==============================================================================
 
 networks:
   pkampus-net:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.28.0.0/16
 
 volumes:
   pg_data:
@@ -18,80 +17,7 @@ volumes:
 
 services:
   # ----------------------------------------------------------------------------
-  # 1. Brama Wejściowa Reverse Proxy & Serwer Statyczny SPA React (PWA)
-  # ----------------------------------------------------------------------------
-  pkampus-proxy:
-    build:
-      context: .
-      dockerfile: ./infra/nginx/Dockerfile
-    image: pkampus-proxy:latest
-    container_name: pkampus-proxy
-    profiles:
-      - app
-      - all
-    restart: unless-stopped
-    ports:
-      - "${PROXY_PORT_BINDING:-80:80}"
-    volumes:
-      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro,z
-      - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro,z
-    networks:
-      - pkampus-net
-    depends_on:
-      pkampus-backend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
-  # ----------------------------------------------------------------------------
-  # 2. Warstwa Aplikacyjna i Logika Biznesowa (Spring Boot 3 / Java 21)
-  # ----------------------------------------------------------------------------
-  pkampus-backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    image: pkampus-backend:latest
-    container_name: pkampus-backend
-    profiles:
-      - app
-      - all
-    restart: unless-stopped
-    environment:
-      - SPRING_PROFILES_ACTIVE=dev
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://pkampus-db:5432/${POSTGRES_DB:-pkampus_db}
-      - SPRING_DATASOURCE_USERNAME=${DB_USER:?DB_USER required}
-      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD required}
-      - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
-      - MINIO_ENDPOINT=http://pkampus-minio:9000
-      - MINIO_ACCESS_KEY=${MINIO_APP_USER:-pkampus_app}
-      - MINIO_SECRET_KEY=${MINIO_APP_PASSWORD:?MINIO_APP_PASSWORD required}
-      - MINIO_BUCKET_ISSUES=${MINIO_BUCKET_ISSUES:-pkampus-issues}
-      - MINIO_BUCKET_AVATARS=${MINIO_BUCKET_AVATARS:-pkampus-avatars}
-      - SPRING_MAIL_HOST=pkampus-mailpit
-      - SPRING_MAIL_PORT=1025
-      - SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=false
-      - SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=false
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET required}
-    networks:
-      - pkampus-net
-    depends_on:
-      pkampus-db:
-        condition: service_healthy
-      pkampus-minio:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep UP || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 25s
-
-  # ----------------------------------------------------------------------------
-  # 3. Relacyjna Baza Danych (PostgreSQL 16 Alpine)
+  # 1. Relational Database (PostgreSQL 16 Alpine)
   # ----------------------------------------------------------------------------
   pkampus-db:
     image: postgres:16-alpine
@@ -105,7 +31,6 @@ services:
       - POSTGRES_PASSWORD=${DB_PASSWORD:?DB_PASSWORD required}
     volumes:
       - pg_data:/var/lib/postgresql/data
-      # Inicjalizacja schematu bazy (kopia baseline Flyway V1); dalsza ewolucja przez migracje Flyway
       - ./backend/src/main/resources/db/01_init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro,z
     networks:
       - pkampus-net
@@ -116,7 +41,7 @@ services:
       retries: 5
 
   # ----------------------------------------------------------------------------
-  # 4. Magazyn Obiektowy na Zdjęcia Usterek i Awatary (MinIO S3)
+  # 2. Object Storage (MinIO S3)
   # ----------------------------------------------------------------------------
   pkampus-minio:
     image: quay.io/minio/minio:latest
@@ -139,7 +64,7 @@ services:
       timeout: 5s
       retries: 3
 
-  # Inicjalizacja bucketów i konta aplikacyjnego MinIO (Least Privilege)
+  # Initialization job to create buckets and app user
   pkampus-minio-init:
     image: quay.io/minio/mc:latest
     container_name: pkampus-minio-init
@@ -166,7 +91,7 @@ services:
       "
 
   # ----------------------------------------------------------------------------
-  # 5. Serwer Pocztowy Dev/Test (Mailpit SMTP + Web UI)
+  # 3. Mail Service (Mailpit SMTP + Web UI)
   # ----------------------------------------------------------------------------
   pkampus-mailpit:
     image: axllent/mailpit
