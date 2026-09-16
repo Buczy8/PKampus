@@ -79,7 +79,7 @@ Zgodnie z wymogami inżynierii oprogramowania każdy węzeł i artefakt środowi
 | **`pkampus-proxy`** | `nginx:alpine` (multi-stage build z `node:20-alpine`) | Skompilowany pakiet **React PWA** (`manifest.webmanifest`, `sw.js`, HTML/JS/CSS, ikony) budowany w kontenerze + plik `nginx.conf` | **Zewn:** 80 (HTTP), 443 (HTTPS)<br/>**Wewn:** brak | Brama wejściowa serwera (Reverse Proxy). Wymusza HTTPS, serwuje statyczne zasoby PWA (App Shell, cache), terminacja SSL oraz przekazuje zapytania `/api/*` (prefiks obejmujący `/api/v1/*`) do kontenera backendu. |
 | **`pkampus-backend`** | `eclipse-temurin:21-jre-alpine` | `pkampus-backend.jar` (Spring Boot Executable JAR na Java 21) | **Zewn:** brak (izolacja)<br/>**Wewn:** 8080 | Główna warstwa logiki biznesowej, uwierzytelniania JWT, transakcji rezerwacji pralni/salek, walidacji czarnej listy oraz obsługi zgłoszeń usterek. |
 | **`pkampus-db`** | `postgres:16-alpine` | Instancja silnika PostgreSQL 16 + DDL schematu | **Zewn:** brak (izolacja)<br/>**Wewn:** 5432 | Relacyjny magazyn danych. Przechowuje 15 tabel domenowych, realizuje blokady transakcyjne, egzekwuje ograniczenia `EXCLUDE USING gist` (anti-overlap) i integralność referencyjną. |
-| **`pkampus-minio`** | `minio/minio` | Silnik MinIO Object Storage | **Zewn:** brak<br/>**Wewn:** 9000 (S3 API), 9001 (Console) | Magazyn obiektowy S3. Buckety: `pkampus-issues` (zdjęcia usterek) oraz `pkampus-avatars` (zdjęcia karty mieszkańca); dostęp tylko przez backend (bez publicznego anonymous download). |
+| **`pkampus-minio`** | `quay.io/minio/minio:latest` | Silnik MinIO Object Storage | **Zewn:** brak<br/>**Wewn:** 9000 (S3 API), 9001 (Console) | Magazyn obiektowy S3. Buckety: `pkampus-issues` (zdjęcia usterek) oraz `pkampus-avatars` (zdjęcia karty mieszkańca); dostęp tylko przez backend (bez publicznego anonymous download). |
 | **`pkampus-mailpit`** | `axllent/mailpit` | Serwer Mailpit (uruchamiany wyłącznie z profilami `demo`, `dev`) | **Zewn:** 8025 (Web UI - dev only)<br/>**Wewn:** 1025 (SMTP) | Serwer pocztowy w kontenerze na potrzeby środowiska deweloperskiego/pokazowego. W profilu `production` kontener nie startuje, a backend łączy się bezpośrednio z uczelnianym serwerem SMTP PK. |
 | **`pkampus-certbot`** | `certbot/certbot:latest` | Klient ACME Certbot (uruchamiany z profilem `production`) | **Zewn:** brak<br/>**Wewn:** brak | Usługa dla profilu produkcyjnego (VPS PK). Skrypt startowy weryfikuje obecność certyfikatu, wykonuje inicjalne żądanie certyfikatu (`certbot certonly`), a następnie cyklicznie odnawia certyfikat Let's Encrypt (`certbot renew` co 12h). |
 
@@ -258,7 +258,7 @@ services:
   # Magazyn Obiektowy na Zdjęcia Usterek i Awatary (MinIO S3)
   # -------------------------------------------------------------
   pkampus-minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     container_name: pkampus-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -277,7 +277,7 @@ services:
 
   # Inicjalizacja bucketów i dedykowanego użytkownika aplikacyjnego MinIO (Least Privilege)
   pkampus-minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     container_name: pkampus-minio-init
     depends_on:
       pkampus-minio:
