@@ -32,6 +32,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-mail")
 
+    // OpenAPI 3 / Swagger Documentation
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
+
     // Database & Migrations
     runtimeOnly("org.postgresql:postgresql")
     implementation("org.flywaydb:flyway-core")
