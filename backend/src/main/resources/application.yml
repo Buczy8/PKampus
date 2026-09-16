@@ -1,11 +1,10 @@
-spring:
-  application:
-    name: pkampus-backend
-
 server:
   port: 8080
 
 spring:
+  application:
+    name: pkampus-backend
+
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/pkampus_db}
     username: ${SPRING_DATASOURCE_USERNAME:pkampus_user}
