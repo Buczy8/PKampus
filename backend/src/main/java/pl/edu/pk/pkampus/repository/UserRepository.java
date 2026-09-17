@@ -12,6 +12,7 @@ import java.util.UUID;
 @Repository
 public interface UserRepository extends JpaRepository<User, UUID> {
 
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"dormitory"})
     Optional<User> findByEmail(String email);
 
     boolean existsByEmail(String email);

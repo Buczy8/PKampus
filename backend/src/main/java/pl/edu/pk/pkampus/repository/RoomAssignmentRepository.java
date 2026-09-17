@@ -11,6 +11,7 @@ import java.util.UUID;
 @Repository
 public interface RoomAssignmentRepository extends JpaRepository<RoomAssignment, UUID> {
 
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"room"})
     Optional<RoomAssignment> findByUserIdAndIsActiveTrue(UUID userId);
 
     List<RoomAssignment> findAllByUserId(UUID userId);

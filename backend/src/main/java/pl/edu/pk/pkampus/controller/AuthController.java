@@ -78,7 +78,7 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(ApiResponse.error("Użytkownik nie jest uwierzytelniony"));
         }
-        UserProfileDto profile = authService.buildUserProfileDto(user, user.getDeclaredRoomNumber());
+        UserProfileDto profile = authService.getCurrentUserProfile(user.getId());
         return ResponseEntity.ok(ApiResponse.ok(profile));
     }
 }

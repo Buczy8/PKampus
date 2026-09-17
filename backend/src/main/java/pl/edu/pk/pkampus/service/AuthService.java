@@ -23,6 +23,8 @@ import pl.edu.pk.pkampus.repository.DormitoryRepository;
 import pl.edu.pk.pkampus.repository.RoomAssignmentRepository;
 import pl.edu.pk.pkampus.repository.UserRepository;
 
+import java.util.UUID;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -151,7 +153,26 @@ public class AuthService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
+    public UserProfileDto getCurrentUserProfile(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Nie znaleziono użytkownika"));
+
+        String roomNumber = roomAssignmentRepository.findByUserIdAndIsActiveTrue(user.getId())
+                .map(ra -> ra.getRoom().getRoomNumber())
+                .orElse(user.getDeclaredRoomNumber());
+
+        return buildUserProfileDto(user, roomNumber);
+    }
+
     public UserProfileDto buildUserProfileDto(User user, String roomNumber) {
+        UUID dormId = null;
+        String dormName = null;
+        if (user.getDormitory() != null) {
+            dormId = user.getDormitory().getId();
+            dormName = user.getDormitory().getName();
+        }
+
         return UserProfileDto.builder()
                 .id(user.getId())
                 .email(user.getEmail())
@@ -161,8 +182,8 @@ public class AuthService {
                 .avatarUrl(user.getAvatarUrl())
                 .role(user.getRole())
                 .status(user.getStatus())
-                .dormitoryId(user.getDormitory() != null ? user.getDormitory().getId() : null)
-                .dormitoryName(user.getDormitory() != null ? user.getDormitory().getName() : null)
+                .dormitoryId(dormId)
+                .dormitoryName(dormName)
                 .roomNumber(roomNumber)
                 .createdAt(user.getCreatedAt())
                 .build();

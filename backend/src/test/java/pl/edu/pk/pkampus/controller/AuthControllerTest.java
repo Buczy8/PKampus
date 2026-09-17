@@ -42,6 +42,12 @@ class AuthControllerTest {
     @MockBean
     private AuthService authService;
 
+    @MockBean
+    private pl.edu.pk.pkampus.config.JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    @MockBean
+    private pl.edu.pk.pkampus.repository.UserRepository userRepository;
+
     @Test
     void shouldRegisterResidentViaMultipart() throws Exception {
         RegisterRequestDto dto = RegisterRequestDto.builder()
@@ -117,5 +123,44 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.status").value("PENDING_APPROVAL"));
+    }
+
+    @Test
+    void shouldGetCurrentUserProfile() throws Exception {
+        pl.edu.pk.pkampus.model.User user = pl.edu.pk.pkampus.model.User.builder()
+                .id(UUID.randomUUID())
+                .email("student@pk.edu.pl")
+                .firstName("Jan")
+                .lastName("Kowalski")
+                .role(UserRole.RESIDENT)
+                .status(UserStatus.ACTIVE)
+                .declaredRoomNumber("101")
+                .build();
+
+        UserProfileDto profile = UserProfileDto.builder()
+                .id(user.getId())
+                .email("student@pk.edu.pl")
+                .firstName("Jan")
+                .lastName("Kowalski")
+                .role(UserRole.RESIDENT)
+                .status(UserStatus.ACTIVE)
+                .roomNumber("101")
+                .build();
+
+        when(authService.getCurrentUserProfile(user.getId())).thenReturn(profile);
+
+        org.springframework.security.authentication.UsernamePasswordAuthenticationToken auth =
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+
+        try {
+            mockMvc.perform(get("/api/v1/auth/me"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true))
+                    .andExpect(jsonPath("$.data.email").value("student@pk.edu.pl"))
+                    .andExpect(jsonPath("$.data.firstName").value("Jan"));
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
     }
 }
