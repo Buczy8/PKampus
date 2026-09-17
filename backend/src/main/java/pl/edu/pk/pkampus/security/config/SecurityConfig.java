@@ -36,9 +36,11 @@ public class SecurityConfig {
     private final pl.edu.pk.pkampus.security.ratelimit.LoginRateLimitFilter loginRateLimitFilter;
     private final UserRepository userRepository;
 
+    public static final int BCRYPT_STRENGTH = 12; // NFR-SEC-02: 12 rounds salt hashing
+
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        return new BCryptPasswordEncoder(BCRYPT_STRENGTH);
     }
 
     @Bean
