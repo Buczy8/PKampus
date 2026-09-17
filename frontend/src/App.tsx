@@ -1,10 +1,17 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
+import { ResidentShell } from '@/components/layout/ResidentShell'
 import { AdminPage } from '@/pages/AdminPage'
+import { BoardPage } from '@/pages/BoardPage'
+import { CardPage } from '@/pages/CardPage'
 import { DashboardPage } from '@/pages/DashboardPage'
+import { IssuesPage } from '@/pages/IssuesPage'
+import { LaundryPage } from '@/pages/LaundryPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { PendingApprovalPage } from '@/pages/PendingApprovalPage'
 import { RegisterPage } from '@/pages/RegisterPage'
+import { RoomsPage } from '@/pages/RoomsPage'
+import { SettingsPage } from '@/pages/SettingsPage'
 import { VerifyEmailPage } from '@/pages/VerifyEmailPage'
 
 export function App() {
@@ -17,10 +24,20 @@ export function App() {
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/pending-approval" element={<PendingApprovalPage />} />
 
+        {/* Resident Authenticated Portal */}
         <Route element={<ProtectedRoute />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route element={<ResidentShell />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/card" element={<CardPage />} />
+            <Route path="/laundry" element={<LaundryPage />} />
+            <Route path="/rooms" element={<RoomsPage />} />
+            <Route path="/issues" element={<IssuesPage />} />
+            <Route path="/board" element={<BoardPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Route>
         </Route>
 
+        {/* Administration Portal */}
         <Route element={<ProtectedRoute adminOnly />}>
           <Route path="/admin" element={<AdminPage />} />
         </Route>
