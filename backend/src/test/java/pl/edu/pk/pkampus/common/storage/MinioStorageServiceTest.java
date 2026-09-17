@@ -34,11 +34,12 @@ class MinioStorageServiceTest {
 
     @Test
     void shouldUploadAvatarSuccessfullyForValidJpeg() throws Exception {
+        byte[] jpegBytes = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0, 0, 0, 0};
         MockMultipartFile file = new MockMultipartFile(
                 "photo",
                 "avatar.jpg",
                 "image/jpeg",
-                new byte[]{1, 2, 3, 4}
+                jpegBytes
         );
 
         String objectName = storageService.uploadAvatar(file);
@@ -50,11 +51,15 @@ class MinioStorageServiceTest {
 
     @Test
     void shouldUploadAvatarSuccessfullyForValidPng() throws Exception {
+        byte[] pngBytes = new byte[]{
+                (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+                0, 0, 0, 0, 0, 0, 0, 0
+        };
         MockMultipartFile file = new MockMultipartFile(
                 "photo",
                 "avatar.png",
                 "image/png",
-                new byte[]{1, 2, 3, 4}
+                pngBytes
         );
 
         String objectName = storageService.uploadAvatar(file);
@@ -66,11 +71,15 @@ class MinioStorageServiceTest {
 
     @Test
     void shouldUploadAvatarSuccessfullyForValidWebp() throws Exception {
+        byte[] webpBytes = new byte[]{
+                'R', 'I', 'F', 'F', 0, 0, 0, 0,
+                'W', 'E', 'B', 'P', 0, 0, 0, 0
+        };
         MockMultipartFile file = new MockMultipartFile(
                 "photo",
                 "avatar.webp",
                 "image/webp",
-                new byte[]{1, 2, 3, 4}
+                webpBytes
         );
 
         String objectName = storageService.uploadAvatar(file);
@@ -78,6 +87,44 @@ class MinioStorageServiceTest {
         assertNotNull(objectName);
         assertTrue(objectName.endsWith(".webp"));
         verify(minioClient).putObject(any(PutObjectArgs.class));
+    }
+
+    @Test
+    void shouldRejectSpoofedFileWhenDeclaredJpegButBinaryIsMaliciousTextOrShell() {
+        byte[] scriptBytes = "#!/bin/bash\necho hacked".getBytes();
+        MockMultipartFile file = new MockMultipartFile(
+                "photo",
+                "malicious.jpg",
+                "image/jpeg",
+                scriptBytes
+        );
+
+        InvalidFileException ex = assertThrows(
+                InvalidFileException.class,
+                () -> storageService.uploadAvatar(file)
+        );
+        assertTrue(ex.getMessage().contains("signature does not match"));
+    }
+
+    @Test
+    void shouldRejectWhenDeclaredContentTypeDoesNotMatchBinaryFormat() {
+        // Real PNG bytes, but declared as image/jpeg in HTTP header
+        byte[] pngBytes = new byte[]{
+                (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+                0, 0, 0, 0, 0, 0, 0, 0
+        };
+        MockMultipartFile file = new MockMultipartFile(
+                "photo",
+                "spoofed.jpg",
+                "image/jpeg",
+                pngBytes
+        );
+
+        InvalidFileException ex = assertThrows(
+                InvalidFileException.class,
+                () -> storageService.uploadAvatar(file)
+        );
+        assertTrue(ex.getMessage().contains("MIME type mismatch"));
     }
 
     @Test
