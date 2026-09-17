@@ -8,6 +8,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import pl.edu.pk.pkampus.exception.EmailVerificationTokenInvalidException;
 
 import java.time.OffsetDateTime;
 import java.util.HashMap;
@@ -43,6 +44,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(EmailVerificationTokenInvalidException.class)
+    public ResponseEntity<ApiResponse<Void>> handleEmailVerificationTokenInvalid(EmailVerificationTokenInvalidException ex) {
+        return ResponseEntity.status(HttpStatus.GONE)
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
