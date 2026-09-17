@@ -54,3 +54,13 @@ jwt:
   secret: ${JWT_SECRET:pkampus_jwt_super_secret_key_development_min_32_characters_long_2026!}
   expiration-minutes: 15
   refresh-expiration-days: 7
+
+app:
+  frontend:
+    url: ${FRONTEND_URL:http://localhost:5173}
+  security:
+    email-token-ttl-hours: 24
+    rate-limit:
+      login:
+        capacity: ${LOGIN_RATE_LIMIT_CAPACITY:5}
+        duration-minutes: ${LOGIN_RATE_LIMIT_DURATION_MINUTES:1}

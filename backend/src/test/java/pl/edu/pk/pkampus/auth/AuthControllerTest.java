@@ -49,6 +49,9 @@ class AuthControllerTest {
     private pl.edu.pk.pkampus.security.config.JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @MockBean
+    private pl.edu.pk.pkampus.security.ratelimit.LoginRateLimitFilter loginRateLimitFilter;
+
+    @MockBean
     private UserRepository userRepository;
 
     @Test
