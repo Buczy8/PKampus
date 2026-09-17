@@ -2,6 +2,9 @@ import { useState, type ComponentProps, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { cn } from 'cn'
 
+import { login } from '@/api/auth'
+import { getApiErrorMessage } from '@/api/errors'
+import { setAuthTokens } from '@/lib/auth-storage'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -22,6 +25,7 @@ import { Input } from '@/components/ui/input'
 type LoginErrors = {
   email?: string
   password?: string
+  form?: string
 }
 
 function validateEmail(email: string): string | undefined {
@@ -38,8 +42,9 @@ export function LoginForm({
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errors, setErrors] = useState<LoginErrors>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     const nextErrors: LoginErrors = {
@@ -50,7 +55,16 @@ export function LoginForm({
     setErrors(nextErrors)
     if (nextErrors.email || nextErrors.password) return
 
-    navigate('/dashboard')
+    setIsSubmitting(true)
+    try {
+      const auth = await login({ email: email.trim(), password })
+      setAuthTokens(auth.token, auth.refreshToken)
+      navigate('/dashboard')
+    } catch (error) {
+      setErrors({ form: getApiErrorMessage(error, 'Login failed') })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -78,6 +92,7 @@ export function LoginForm({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   aria-invalid={Boolean(errors.email)}
+                  disabled={isSubmitting}
                 />
                 {errors.email ? <FieldError>{errors.email}</FieldError> : null}
               </Field>
@@ -99,11 +114,19 @@ export function LoginForm({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   aria-invalid={Boolean(errors.password)}
+                  disabled={isSubmitting}
                 />
                 {errors.password ? <FieldError>{errors.password}</FieldError> : null}
               </Field>
+              {errors.form ? (
+                <Field data-invalid>
+                  <FieldError>{errors.form}</FieldError>
+                </Field>
+              ) : null}
               <Field>
-                <Button type="submit">Login</Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Logging in…' : 'Login'}
+                </Button>
                 <FieldDescription className="text-center">
                   Don&apos;t have an account? <Link to="/register">Sign up</Link>
                 </FieldDescription>

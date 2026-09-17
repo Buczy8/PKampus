@@ -1,7 +1,11 @@
 import { useRef, useState, type ComponentProps, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { cn } from 'cn'
 
+import { registerResident } from '@/api/auth'
+import { getDormitories } from '@/api/dormitories'
+import { getApiErrorMessage } from '@/api/errors'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -26,12 +30,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-const MOCK_DORMITORIES = [
-  { id: '11111111-1111-1111-1111-111111111111', name: 'DS Akropol' },
-  { id: '22222222-2222-2222-2222-222222222222', name: 'DS Olimp' },
-  { id: '33333333-3333-3333-3333-333333333333', name: 'DS Neon' },
-] as const
-
 const PASSWORD_PATTERN = /^(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).{8,}$/
 const PHONE_PATTERN = /^\+?[0-9]{9,15}$/
 
@@ -44,7 +42,8 @@ type RegisterErrors = Partial<
     | 'phoneNumber'
     | 'dormitoryId'
     | 'declaredRoomNumber'
-    | 'photo',
+    | 'photo'
+    | 'form',
     string
   >
 >
@@ -60,7 +59,6 @@ export function RegisterForm({
   className,
   ...props
 }: ComponentProps<'div'>) {
-  const navigate = useNavigate()
   const photoPreviewUrlRef = useRef<string | null>(null)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -72,6 +70,13 @@ export function RegisterForm({
   const [photo, setPhoto] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [errors, setErrors] = useState<RegisterErrors>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  const dormitoriesQuery = useQuery({
+    queryKey: ['dormitories'],
+    queryFn: getDormitories,
+  })
 
   function updatePhoto(file: File | null) {
     if (photoPreviewUrlRef.current) {
@@ -88,8 +93,9 @@ export function RegisterForm({
     setPhotoPreview(url)
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setSuccessMessage(null)
 
     const nextErrors: RegisterErrors = {
       firstName: firstName.trim()
@@ -124,8 +130,31 @@ export function RegisterForm({
 
     setErrors(nextErrors)
     if (Object.values(nextErrors).some(Boolean)) return
+    if (!photo) return
 
-    navigate('/dashboard')
+    setIsSubmitting(true)
+    try {
+      const response = await registerResident(
+        {
+          email: email.trim(),
+          password,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phoneNumber: phoneNumber.trim(),
+          dormitoryId,
+          declaredRoomNumber: declaredRoomNumber.trim(),
+        },
+        photo,
+      )
+      setSuccessMessage(
+        response.message ||
+          'Registration successful. Check your email to activate the account.',
+      )
+    } catch (error) {
+      setErrors({ form: getApiErrorMessage(error, 'Registration failed') })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -141,131 +170,172 @@ export function RegisterForm({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} noValidate>
-            <FieldGroup>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field data-invalid={Boolean(errors.firstName) || undefined}>
-                  <FieldLabel htmlFor="firstName">First name</FieldLabel>
+          {successMessage ? (
+            <div className="flex flex-col gap-4">
+              <p className="text-sm text-muted-foreground">{successMessage}</p>
+              <FieldDescription className="text-center">
+                <Link to="/login">Back to login</Link>
+              </FieldDescription>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} noValidate>
+              <FieldGroup>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field data-invalid={Boolean(errors.firstName) || undefined}>
+                    <FieldLabel htmlFor="firstName">First name</FieldLabel>
+                    <Input
+                      id="firstName"
+                      autoComplete="given-name"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      aria-invalid={Boolean(errors.firstName)}
+                      disabled={isSubmitting}
+                    />
+                    {errors.firstName ? <FieldError>{errors.firstName}</FieldError> : null}
+                  </Field>
+                  <Field data-invalid={Boolean(errors.lastName) || undefined}>
+                    <FieldLabel htmlFor="lastName">Last name</FieldLabel>
+                    <Input
+                      id="lastName"
+                      autoComplete="family-name"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      aria-invalid={Boolean(errors.lastName)}
+                      disabled={isSubmitting}
+                    />
+                    {errors.lastName ? <FieldError>{errors.lastName}</FieldError> : null}
+                  </Field>
+                </div>
+
+                <Field data-invalid={Boolean(errors.email) || undefined}>
+                  <FieldLabel htmlFor="register-email">Email</FieldLabel>
                   <Input
-                    id="firstName"
-                    autoComplete="given-name"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    aria-invalid={Boolean(errors.firstName)}
+                    id="register-email"
+                    type="email"
+                    placeholder="m@example.com"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    aria-invalid={Boolean(errors.email)}
+                    disabled={isSubmitting}
                   />
-                  {errors.firstName ? <FieldError>{errors.firstName}</FieldError> : null}
+                  {errors.email ? <FieldError>{errors.email}</FieldError> : null}
                 </Field>
-                <Field data-invalid={Boolean(errors.lastName) || undefined}>
-                  <FieldLabel htmlFor="lastName">Last name</FieldLabel>
+
+                <Field data-invalid={Boolean(errors.password) || undefined}>
+                  <FieldLabel htmlFor="register-password">Password</FieldLabel>
                   <Input
-                    id="lastName"
-                    autoComplete="family-name"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    aria-invalid={Boolean(errors.lastName)}
+                    id="register-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    aria-invalid={Boolean(errors.password)}
+                    disabled={isSubmitting}
                   />
-                  {errors.lastName ? <FieldError>{errors.lastName}</FieldError> : null}
+                  {errors.password ? <FieldError>{errors.password}</FieldError> : null}
                 </Field>
-              </div>
 
-              <Field data-invalid={Boolean(errors.email) || undefined}>
-                <FieldLabel htmlFor="register-email">Email</FieldLabel>
-                <Input
-                  id="register-email"
-                  type="email"
-                  placeholder="m@example.com"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  aria-invalid={Boolean(errors.email)}
-                />
-                {errors.email ? <FieldError>{errors.email}</FieldError> : null}
-              </Field>
-
-              <Field data-invalid={Boolean(errors.password) || undefined}>
-                <FieldLabel htmlFor="register-password">Password</FieldLabel>
-                <Input
-                  id="register-password"
-                  type="password"
-                  autoComplete="new-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  aria-invalid={Boolean(errors.password)}
-                />
-                {errors.password ? <FieldError>{errors.password}</FieldError> : null}
-              </Field>
-
-              <Field data-invalid={Boolean(errors.phoneNumber) || undefined}>
-                <FieldLabel htmlFor="phoneNumber">Phone number</FieldLabel>
-                <Input
-                  id="phoneNumber"
-                  type="tel"
-                  placeholder="+48123456789"
-                  autoComplete="tel"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  aria-invalid={Boolean(errors.phoneNumber)}
-                />
-                {errors.phoneNumber ? <FieldError>{errors.phoneNumber}</FieldError> : null}
-              </Field>
-
-              <Field data-invalid={Boolean(errors.dormitoryId) || undefined}>
-                <FieldLabel htmlFor="dormitoryId">Dormitory</FieldLabel>
-                <Select value={dormitoryId} onValueChange={setDormitoryId}>
-                  <SelectTrigger id="dormitoryId" className="w-full" aria-invalid={Boolean(errors.dormitoryId)}>
-                    <SelectValue placeholder="Select a dormitory" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MOCK_DORMITORIES.map((dorm) => (
-                      <SelectItem key={dorm.id} value={dorm.id}>
-                        {dorm.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.dormitoryId ? <FieldError>{errors.dormitoryId}</FieldError> : null}
-              </Field>
-
-              <Field data-invalid={Boolean(errors.declaredRoomNumber) || undefined}>
-                <FieldLabel htmlFor="declaredRoomNumber">Declared room number</FieldLabel>
-                <Input
-                  id="declaredRoomNumber"
-                  value={declaredRoomNumber}
-                  onChange={(e) => setDeclaredRoomNumber(e.target.value)}
-                  aria-invalid={Boolean(errors.declaredRoomNumber)}
-                />
-                {errors.declaredRoomNumber ? (
-                  <FieldError>{errors.declaredRoomNumber}</FieldError>
-                ) : null}
-              </Field>
-
-              <Field data-invalid={Boolean(errors.photo) || undefined}>
-                <FieldLabel htmlFor="photo">Photo</FieldLabel>
-                <Input
-                  id="photo"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => updatePhoto(e.target.files?.[0] ?? null)}
-                  aria-invalid={Boolean(errors.photo)}
-                />
-                {errors.photo ? <FieldError>{errors.photo}</FieldError> : null}
-                {photoPreview ? (
-                  <img
-                    src={photoPreview}
-                    alt="Selected registration photo preview"
-                    className="mt-1 h-24 w-24 rounded-md border object-cover"
+                <Field data-invalid={Boolean(errors.phoneNumber) || undefined}>
+                  <FieldLabel htmlFor="phoneNumber">Phone number</FieldLabel>
+                  <Input
+                    id="phoneNumber"
+                    type="tel"
+                    placeholder="+48123456789"
+                    autoComplete="tel"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    aria-invalid={Boolean(errors.phoneNumber)}
+                    disabled={isSubmitting}
                   />
-                ) : null}
-              </Field>
+                  {errors.phoneNumber ? <FieldError>{errors.phoneNumber}</FieldError> : null}
+                </Field>
 
-              <Field>
-                <Button type="submit">Create account</Button>
-                <FieldDescription className="text-center">
-                  Already have an account? <Link to="/login">Login</Link>
-                </FieldDescription>
-              </Field>
-            </FieldGroup>
-          </form>
+                <Field data-invalid={Boolean(errors.dormitoryId) || undefined}>
+                  <FieldLabel htmlFor="dormitoryId">Dormitory</FieldLabel>
+                  <Select
+                    value={dormitoryId}
+                    onValueChange={setDormitoryId}
+                    disabled={isSubmitting || dormitoriesQuery.isLoading}
+                  >
+                    <SelectTrigger
+                      id="dormitoryId"
+                      className="w-full"
+                      aria-invalid={Boolean(errors.dormitoryId)}
+                    >
+                      <SelectValue
+                        placeholder={
+                          dormitoriesQuery.isLoading
+                            ? 'Loading dormitories…'
+                            : 'Select a dormitory'
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(dormitoriesQuery.data ?? []).map((dorm) => (
+                        <SelectItem key={dorm.id} value={dorm.id}>
+                          {dorm.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.dormitoryId ? <FieldError>{errors.dormitoryId}</FieldError> : null}
+                  {dormitoriesQuery.isError ? (
+                    <FieldError>{getApiErrorMessage(dormitoriesQuery.error)}</FieldError>
+                  ) : null}
+                </Field>
+
+                <Field data-invalid={Boolean(errors.declaredRoomNumber) || undefined}>
+                  <FieldLabel htmlFor="declaredRoomNumber">Declared room number</FieldLabel>
+                  <Input
+                    id="declaredRoomNumber"
+                    value={declaredRoomNumber}
+                    onChange={(e) => setDeclaredRoomNumber(e.target.value)}
+                    aria-invalid={Boolean(errors.declaredRoomNumber)}
+                    disabled={isSubmitting}
+                  />
+                  {errors.declaredRoomNumber ? (
+                    <FieldError>{errors.declaredRoomNumber}</FieldError>
+                  ) : null}
+                </Field>
+
+                <Field data-invalid={Boolean(errors.photo) || undefined}>
+                  <FieldLabel htmlFor="photo">Photo</FieldLabel>
+                  <Input
+                    id="photo"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => updatePhoto(e.target.files?.[0] ?? null)}
+                    aria-invalid={Boolean(errors.photo)}
+                    disabled={isSubmitting}
+                  />
+                  {errors.photo ? <FieldError>{errors.photo}</FieldError> : null}
+                  {photoPreview ? (
+                    <img
+                      src={photoPreview}
+                      alt="Selected registration photo preview"
+                      className="mt-1 h-24 w-24 rounded-md border object-cover"
+                    />
+                  ) : null}
+                </Field>
+
+                {errors.form ? (
+                  <Field data-invalid>
+                    <FieldError>{errors.form}</FieldError>
+                  </Field>
+                ) : null}
+
+                <Field>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? 'Creating account…' : 'Create account'}
+                  </Button>
+                  <FieldDescription className="text-center">
+                    Already have an account? <Link to="/login">Login</Link>
+                  </FieldDescription>
+                </Field>
+              </FieldGroup>
+            </form>
+          )}
         </CardContent>
       </Card>
     </div>

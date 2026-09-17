@@ -9,6 +9,9 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -24,7 +27,8 @@ public class EmailService {
 
     @Async
     public void sendVerificationEmail(String toEmail, String token) {
-        String verificationLink = frontendUrl + "/verify-email?token=" + token;
+        String verificationLink = frontendUrl + "/verify-email?token="
+                + URLEncoder.encode(token, StandardCharsets.UTF_8);
         String subject = "PKampus - Confirm your registration";
         String htmlContent = """
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
