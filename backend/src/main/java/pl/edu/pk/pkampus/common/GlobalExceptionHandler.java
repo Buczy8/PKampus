@@ -8,9 +8,11 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import pl.edu.pk.pkampus.exception.AccountStatusException;
 import pl.edu.pk.pkampus.exception.EmailVerificationTokenInvalidException;
 import pl.edu.pk.pkampus.exception.FileStorageException;
 import pl.edu.pk.pkampus.exception.InvalidFileException;
+import pl.edu.pk.pkampus.exception.ResourceNotFoundException;
 
 import java.time.OffsetDateTime;
 import java.util.HashMap;
@@ -64,6 +66,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(FileStorageException.class)
     public ResponseEntity<ApiResponse<Void>> handleFileStorage(FileStorageException ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(AccountStatusException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccountStatus(AccountStatusException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleResourceNotFound(ResourceNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
