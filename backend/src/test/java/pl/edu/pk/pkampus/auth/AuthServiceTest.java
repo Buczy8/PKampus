@@ -139,6 +139,19 @@ class AuthServiceTest {
     }
 
     @Test
+    void shouldCompensateAndRemoveUploadedAvatarWhenDatabaseSaveFails() {
+        when(userRepository.existsByEmail("student@pk.edu.pl")).thenReturn(false);
+        when(dormitoryRepository.findById(registerDto.getDormitoryId())).thenReturn(Optional.of(testDormitory));
+        when(minioStorageService.uploadAvatar(testPhoto)).thenReturn("avatar-uuid.jpg");
+        when(passwordEncoder.encode(registerDto.getPassword())).thenReturn("hashedPass123!");
+        when(userRepository.save(any(User.class))).thenThrow(new RuntimeException("DB error"));
+
+        assertThrows(RuntimeException.class, () -> authService.registerResident(registerDto, testPhoto));
+
+        verify(minioStorageService).removeAvatar("avatar-uuid.jpg");
+    }
+
+    @Test
     void shouldHandleAntiEnumerationWhenEmailAlreadyExists() {
         when(userRepository.existsByEmail("student@pk.edu.pl")).thenReturn(true);
 

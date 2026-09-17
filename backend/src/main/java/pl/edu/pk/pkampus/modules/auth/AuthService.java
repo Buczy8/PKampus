@@ -69,29 +69,40 @@ public class AuthService {
         // Upload avatar to MinIO S3
         String avatarUrl = minioStorageService.uploadAvatar(photo);
 
-        // Create resident in PENDING_EMAIL state
-        User user = User.builder()
-                .email(normalizedEmail)
-                .passwordHash(passwordEncoder.encode(dto.getPassword()))
-                .firstName(dto.getFirstName().trim())
-                .lastName(dto.getLastName().trim())
-                .phoneNumber(dto.getPhoneNumber().trim())
-                .avatarUrl(avatarUrl)
-                .role(UserRole.RESIDENT)
-                .status(UserStatus.PENDING_EMAIL)
-                .dormitory(dormitory)
-                .declaredRoomNumber(dto.getDeclaredRoomNumber().trim())
-                .build();
+        try {
+            // Create resident in PENDING_EMAIL state
+            User user = User.builder()
+                    .email(normalizedEmail)
+                    .passwordHash(passwordEncoder.encode(dto.getPassword()))
+                    .firstName(dto.getFirstName().trim())
+                    .lastName(dto.getLastName().trim())
+                    .phoneNumber(dto.getPhoneNumber().trim())
+                    .avatarUrl(avatarUrl)
+                    .role(UserRole.RESIDENT)
+                    .status(UserStatus.PENDING_EMAIL)
+                    .dormitory(dormitory)
+                    .declaredRoomNumber(dto.getDeclaredRoomNumber().trim())
+                    .build();
 
-        User savedUser = userRepository.save(user);
+            User savedUser = userRepository.save(user);
 
-        // Generate signed HMAC token (TTL 24h) and send email
-        String token = signedEmailTokenService.generateToken(savedUser.getId(), savedUser.getEmail());
-        emailService.sendVerificationEmail(savedUser.getEmail(), token);
+            // Generate signed HMAC token (TTL 24h) and send email
+            String token = signedEmailTokenService.generateToken(savedUser.getId(), savedUser.getEmail());
+            emailService.sendVerificationEmail(savedUser.getEmail(), token);
 
-        log.info("Resident registered with ID {}. Verification email dispatched.", savedUser.getId());
+            log.info("Resident registered with ID {}. Verification email dispatched.", savedUser.getId());
 
-        return new RegisterResponseDto(REGISTRATION_SUCCESS_MESSAGE, savedUser.getEmail());
+            return new RegisterResponseDto(REGISTRATION_SUCCESS_MESSAGE, savedUser.getEmail());
+        } catch (Exception e) {
+            log.error("Failed to complete resident registration for {}. Compensating by removing uploaded avatar {}",
+                    normalizedEmail, avatarUrl, e);
+            try {
+                minioStorageService.removeAvatar(avatarUrl);
+            } catch (Exception minioEx) {
+                log.error("Failed to cleanup orphaned avatar {} from MinIO", avatarUrl, minioEx);
+            }
+            throw e;
+        }
     }
 
     @Transactional
