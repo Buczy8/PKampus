@@ -23,7 +23,7 @@ public class SignedEmailTokenService {
 
     private static final String HMAC_SHA256 = "HmacSHA256";
 
-    @Value("${jwt.secret}")
+    @Value("${app.security.email-token-secret}")
     private String secret;
 
     @Value("${app.security.email-token-ttl-hours:24}")

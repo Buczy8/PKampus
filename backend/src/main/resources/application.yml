@@ -59,6 +59,7 @@ app:
   frontend:
     url: ${FRONTEND_URL:http://localhost:5173}
   security:
+    email-token-secret: ${EMAIL_TOKEN_SECRET:pkampus_email_activation_secret_key_dev_min_32_chars_2026!}
     email-token-ttl-hours: 24
     rate-limit:
       login:
