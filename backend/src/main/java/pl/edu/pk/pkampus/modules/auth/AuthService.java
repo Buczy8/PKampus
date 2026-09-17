@@ -44,17 +44,19 @@ public class AuthService {
     private final JwtService jwtService;
     private final EmailService emailService;
 
+    public static final String REGISTRATION_SUCCESS_MESSAGE =
+            "Registration request received. If the email is eligible, an activation link has been sent to your inbox.";
+
     @Transactional
     public RegisterResponseDto registerResident(RegisterRequestDto dto, MultipartFile photo) {
         String normalizedEmail = dto.getEmail().trim().toLowerCase();
 
-        // Anti-enumeration protection (UC-AUTH-01): if email already exists, return neutral message
+        // Anti-enumeration protection (UC-AUTH-01): return identical response & match computation timing
         if (userRepository.existsByEmail(normalizedEmail)) {
             log.warn("Registration attempt with existing email: {}", normalizedEmail);
-            return new RegisterResponseDto(
-                    "If the provided email address exists in the system, an activation link has been sent.",
-                    normalizedEmail
-            );
+            // Execute dummy password hash to prevent timing-based user enumeration attacks
+            passwordEncoder.encode(dto.getPassword());
+            return new RegisterResponseDto(REGISTRATION_SUCCESS_MESSAGE, normalizedEmail);
         }
 
         Dormitory dormitory = dormitoryRepository.findById(dto.getDormitoryId())
@@ -85,10 +87,7 @@ public class AuthService {
 
         log.info("Resident registered with ID {}. Verification email dispatched.", savedUser.getId());
 
-        return new RegisterResponseDto(
-                "Registration successful. Please check your inbox to confirm your email address.",
-                savedUser.getEmail()
-        );
+        return new RegisterResponseDto(REGISTRATION_SUCCESS_MESSAGE, savedUser.getEmail());
     }
 
     @Transactional

@@ -127,6 +127,7 @@ class AuthServiceTest {
 
         assertNotNull(response);
         assertEquals("student@pk.edu.pl", response.getEmail());
+        assertEquals(AuthService.REGISTRATION_SUCCESS_MESSAGE, response.getMessage());
         verify(emailService).sendVerificationEmail(eq("student@pk.edu.pl"), eq("signed-token-xyz"));
         verify(userRepository).save(any(User.class));
     }
@@ -138,6 +139,11 @@ class AuthServiceTest {
         RegisterResponseDto response = authService.registerResident(registerDto, testPhoto);
 
         assertNotNull(response);
+        assertEquals("student@pk.edu.pl", response.getEmail());
+        // Verify anti-enumeration returns identical message as successful registration
+        assertEquals(AuthService.REGISTRATION_SUCCESS_MESSAGE, response.getMessage());
+        // Verify dummy hash is calculated to mitigate timing attacks
+        verify(passwordEncoder).encode(registerDto.getPassword());
         verify(minioStorageService, never()).uploadAvatar(any());
         verify(userRepository, never()).save(any());
         verify(emailService, never()).sendVerificationEmail(any(), any());

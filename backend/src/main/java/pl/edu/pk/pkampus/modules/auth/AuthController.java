@@ -45,7 +45,7 @@ public class AuthController {
     ) {
         RegisterResponseDto response = authService.registerResident(registerRequestDto, photo);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.ok(response, "Registration request accepted"));
+                .body(ApiResponse.ok(response, response.getMessage()));
     }
 
     @GetMapping("/verify-email")
