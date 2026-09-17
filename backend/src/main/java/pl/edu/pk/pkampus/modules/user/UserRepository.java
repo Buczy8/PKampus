@@ -15,7 +15,12 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByEmail(String email);
 
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"dormitory"})
     List<User> findAllByDormitoryIdAndStatus(UUID dormitoryId, UserStatus status);
 
     List<User> findAllByStatus(UserStatus status);
+
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"dormitory"})
+    @Override
+    Optional<User> findById(UUID id);
 }
