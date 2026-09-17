@@ -18,37 +18,37 @@ import java.util.UUID;
 @AllArgsConstructor
 public class RegisterRequestDto {
 
-    @NotBlank(message = "Adres e-mail jest wymagany")
-    @Email(message = "Niepoprawny format adresu e-mail")
-    @Size(max = 150, message = "Adres e-mail może mieć maksymalnie 150 znaków")
+    @NotBlank(message = "Email address is required")
+    @Email(message = "Invalid email address format")
+    @Size(max = 150, message = "Email address cannot exceed 150 characters")
     private String email;
 
-    @NotBlank(message = "Hasło jest wymagane")
+    @NotBlank(message = "Password is required")
     @Pattern(
             regexp = "^(?=.*[A-Z])(?=.*\\d)(?=.*[^a-zA-Z\\d]).{8,}$",
-            message = "Hasło musi mieć co najmniej 8 znaków, zawierać dużą literę, cyfrę oraz znak specjalny"
+            message = "Password must be at least 8 characters long and contain an uppercase letter, a digit, and a special character"
     )
     private String password;
 
-    @NotBlank(message = "Imię jest wymagane")
-    @Size(max = 50, message = "Imię może mieć maksymalnie 50 znaków")
+    @NotBlank(message = "First name is required")
+    @Size(max = 50, message = "First name cannot exceed 50 characters")
     private String firstName;
 
-    @NotBlank(message = "Nazwisko jest wymagane")
-    @Size(max = 80, message = "Nazwisko może mieć maksymalnie 80 znaków")
+    @NotBlank(message = "Last name is required")
+    @Size(max = 80, message = "Last name cannot exceed 80 characters")
     private String lastName;
 
-    @NotBlank(message = "Numer telefonu jest wymagany")
+    @NotBlank(message = "Phone number is required")
     @Pattern(
             regexp = "^\\+?[0-9]{9,15}$",
-            message = "Numer telefonu musi zawierać od 9 do 15 cyfr (opcjonalnie z prefiksem '+')"
+            message = "Phone number must contain between 9 and 15 digits (optional '+' prefix)"
     )
     private String phoneNumber;
 
-    @NotNull(message = "Identyfikator akademika jest wymagany")
+    @NotNull(message = "Dormitory ID is required")
     private UUID dormitoryId;
 
-    @NotBlank(message = "Deklarowany numer pokoju jest wymagany")
-    @Size(max = 10, message = "Numer pokoju może mieć maksymalnie 10 znaków")
+    @NotBlank(message = "Declared room number is required")
+    @Size(max = 10, message = "Room number cannot exceed 10 characters")
     private String declaredRoomNumber;
 }

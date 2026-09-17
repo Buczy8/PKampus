@@ -22,13 +22,13 @@ public class UserService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         return userRepository.findByEmail(username.trim().toLowerCase())
-                .orElseThrow(() -> new UsernameNotFoundException("Nie znaleziono użytkownika o adresie: " + username));
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + username));
     }
 
     @Transactional(readOnly = true)
     public UserProfileDto getUserProfile(UUID userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Nie znaleziono użytkownika o podanym ID"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
 
         String roomNumber = roomAssignmentRepository.findByUserIdAndIsActiveTrue(user.getId())
                 .map(ra -> ra.getRoom().getRoomNumber())

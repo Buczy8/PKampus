@@ -163,16 +163,16 @@ public class MinioStorageService {
 
     public void validateImageFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new InvalidFileException("Plik nie może być pusty");
+            throw new InvalidFileException("File cannot be empty");
         }
 
         if (file.getSize() > MAX_FILE_SIZE_BYTES) {
-            throw new InvalidFileException("Rozmiar pliku przekracza dopuszczalny limit 5 MB");
+            throw new InvalidFileException("File size exceeds the maximum allowed limit of 5 MB");
         }
 
         String contentType = file.getContentType();
         if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType.toLowerCase())) {
-            throw new InvalidFileException("Niedozwolony format pliku. Akceptowane formaty to: JPEG, PNG, WebP");
+            throw new InvalidFileException("Unsupported file format. Allowed formats are: JPEG, PNG, WebP");
         }
     }
 

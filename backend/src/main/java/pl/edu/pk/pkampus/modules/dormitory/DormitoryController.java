@@ -15,13 +15,13 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/dormitories")
 @RequiredArgsConstructor
-@Tag(name = "Dormitories", description = "Zarządzanie i katalog domów studenckich")
+@Tag(name = "Dormitories", description = "Dormitory catalog and room management")
 public class DormitoryController {
 
     private final DormitoryService dormitoryService;
 
     @GetMapping
-    @Operation(summary = "Pobranie listy akademików", description = "Zwraca listę domów studenckich dostępnych w systemie.")
+    @Operation(summary = "Get list of dormitories", description = "Returns a list of all student dormitories available in the system.")
     public ResponseEntity<ApiResponse<List<DormitoryDto>>> getDormitories() {
         return ResponseEntity.ok(ApiResponse.ok(dormitoryService.getAllDormitories()));
     }

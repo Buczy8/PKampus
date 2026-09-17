@@ -13,10 +13,10 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class LoginRequestDto {
 
-    @NotBlank(message = "Adres e-mail jest wymagany")
-    @Email(message = "Niepoprawny format adresu e-mail")
+    @NotBlank(message = "Email address is required")
+    @Email(message = "Invalid email address format")
     private String email;
 
-    @NotBlank(message = "Hasło jest wymagane")
+    @NotBlank(message = "Password is required")
     private String password;
 }

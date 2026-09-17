@@ -18,23 +18,23 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
-@Tag(name = "Users", description = "Zarządzanie użytkownikami i profilami")
+@Tag(name = "Users", description = "User profile and permission management")
 public class UserController {
 
     private final UserService userService;
 
     @GetMapping("/me")
-    @Operation(summary = "Pobranie profilu zalogowanego użytkownika", description = "Zwraca profil użytkownika skojarzonego z tokenem uwierzytelniającym Bearer.")
+    @Operation(summary = "Get current authenticated user profile", description = "Returns profile of the user associated with the Bearer authentication token.")
     public ResponseEntity<ApiResponse<UserProfileDto>> getCurrentUser(@AuthenticationPrincipal User user) {
         if (user == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("Użytkownik nie jest uwierzytelniony"));
+                    .body(ApiResponse.error("User is not authenticated"));
         }
         return ResponseEntity.ok(ApiResponse.ok(userService.getUserProfile(user.getId())));
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Pobranie profilu użytkownika po ID", description = "Zwraca szczegółowe dane profilowe wskazanego użytkownika.")
+    @Operation(summary = "Get user profile by ID", description = "Returns detailed profile data for the specified user.")
     public ResponseEntity<ApiResponse<UserProfileDto>> getUserById(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.ok(userService.getUserProfile(id)));
     }

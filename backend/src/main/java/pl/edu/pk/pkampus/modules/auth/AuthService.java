@@ -52,13 +52,13 @@ public class AuthService {
         if (userRepository.existsByEmail(normalizedEmail)) {
             log.warn("Registration attempt with existing email: {}", normalizedEmail);
             return new RegisterResponseDto(
-                    "Jeśli podany adres e-mail nie istnieje w systemie, wysłaliśmy link aktywacyjny.",
+                    "If the provided email address exists in the system, an activation link has been sent.",
                     normalizedEmail
             );
         }
 
         Dormitory dormitory = dormitoryRepository.findById(dto.getDormitoryId())
-                .orElseThrow(() -> new ResourceNotFoundException("Nie znaleziono akademika o podanym identyfikatorze"));
+                .orElseThrow(() -> new ResourceNotFoundException("Dormitory not found with the provided ID"));
 
         // Upload avatar to MinIO S3
         String avatarUrl = minioStorageService.uploadAvatar(photo);
@@ -86,7 +86,7 @@ public class AuthService {
         log.info("Resident registered with ID {}. Verification email dispatched.", savedUser.getId());
 
         return new RegisterResponseDto(
-                "Rejestracja powiodła się. Sprawdź swoją skrzynkę pocztową, aby potwierdzić adres e-mail.",
+                "Registration successful. Please check your inbox to confirm your email address.",
                 savedUser.getEmail()
         );
     }
@@ -96,10 +96,10 @@ public class AuthService {
         EmailTokenPayload payload = signedEmailTokenService.verifyToken(token);
 
         User user = userRepository.findById(payload.userId())
-                .orElseThrow(() -> new ResourceNotFoundException("Użytkownik powiązany z tokenem nie istnieje"));
+                .orElseThrow(() -> new ResourceNotFoundException("User associated with the token does not exist"));
 
         if (!user.getEmail().equalsIgnoreCase(payload.email())) {
-            throw new AccountStatusException("Niezgodność adresu e-mail w tokenie aktywacyjnym");
+            throw new AccountStatusException("Email address mismatch in activation token");
         }
 
         if (user.getStatus() == UserStatus.PENDING_EMAIL) {
@@ -109,7 +109,7 @@ public class AuthService {
         }
 
         return new VerifyEmailResponseDto(
-                "Adres e-mail został pomyślnie potwierdzony. Twoje konto oczekuje na weryfikację meldunku przez Administrację DS.",
+                "Email address confirmed successfully. Your account is awaiting residency approval by the dormitory administration.",
                 user.getStatus()
         );
     }
@@ -119,22 +119,22 @@ public class AuthService {
         String normalizedEmail = dto.getEmail().trim().toLowerCase();
 
         User user = userRepository.findByEmail(normalizedEmail)
-                .orElseThrow(() -> new BadCredentialsException("Nieprawidłowy e-mail lub hasło"));
+                .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
 
         if (!passwordEncoder.matches(dto.getPassword(), user.getPasswordHash())) {
-            throw new BadCredentialsException("Nieprawidłowy e-mail lub hasło");
+            throw new BadCredentialsException("Invalid email or password");
         }
 
         // Validate account status against lifecycle rules (BR-06, FR-AUTH-03)
         switch (user.getStatus()) {
             case PENDING_EMAIL ->
-                    throw new AccountStatusException("Potwierdź swój adres e-mail klikając w link przesłany na pocztę.");
+                    throw new AccountStatusException("Please confirm your email address by clicking the link sent to your inbox.");
             case PENDING_APPROVAL ->
-                    throw new AccountStatusException("Twoje konto oczekuje na weryfikację meldunku przez Administrację DS.");
+                    throw new AccountStatusException("Your account is awaiting residency approval by the dormitory administration.");
             case BLOCKED ->
-                    throw new AccountStatusException("Konto zostało zablokowane administracyjnie. Skontaktuj się z kierownikiem DS.");
+                    throw new AccountStatusException("Account has been administratively suspended. Please contact the dormitory manager.");
             case CHECKED_OUT ->
-                    throw new AccountStatusException("Konto wygasło (wymeldowanie). Skontaktuj się z administracją DS.");
+                    throw new AccountStatusException("Account has expired (checked out). Please contact the dormitory administration.");
             case ACTIVE -> {
                 // Account is active, proceed to login
             }
@@ -161,7 +161,7 @@ public class AuthService {
     @Transactional(readOnly = true)
     public UserProfileDto getCurrentUserProfile(UUID userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Nie znaleziono użytkownika"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         String roomNumber = roomAssignmentRepository.findByUserIdAndIsActiveTrue(user.getId())
                 .map(ra -> ra.getRoom().getRoomNumber())

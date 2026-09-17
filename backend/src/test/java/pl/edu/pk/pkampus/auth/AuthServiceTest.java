@@ -195,7 +195,7 @@ class AuthServiceTest {
         when(passwordEncoder.matches("Password123!", testUser.getPasswordHash())).thenReturn(true);
 
         AccountStatusException ex = assertThrows(AccountStatusException.class, () -> authService.login(loginDto));
-        assertTrue(ex.getMessage().contains("oczekuje na weryfikację meldunku"));
+        assertTrue(ex.getMessage().contains("awaiting residency approval"));
     }
 
     @Test
@@ -207,6 +207,6 @@ class AuthServiceTest {
         when(passwordEncoder.matches("Password123!", testUser.getPasswordHash())).thenReturn(true);
 
         AccountStatusException ex = assertThrows(AccountStatusException.class, () -> authService.login(loginDto));
-        assertTrue(ex.getMessage().contains("zablokowane"));
+        assertTrue(ex.getMessage().contains("suspended"));
     }
 }

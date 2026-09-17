@@ -78,7 +78,7 @@ class AuthControllerTest {
         );
 
         when(authService.registerResident(any(), any()))
-                .thenReturn(new RegisterResponseDto("Rejestracja powiodła się", "student@pk.edu.pl"));
+                .thenReturn(new RegisterResponseDto("Registration successful", "student@pk.edu.pl"));
 
         mockMvc.perform(multipart("/api/v1/auth/register")
                         .file(dataPart)
@@ -120,7 +120,7 @@ class AuthControllerTest {
     @Test
     void shouldVerifyEmailSuccessfully() throws Exception {
         when(authService.verifyEmail("valid-token"))
-                .thenReturn(new VerifyEmailResponseDto("Adres e-mail został pomyślnie potwierdzony", UserStatus.PENDING_APPROVAL));
+                .thenReturn(new VerifyEmailResponseDto("Email address confirmed successfully", UserStatus.PENDING_APPROVAL));
 
         mockMvc.perform(get("/api/v1/auth/verify-email").param("token", "valid-token"))
                 .andExpect(status().isOk())
