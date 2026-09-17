@@ -1,0 +1,54 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:pkampus_admin_it;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+    show-sql: false
+  flyway:
+    enabled: false
+  mail:
+    host: localhost
+    port: 1025
+
+jwt:
+  secret: test_jwt_secret_key_minimum_32_characters_long_2026!
+  expiration-minutes: 15
+  refresh-expiration-days: 7
+
+app:
+  frontend:
+    url: http://localhost:5173
+  security:
+    email-token-secret: test_email_token_secret_minimum_32_characters!
+    email-token-ttl-hours: 24
+    trust-forwarded-headers: false
+    max-active-refresh-tokens: 5
+    rate-limit:
+      login:
+        capacity: 100
+        duration-minutes: 1
+      register:
+        capacity: 100
+        duration-minutes: 10
+      refresh:
+        capacity: 100
+        duration-minutes: 1
+
+minio:
+  endpoint: http://127.0.0.1:1
+  access-key: test
+  secret-key: testtesttesttest
+  bucket-issues: pkampus-issues
+  bucket-avatars: pkampus-avatars
+
+logging:
+  level:
+    root: WARN
+    pl.edu.pk.pkampus: INFO

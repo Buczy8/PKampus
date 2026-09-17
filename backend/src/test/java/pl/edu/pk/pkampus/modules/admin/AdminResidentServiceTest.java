@@ -1,6 +1,8 @@
 package pl.edu.pk.pkampus.modules.admin;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -9,6 +11,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 import pl.edu.pk.pkampus.common.exception.AccountStatusException;
+import pl.edu.pk.pkampus.common.exception.FileStorageException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
 import pl.edu.pk.pkampus.mail.EmailService;
@@ -32,24 +35,23 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@DisplayName("AdminResidentService unit tests")
 class AdminResidentServiceTest {
 
     @Mock
     private UserRepository userRepository;
-
     @Mock
     private RoomRepository roomRepository;
-
     @Mock
     private RoomAssignmentRepository roomAssignmentRepository;
-
     @Mock
     private MinioStorageService minioStorageService;
-
     @Mock
     private EmailService emailService;
 
@@ -57,22 +59,27 @@ class AdminResidentServiceTest {
     private AdminResidentService adminResidentService;
 
     private Dormitory dormitory;
-    private User admin;
+    private Dormitory otherDormitory;
+    private User dormAdmin;
     private User pendingResident;
     private Room room;
 
     @BeforeEach
     void setUp() {
-        UUID dormId = UUID.randomUUID();
         dormitory = Dormitory.builder()
-                .id(dormId)
+                .id(UUID.randomUUID())
                 .name("DS Akademik")
                 .code("DS1")
                 .build();
-
-        admin = User.builder()
+        otherDormitory = Dormitory.builder()
                 .id(UUID.randomUUID())
-                .email("admin@pk.edu.pl")
+                .name("Inny DS")
+                .code("DS2")
+                .build();
+
+        dormAdmin = User.builder()
+                .id(UUID.randomUUID())
+                .email("kierownik@pk.edu.pl")
                 .role(UserRole.DORM_ADMIN)
                 .status(UserStatus.ACTIVE)
                 .dormitory(dormitory)
@@ -100,131 +107,363 @@ class AdminResidentServiceTest {
                 .build();
     }
 
-    @Test
-    void shouldListPendingResidentsWithPresignedAvatar() {
-        when(userRepository.findAllByDormitoryIdAndStatus(dormitory.getId(), UserStatus.PENDING_APPROVAL))
-                .thenReturn(List.of(pendingResident));
-        when(minioStorageService.getAvatarPresignedUrl("avatar.jpg", 60))
-                .thenReturn("https://minio.local/avatar.jpg?sig=1");
+    @Nested
+    @DisplayName("listPendingResidents")
+    class ListPending {
 
-        List<PendingResidentDto> result = adminResidentService.listPendingResidents(admin);
+        @Test
+        void returnsPendingResidentsWithPresignedAvatar() {
+            when(userRepository.findAllByDormitoryIdAndStatus(dormitory.getId(), UserStatus.PENDING_APPROVAL))
+                    .thenReturn(List.of(pendingResident));
+            when(minioStorageService.getAvatarPresignedUrl("avatar.jpg", 60))
+                    .thenReturn("https://minio/avatar.jpg");
 
-        assertEquals(1, result.size());
-        assertEquals(pendingResident.getId(), result.getFirst().getId());
-        assertEquals("101", result.getFirst().getDeclaredRoomNumber());
-        assertEquals("https://minio.local/avatar.jpg?sig=1", result.getFirst().getAvatarUrl());
+            List<PendingResidentDto> result = adminResidentService.listPendingResidents(dormAdmin);
+
+            assertEquals(1, result.size());
+            PendingResidentDto dto = result.getFirst();
+            assertEquals(pendingResident.getId(), dto.getId());
+            assertEquals("student@pk.edu.pl", dto.getEmail());
+            assertEquals("Jan", dto.getFirstName());
+            assertEquals("Kowalski", dto.getLastName());
+            assertEquals("101", dto.getDeclaredRoomNumber());
+            assertEquals(dormitory.getId(), dto.getDormitoryId());
+            assertEquals("DS Akademik", dto.getDormitoryName());
+            assertEquals("https://minio/avatar.jpg", dto.getAvatarUrl());
+        }
+
+        @Test
+        void filtersOutNonResidentRoles() {
+            User pendingReceptionist = User.builder()
+                    .id(UUID.randomUUID())
+                    .email("portier@pk.edu.pl")
+                    .role(UserRole.RECEPTIONIST)
+                    .status(UserStatus.PENDING_APPROVAL)
+                    .dormitory(dormitory)
+                    .build();
+            when(userRepository.findAllByDormitoryIdAndStatus(dormitory.getId(), UserStatus.PENDING_APPROVAL))
+                    .thenReturn(List.of(pendingResident, pendingReceptionist));
+
+            List<PendingResidentDto> result = adminResidentService.listPendingResidents(dormAdmin);
+
+            assertEquals(1, result.size());
+            assertEquals(pendingResident.getId(), result.getFirst().getId());
+        }
+
+        @Test
+        void returnsEmptyListWhenNoPending() {
+            when(userRepository.findAllByDormitoryIdAndStatus(dormitory.getId(), UserStatus.PENDING_APPROVAL))
+                    .thenReturn(List.of());
+
+            assertTrue(adminResidentService.listPendingResidents(dormAdmin).isEmpty());
+        }
+
+        @Test
+        void continuesWhenAvatarPresignFails() {
+            when(userRepository.findAllByDormitoryIdAndStatus(dormitory.getId(), UserStatus.PENDING_APPROVAL))
+                    .thenReturn(List.of(pendingResident));
+            when(minioStorageService.getAvatarPresignedUrl(anyString(), anyInt()))
+                    .thenThrow(new FileStorageException("minio down"));
+
+            List<PendingResidentDto> result = adminResidentService.listPendingResidents(dormAdmin);
+
+            assertEquals(1, result.size());
+            assertNull(result.getFirst().getAvatarUrl());
+        }
+
+        @Test
+        void allowsBlankAvatarWithoutCallingMinio() {
+            pendingResident.setAvatarUrl("  ");
+            when(userRepository.findAllByDormitoryIdAndStatus(dormitory.getId(), UserStatus.PENDING_APPROVAL))
+                    .thenReturn(List.of(pendingResident));
+
+            List<PendingResidentDto> result = adminResidentService.listPendingResidents(dormAdmin);
+
+            assertNull(result.getFirst().getAvatarUrl());
+            verify(minioStorageService, never()).getAvatarPresignedUrl(anyString(), anyInt());
+        }
+
+        @Test
+        void superAdminWithDormitoryContextCanList() {
+            User superAdmin = User.builder()
+                    .id(UUID.randomUUID())
+                    .email("super@pk.edu.pl")
+                    .role(UserRole.SUPER_ADMIN)
+                    .status(UserStatus.ACTIVE)
+                    .dormitory(dormitory)
+                    .build();
+            when(userRepository.findAllByDormitoryIdAndStatus(dormitory.getId(), UserStatus.PENDING_APPROVAL))
+                    .thenReturn(List.of(pendingResident));
+
+            assertEquals(1, adminResidentService.listPendingResidents(superAdmin).size());
+        }
+
+        @Test
+        void superAdminWithoutDormitoryThrows() {
+            User superAdmin = User.builder()
+                    .id(UUID.randomUUID())
+                    .email("super@pk.edu.pl")
+                    .role(UserRole.SUPER_ADMIN)
+                    .status(UserStatus.ACTIVE)
+                    .dormitory(null)
+                    .build();
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> adminResidentService.listPendingResidents(superAdmin));
+        }
+
+        @Test
+        void receptionistCannotList() {
+            User receptionist = User.builder()
+                    .id(UUID.randomUUID())
+                    .email("portier@pk.edu.pl")
+                    .role(UserRole.RECEPTIONIST)
+                    .status(UserStatus.ACTIVE)
+                    .dormitory(dormitory)
+                    .build();
+
+            assertThrows(AccessDeniedException.class,
+                    () -> adminResidentService.listPendingResidents(receptionist));
+        }
+
+        @Test
+        void dormAdminWithoutDormitoryThrows() {
+            dormAdmin.setDormitory(null);
+            assertThrows(AccountStatusException.class,
+                    () -> adminResidentService.listPendingResidents(dormAdmin));
+        }
     }
 
-    @Test
-    void shouldActivateResidentAndCreateAssignment() {
-        when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
-        when(roomRepository.findByDormitoryIdAndRoomNumber(dormitory.getId(), "101"))
-                .thenReturn(Optional.of(room));
-        when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(pendingResident.getId()))
-                .thenReturn(Optional.empty());
-        when(roomAssignmentRepository.save(any(RoomAssignment.class))).thenAnswer(inv -> {
-            RoomAssignment ra = inv.getArgument(0);
-            ra.setId(UUID.randomUUID());
-            return ra;
-        });
-        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+    @Nested
+    @DisplayName("activateResident")
+    class Activate {
 
-        ActivateResidentResponseDto response = adminResidentService.activateResident(
-                admin,
-                pendingResident.getId(),
-                new ActivateResidentRequestDto()
-        );
+        private void stubSuccessfulActivate(String roomNumber, Room targetRoom) {
+            when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
+            when(roomRepository.findByDormitoryIdAndRoomNumber(dormitory.getId(), roomNumber))
+                    .thenReturn(Optional.of(targetRoom));
+            when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(pendingResident.getId()))
+                    .thenReturn(Optional.empty());
+            when(roomAssignmentRepository.save(any(RoomAssignment.class))).thenAnswer(inv -> {
+                RoomAssignment ra = inv.getArgument(0);
+                ra.setId(UUID.randomUUID());
+                return ra;
+            });
+            when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        }
 
-        assertEquals(UserStatus.ACTIVE, pendingResident.getStatus());
-        assertEquals(UserStatus.ACTIVE, response.getStatus());
-        assertEquals("101", response.getRoomNumber());
-        assertNotNull(response.getAcademicYear());
-        verify(emailService).sendAccountActivatedEmail(
-                eq("student@pk.edu.pl"),
-                eq("Jan"),
-                eq("101"),
-                eq("DS Akademik")
-        );
+        @Test
+        void activatesWithDeclaredRoomAndSendsEmail() {
+            stubSuccessfulActivate("101", room);
+
+            ActivateResidentResponseDto response = adminResidentService.activateResident(
+                    dormAdmin, pendingResident.getId(), new ActivateResidentRequestDto());
+
+            assertEquals(UserStatus.ACTIVE, pendingResident.getStatus());
+            assertEquals(UserStatus.ACTIVE, response.getStatus());
+            assertEquals("101", response.getRoomNumber());
+            assertNotNull(response.getRoomAssignmentId());
+            assertNotNull(response.getAcademicYear());
+            assertTrue(response.getAcademicYear().matches("\\d{4}/\\d{4}"));
+            verify(emailService).sendAccountActivatedEmail("student@pk.edu.pl", "Jan", "101", "DS Akademik");
+        }
+
+        @Test
+        void activatesWithNullRequestBody() {
+            stubSuccessfulActivate("101", room);
+
+            ActivateResidentResponseDto response = adminResidentService.activateResident(
+                    dormAdmin, pendingResident.getId(), null);
+
+            assertEquals("101", response.getRoomNumber());
+        }
+
+        @Test
+        void activatesWithRoomOverride() {
+            Room room202 = Room.builder()
+                    .id(UUID.randomUUID())
+                    .dormitory(dormitory)
+                    .roomNumber("202")
+                    .floor(2)
+                    .capacity(2)
+                    .build();
+            stubSuccessfulActivate("202", room202);
+
+            ActivateResidentResponseDto response = adminResidentService.activateResident(
+                    dormAdmin,
+                    pendingResident.getId(),
+                    ActivateResidentRequestDto.builder().roomNumber("202").build());
+
+            assertEquals("202", response.getRoomNumber());
+            assertEquals("202", pendingResident.getDeclaredRoomNumber());
+            ArgumentCaptor<RoomAssignment> captor = ArgumentCaptor.forClass(RoomAssignment.class);
+            verify(roomAssignmentRepository).save(captor.capture());
+            assertEquals("202", captor.getValue().getRoom().getRoomNumber());
+            assertEquals(true, captor.getValue().getIsActive());
+            assertNotNull(captor.getValue().getCheckInDate());
+        }
+
+        @Test
+        void trimsRoomOverrideWhitespace() {
+            Room room202 = Room.builder()
+                    .id(UUID.randomUUID())
+                    .dormitory(dormitory)
+                    .roomNumber("202")
+                    .floor(2)
+                    .capacity(2)
+                    .build();
+            stubSuccessfulActivate("202", room202);
+
+            adminResidentService.activateResident(
+                    dormAdmin,
+                    pendingResident.getId(),
+                    ActivateResidentRequestDto.builder().roomNumber("  202  ").build());
+
+            verify(roomRepository).findByDormitoryIdAndRoomNumber(dormitory.getId(), "202");
+        }
+
+        @Test
+        void failsWhenRoomMissing() {
+            when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
+            when(roomRepository.findByDormitoryIdAndRoomNumber(dormitory.getId(), "101"))
+                    .thenReturn(Optional.empty());
+
+            assertThrows(ResourceNotFoundException.class, () ->
+                    adminResidentService.activateResident(dormAdmin, pendingResident.getId(), null));
+            verify(roomAssignmentRepository, never()).save(any());
+            verify(emailService, never()).sendAccountActivatedEmail(any(), any(), any(), any());
+        }
+
+        @Test
+        void failsWhenDeclaredRoomBlankAndNoOverride() {
+            pendingResident.setDeclaredRoomNumber("  ");
+            when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
+
+            assertThrows(IllegalArgumentException.class, () ->
+                    adminResidentService.activateResident(dormAdmin, pendingResident.getId(), null));
+        }
+
+        @Test
+        void failsWhenActiveAssignmentAlreadyExists() {
+            when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
+            when(roomRepository.findByDormitoryIdAndRoomNumber(dormitory.getId(), "101"))
+                    .thenReturn(Optional.of(room));
+            when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(pendingResident.getId()))
+                    .thenReturn(Optional.of(RoomAssignment.builder().id(UUID.randomUUID()).build()));
+
+            assertThrows(AccountStatusException.class, () ->
+                    adminResidentService.activateResident(dormAdmin, pendingResident.getId(), null));
+            verify(roomAssignmentRepository, never()).save(any());
+        }
+
+        @Test
+        void failsWhenResidentNotFound() {
+            UUID missingId = UUID.randomUUID();
+            when(userRepository.findById(missingId)).thenReturn(Optional.empty());
+
+            assertThrows(ResourceNotFoundException.class, () ->
+                    adminResidentService.activateResident(dormAdmin, missingId, null));
+        }
+
+        @Test
+        void failsWhenStatusNotPendingApproval() {
+            for (UserStatus status : List.of(
+                    UserStatus.PENDING_EMAIL, UserStatus.ACTIVE, UserStatus.BLOCKED, UserStatus.CHECKED_OUT)) {
+                pendingResident.setStatus(status);
+                when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
+
+                AccountStatusException ex = assertThrows(AccountStatusException.class, () ->
+                        adminResidentService.activateResident(dormAdmin, pendingResident.getId(), null));
+                assertTrue(ex.getMessage().contains("not awaiting approval"));
+            }
+        }
+
+        @Test
+        void failsWhenTargetIsNotResident() {
+            pendingResident.setRole(UserRole.RECEPTIONIST);
+            when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
+
+            assertThrows(AccountStatusException.class, () ->
+                    adminResidentService.activateResident(dormAdmin, pendingResident.getId(), null));
+        }
+
+        @Test
+        void failsWhenResidentHasNoDormitory() {
+            pendingResident.setDormitory(null);
+            when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
+
+            assertThrows(AccountStatusException.class, () ->
+                    adminResidentService.activateResident(dormAdmin, pendingResident.getId(), null));
+        }
+
+        @Test
+        void failsWhenResidentFromOtherDormitory() {
+            pendingResident.setDormitory(otherDormitory);
+            when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
+
+            assertThrows(AccessDeniedException.class, () ->
+                    adminResidentService.activateResident(dormAdmin, pendingResident.getId(), null));
+        }
     }
 
-    @Test
-    void shouldRejectWhenRoomMissing() {
-        when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
-        when(roomRepository.findByDormitoryIdAndRoomNumber(dormitory.getId(), "101"))
-                .thenReturn(Optional.empty());
+    @Nested
+    @DisplayName("rejectResident")
+    class Reject {
 
-        assertThrows(ResourceNotFoundException.class, () ->
-                adminResidentService.activateResident(admin, pendingResident.getId(), null));
-    }
+        @Test
+        void deletesUserRemovesAvatarAndEmails() {
+            when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
 
-    @Test
-    void shouldRejectResidentDeleteAvatarAndEmail() {
-        when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
+            adminResidentService.rejectResident(
+                    dormAdmin,
+                    pendingResident.getId(),
+                    new RejectResidentRequestDto("  Not on housing list  "));
 
-        adminResidentService.rejectResident(
-                admin,
-                pendingResident.getId(),
-                new RejectResidentRequestDto("Not on housing list")
-        );
+            verify(userRepository).delete(pendingResident);
+            verify(userRepository).flush();
+            verify(minioStorageService).removeAvatar("avatar.jpg");
+            verify(emailService).sendRegistrationRejectedEmail(
+                    "student@pk.edu.pl", "Jan", "Not on housing list");
+        }
 
-        verify(userRepository).delete(pendingResident);
-        verify(minioStorageService).removeAvatar("avatar.jpg");
-        verify(emailService).sendRegistrationRejectedEmail(
-                "student@pk.edu.pl",
-                "Jan",
-                "Not on housing list"
-        );
-    }
+        @Test
+        void stillEmailsWhenAvatarRemovalFails() {
+            when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
+            doThrow(new FileStorageException("minio error")).when(minioStorageService).removeAvatar("avatar.jpg");
 
-    @Test
-    void shouldDenyActivateOutsideAdminDormitory() {
-        Dormitory other = Dormitory.builder().id(UUID.randomUUID()).name("Other").code("X").build();
-        pendingResident.setDormitory(other);
-        when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
+            assertDoesNotThrow(() -> adminResidentService.rejectResident(
+                    dormAdmin,
+                    pendingResident.getId(),
+                    new RejectResidentRequestDto("Rejected")));
 
-        assertThrows(AccessDeniedException.class, () ->
-                adminResidentService.activateResident(admin, pendingResident.getId(), null));
-    }
+            verify(emailService).sendRegistrationRejectedEmail(eq("student@pk.edu.pl"), eq("Jan"), eq("Rejected"));
+        }
 
-    @Test
-    void shouldRejectNonPendingStatus() {
-        pendingResident.setStatus(UserStatus.ACTIVE);
-        when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
+        @Test
+        void skipsAvatarRemovalWhenMissing() {
+            pendingResident.setAvatarUrl(null);
+            when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
 
-        assertThrows(AccountStatusException.class, () ->
-                adminResidentService.activateResident(admin, pendingResident.getId(), null));
-    }
+            adminResidentService.rejectResident(
+                    dormAdmin,
+                    pendingResident.getId(),
+                    new RejectResidentRequestDto("Rejected"));
 
-    @Test
-    void shouldUseRoomNumberOverrideOnActivate() {
-        when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
-        Room room202 = Room.builder()
-                .id(UUID.randomUUID())
-                .dormitory(dormitory)
-                .roomNumber("202")
-                .floor(2)
-                .capacity(2)
-                .build();
-        when(roomRepository.findByDormitoryIdAndRoomNumber(dormitory.getId(), "202"))
-                .thenReturn(Optional.of(room202));
-        when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(pendingResident.getId()))
-                .thenReturn(Optional.empty());
-        when(roomAssignmentRepository.save(any(RoomAssignment.class))).thenAnswer(inv -> {
-            RoomAssignment ra = inv.getArgument(0);
-            ra.setId(UUID.randomUUID());
-            return ra;
-        });
-        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+            verify(minioStorageService, never()).removeAvatar(any());
+            verify(emailService).sendRegistrationRejectedEmail(anyString(), anyString(), anyString());
+        }
 
-        ActivateResidentRequestDto request = ActivateResidentRequestDto.builder().roomNumber("202").build();
-        ActivateResidentResponseDto response = adminResidentService.activateResident(
-                admin, pendingResident.getId(), request);
+        @Test
+        void failsOutsideScope() {
+            pendingResident.setDormitory(otherDormitory);
+            when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
 
-        assertEquals("202", response.getRoomNumber());
-        assertEquals("202", pendingResident.getDeclaredRoomNumber());
-
-        ArgumentCaptor<RoomAssignment> captor = ArgumentCaptor.forClass(RoomAssignment.class);
-        verify(roomAssignmentRepository).save(captor.capture());
-        assertEquals("202", captor.getValue().getRoom().getRoomNumber());
+            assertThrows(AccessDeniedException.class, () ->
+                    adminResidentService.rejectResident(
+                            dormAdmin,
+                            pendingResident.getId(),
+                            new RejectResidentRequestDto("Rejected")));
+            verify(userRepository, never()).delete(any());
+        }
     }
 }
