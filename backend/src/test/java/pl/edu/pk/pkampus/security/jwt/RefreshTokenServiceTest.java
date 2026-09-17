@@ -17,6 +17,8 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,6 +35,7 @@ class RefreshTokenServiceTest {
     void setUp() {
         refreshTokenService = new RefreshTokenService(refreshTokenRepository);
         org.springframework.test.util.ReflectionTestUtils.setField(refreshTokenService, "refreshExpirationDays", 7L);
+        org.springframework.test.util.ReflectionTestUtils.setField(refreshTokenService, "maxActiveRefreshTokens", 5);
 
         testUser = User.builder()
                 .id(UUID.randomUUID())
@@ -45,6 +48,8 @@ class RefreshTokenServiceTest {
     @Test
     void shouldCreateRefreshToken() {
         when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(refreshTokenRepository.countByUser_IdAndRevokedFalseAndExpiresAtAfter(eq(testUser.getId()), any()))
+                .thenReturn(1L);
 
         String rawToken = refreshTokenService.createRefreshToken(testUser);
 
@@ -56,6 +61,8 @@ class RefreshTokenServiceTest {
     @Test
     void shouldRotateRefreshTokenSuccessfully() {
         when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(refreshTokenRepository.countByUser_IdAndRevokedFalseAndExpiresAtAfter(eq(testUser.getId()), any()))
+                .thenReturn(1L);
         String rawToken = refreshTokenService.createRefreshToken(testUser);
 
         RefreshToken existingToken = RefreshToken.builder()
@@ -125,9 +132,36 @@ class RefreshTokenServiceTest {
 
         when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(token));
 
-        refreshTokenService.revokeRefreshToken("raw-token");
+        Optional<UUID> ownerId = refreshTokenService.revokeRefreshToken("raw-token");
 
         assertTrue(token.isRevoked());
+        assertTrue(ownerId.isPresent());
+        assertEquals(testUser.getId(), ownerId.get());
         verify(refreshTokenRepository).save(token);
+    }
+
+    @Test
+    void shouldEnforceMaxActiveSessionsByRevokingOldest() {
+        when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(refreshTokenRepository.countByUser_IdAndRevokedFalseAndExpiresAtAfter(eq(testUser.getId()), any()))
+                .thenReturn(6L);
+
+        RefreshToken oldest = RefreshToken.builder()
+                .id(UUID.randomUUID())
+                .user(testUser)
+                .tokenHash("old")
+                .expiresAt(Instant.now().plus(7, ChronoUnit.DAYS))
+                .revoked(false)
+                .createdAt(Instant.now().minus(2, ChronoUnit.DAYS))
+                .build();
+
+        when(refreshTokenRepository.findByUser_IdAndRevokedFalseAndExpiresAtAfterOrderByCreatedAtAsc(
+                eq(testUser.getId()), any()))
+                .thenReturn(java.util.List.of(oldest));
+
+        refreshTokenService.createRefreshToken(testUser);
+
+        assertTrue(oldest.isRevoked());
+        verify(refreshTokenRepository, atLeastOnce()).save(oldest);
     }
 }

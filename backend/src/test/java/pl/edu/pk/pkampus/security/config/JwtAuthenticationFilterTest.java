@@ -12,9 +12,10 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.context.SecurityContextHolder;
 import pl.edu.pk.pkampus.modules.user.User;
+import pl.edu.pk.pkampus.modules.user.UserRepository;
 import pl.edu.pk.pkampus.modules.user.UserRole;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
-import pl.edu.pk.pkampus.modules.user.UserRepository;
+import pl.edu.pk.pkampus.security.jwt.AuthenticatedUserCache;
 import pl.edu.pk.pkampus.security.jwt.JwtService;
 import pl.edu.pk.pkampus.security.jwt.TokenRevocationService;
 
@@ -22,6 +23,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,6 +38,9 @@ class JwtAuthenticationFilterTest {
 
     @Mock
     private TokenRevocationService tokenRevocationService;
+
+    @Mock
+    private AuthenticatedUserCache authenticatedUserCache;
 
     @Mock
     private FilterChain filterChain;
@@ -79,10 +85,10 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer valid-jwt-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
+        when(jwtService.isTokenExpired("valid-jwt-token")).thenReturn(false);
         when(jwtService.extractUserId("valid-jwt-token")).thenReturn(testUserId);
-        when(jwtService.extractEmail("valid-jwt-token")).thenReturn("student@pk.edu.pl");
         when(tokenRevocationService.isRevoked(testUserId)).thenReturn(false);
-        when(userRepository.findByEmail("student@pk.edu.pl")).thenReturn(Optional.of(testUser));
+        when(authenticatedUserCache.getOrLoad(eq(testUserId), any())).thenReturn(testUser);
         when(jwtService.isTokenValid("valid-jwt-token", testUser)).thenReturn(true);
 
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
@@ -100,14 +106,14 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer revoked-jwt-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
+        when(jwtService.isTokenExpired("revoked-jwt-token")).thenReturn(false);
         when(jwtService.extractUserId("revoked-jwt-token")).thenReturn(testUserId);
-        when(jwtService.extractEmail("revoked-jwt-token")).thenReturn("student@pk.edu.pl");
         when(tokenRevocationService.isRevoked(testUserId)).thenReturn(true);
 
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
 
         assertNull(SecurityContextHolder.getContext().getAuthentication());
-        verify(userRepository, never()).findByEmail(anyString());
+        verify(authenticatedUserCache, never()).getOrLoad(any(), any());
         verify(filterChain).doFilter(request, response);
     }
 
@@ -119,10 +125,10 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer blocked-jwt-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
+        when(jwtService.isTokenExpired("blocked-jwt-token")).thenReturn(false);
         when(jwtService.extractUserId("blocked-jwt-token")).thenReturn(testUserId);
-        when(jwtService.extractEmail("blocked-jwt-token")).thenReturn("student@pk.edu.pl");
         when(tokenRevocationService.isRevoked(testUserId)).thenReturn(false);
-        when(userRepository.findByEmail("student@pk.edu.pl")).thenReturn(Optional.of(testUser));
+        when(authenticatedUserCache.getOrLoad(eq(testUserId), any())).thenReturn(testUser);
 
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
 

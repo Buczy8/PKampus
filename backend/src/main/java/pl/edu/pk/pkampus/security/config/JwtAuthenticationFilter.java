@@ -13,8 +13,9 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import pl.edu.pk.pkampus.modules.user.User;
-import pl.edu.pk.pkampus.modules.user.UserStatus;
 import pl.edu.pk.pkampus.modules.user.UserRepository;
+import pl.edu.pk.pkampus.modules.user.UserStatus;
+import pl.edu.pk.pkampus.security.jwt.AuthenticatedUserCache;
 import pl.edu.pk.pkampus.security.jwt.JwtService;
 import pl.edu.pk.pkampus.security.jwt.TokenRevocationService;
 
@@ -29,6 +30,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
     private final UserRepository userRepository;
     private final TokenRevocationService tokenRevocationService;
+    private final AuthenticatedUserCache authenticatedUserCache;
 
     @Override
     protected void doFilterInternal(
@@ -47,23 +49,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         final String token = authHeader.substring(7);
 
         try {
+            if (jwtService.isTokenExpired(token)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+
             final UUID userId = jwtService.extractUserId(token);
-            final String email = jwtService.extractEmail(token);
 
-            // Verify if user is not already authenticated in current context
-            if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
-                // Check Caffeine blacklist / revocation cache (UC-AUTH-02, NFR-SEC-01)
                 if (tokenRevocationService.isRevoked(userId)) {
                     log.warn("Blocked request for revoked user token: {}", userId);
                     filterChain.doFilter(request, response);
                     return;
                 }
 
-                User user = userRepository.findByEmail(email).orElse(null);
+                User user = authenticatedUserCache.getOrLoad(userId, id ->
+                        userRepository.findById(id).orElse(null)
+                );
 
-                // User must be ACTIVE (BLOCKED, PENDING_EMAIL, PENDING_APPROVAL rejected)
-                if (user != null && user.getStatus() == UserStatus.ACTIVE && jwtService.isTokenValid(token, user)) {
+                if (user != null
+                        && user.getStatus() == UserStatus.ACTIVE
+                        && jwtService.isTokenValid(token, user)) {
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             user,
                             null,
@@ -71,7 +78,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     );
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
-                    log.debug("Authenticated user {} with authorities {}", email, user.getAuthorities());
+                    log.debug("Authenticated user {} with authorities {}", user.getEmail(), user.getAuthorities());
+                } else if (user == null) {
+                    authenticatedUserCache.invalidate(userId);
                 }
             }
         } catch (Exception e) {

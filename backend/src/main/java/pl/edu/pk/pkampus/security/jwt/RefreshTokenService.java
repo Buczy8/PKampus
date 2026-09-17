@@ -17,6 +17,8 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -28,6 +30,9 @@ public class RefreshTokenService {
 
     @Value("${jwt.refresh-expiration-days:7}")
     private long refreshExpirationDays;
+
+    @Value("${app.security.max-active-refresh-tokens:5}")
+    private int maxActiveRefreshTokens;
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
@@ -46,6 +51,7 @@ public class RefreshTokenService {
                 .build();
 
         refreshTokenRepository.save(refreshToken);
+        enforceMaxActiveSessions(user.getId());
         log.debug("Created refresh token for user {}", user.getId());
 
         return rawToken;
@@ -58,9 +64,9 @@ public class RefreshTokenService {
         RefreshToken existingToken = refreshTokenRepository.findByTokenHash(tokenHash)
                 .orElseThrow(() -> new AccountStatusException("Invalid refresh token"));
 
-        // If a revoked token is presented, suspect token reuse / compromise and revoke all tokens for this user!
         if (existingToken.isRevoked()) {
-            log.warn("Attempted reuse of revoked refresh token! Revoking all sessions for user {}", existingToken.getUser().getId());
+            log.warn("Attempted reuse of revoked refresh token! Revoking all sessions for user {}",
+                    existingToken.getUser().getId());
             refreshTokenRepository.revokeAllByUserId(existingToken.getUser().getId());
             throw new AccountStatusException("Refresh token has been revoked due to security violation");
         }
@@ -74,10 +80,8 @@ public class RefreshTokenService {
             throw new AccountStatusException("User account is not active");
         }
 
-        // Revoke the old token
         existingToken.setRevoked(true);
 
-        // Issue new refresh token
         String newRawToken = generateSecureRandomToken();
         String newTokenHash = hashToken(newRawToken);
         Instant expiresAt = Instant.now().plus(refreshExpirationDays, ChronoUnit.DAYS);
@@ -93,20 +97,25 @@ public class RefreshTokenService {
         existingToken.setReplacedByToken(savedNewToken);
         refreshTokenRepository.save(existingToken);
 
+        enforceMaxActiveSessions(user.getId());
         log.debug("Rotated refresh token for user {}", user.getId());
         return new RefreshTokenResult(newRawToken, user);
     }
 
+    /**
+     * Revokes a single refresh token and returns the owning user id when found.
+     */
     @Transactional
-    public void revokeRefreshToken(String rawToken) {
+    public Optional<UUID> revokeRefreshToken(String rawToken) {
         if (rawToken == null || rawToken.isBlank()) {
-            return;
+            return Optional.empty();
         }
         String tokenHash = hashToken(rawToken);
-        refreshTokenRepository.findByTokenHash(tokenHash).ifPresent(token -> {
+        return refreshTokenRepository.findByTokenHash(tokenHash).map(token -> {
             token.setRevoked(true);
             refreshTokenRepository.save(token);
             log.debug("Revoked refresh token for user {}", token.getUser().getId());
+            return token.getUser().getId();
         });
     }
 
@@ -119,6 +128,29 @@ public class RefreshTokenService {
 
     public long getRefreshExpirationSeconds() {
         return refreshExpirationDays * 24 * 60 * 60;
+    }
+
+    void enforceMaxActiveSessions(UUID userId) {
+        if (userId == null || maxActiveRefreshTokens <= 0) {
+            return;
+        }
+        Instant now = Instant.now();
+        long activeCount = refreshTokenRepository.countByUser_IdAndRevokedFalseAndExpiresAtAfter(userId, now);
+        if (activeCount <= maxActiveRefreshTokens) {
+            return;
+        }
+
+        List<RefreshToken> activeTokens = refreshTokenRepository
+                .findByUser_IdAndRevokedFalseAndExpiresAtAfterOrderByCreatedAtAsc(userId, now);
+
+        long toRevoke = activeCount - maxActiveRefreshTokens;
+        for (int i = 0; i < toRevoke && i < activeTokens.size(); i++) {
+            RefreshToken token = activeTokens.get(i);
+            token.setRevoked(true);
+            refreshTokenRepository.save(token);
+            log.info("Revoked oldest refresh token {} for user {} (session cap {})",
+                    token.getId(), userId, maxActiveRefreshTokens);
+        }
     }
 
     private String generateSecureRandomToken() {

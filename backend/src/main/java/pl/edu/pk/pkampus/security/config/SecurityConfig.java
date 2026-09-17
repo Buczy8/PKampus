@@ -3,6 +3,7 @@ package pl.edu.pk.pkampus.security.config;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -24,6 +25,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import pl.edu.pk.pkampus.modules.user.UserRepository;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -33,8 +35,9 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    private final pl.edu.pk.pkampus.security.ratelimit.LoginRateLimitFilter loginRateLimitFilter;
+    private final pl.edu.pk.pkampus.security.ratelimit.AuthRateLimitFilter authRateLimitFilter;
     private final UserRepository userRepository;
+    private final Environment environment;
 
     public static final int BCRYPT_STRENGTH = 12; // NFR-SEC-02: 12 rounds salt hashing
 
@@ -81,30 +84,35 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider())
-                .addFilterBefore(loginRateLimitFilter, org.springframework.security.web.authentication.logout.LogoutFilter.class)
+                .addFilterBefore(authRateLimitFilter, org.springframework.security.web.authentication.logout.LogoutFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .authorizeHttpRequests(auth -> auth
-                        // Public endpoints
-                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout").permitAll()
+                .authorizeHttpRequests(auth -> {
+                    auth.requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/verify-email").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/dormitories/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/health").permitAll()
-                        .requestMatchers(
+                        .requestMatchers(HttpMethod.GET, "/api/v1/health").permitAll();
+
+                    if (isProdProfile()) {
+                        auth.requestMatchers("/actuator/health", "/actuator/health/**").permitAll();
+                    } else {
+                        auth.requestMatchers(
                                 "/actuator/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html"
-                        ).permitAll()
+                        ).permitAll();
+                    }
 
-                        // Role-based authorization (RBAC)
-                        .requestMatchers("/api/v1/admin/**").hasAnyRole("DORM_ADMIN", "SUPER_ADMIN")
+                    auth.requestMatchers("/api/v1/admin/**").hasAnyRole("DORM_ADMIN", "SUPER_ADMIN")
                         .requestMatchers("/api/v1/receptionist/**").hasAnyRole("RECEPTIONIST", "DORM_ADMIN", "SUPER_ADMIN")
                         .requestMatchers("/api/v1/superadmin/**").hasRole("SUPER_ADMIN")
-
-                        // Authenticated endpoints (e.g. /api/v1/auth/me)
-                        .anyRequest().authenticated()
-                );
+                        .anyRequest().authenticated();
+                });
 
         return http.build();
+    }
+
+    private boolean isProdProfile() {
+        return Arrays.stream(environment.getActiveProfiles()).anyMatch("prod"::equals);
     }
 }

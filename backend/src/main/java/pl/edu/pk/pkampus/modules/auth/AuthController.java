@@ -46,8 +46,7 @@ public class AuthController {
             @RequestPart("photo") MultipartFile photo
     ) {
         RegisterResponseDto response = authService.registerResident(registerRequestDto, photo);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.ok(response, response.getMessage()));
+        return ResponseEntity.ok(ApiResponse.ok(response, response.getMessage()));
     }
 
     @GetMapping("/verify-email")

@@ -49,7 +49,7 @@ class AuthControllerTest {
     private pl.edu.pk.pkampus.security.config.JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @MockBean
-    private pl.edu.pk.pkampus.security.ratelimit.LoginRateLimitFilter loginRateLimitFilter;
+    private pl.edu.pk.pkampus.security.ratelimit.AuthRateLimitFilter authRateLimitFilter;
 
     @MockBean
     private UserRepository userRepository;
@@ -86,7 +86,7 @@ class AuthControllerTest {
         mockMvc.perform(multipart("/api/v1/auth/register")
                         .file(dataPart)
                         .file(photoPart))
-                .andExpect(status().isCreated())
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.email").value("student@pk.edu.pl"));
     }

@@ -9,7 +9,7 @@ class PasswordEncoderTest {
 
     @Test
     void shouldGenerateBCryptHashWithStrength12() {
-        SecurityConfig config = new SecurityConfig(null, null, null);
+        SecurityConfig config = new SecurityConfig(null, null, null, null);
         PasswordEncoder encoder = config.passwordEncoder();
 
         String rawPassword = "SecurePassword123!";

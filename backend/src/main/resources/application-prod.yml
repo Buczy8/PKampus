@@ -1,0 +1,21 @@
+server:
+  forward-headers-strategy: framework
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+app:
+  security:
+    trust-forwarded-headers: true

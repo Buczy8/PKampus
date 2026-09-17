@@ -53,12 +53,12 @@ public class AuthService {
 
     @Transactional
     public RegisterResponseDto registerResident(RegisterRequestDto dto, MultipartFile photo) {
+        // Always validate image first (equal early work for anti-enumeration timing)
+        String detectedMime = minioStorageService.validateAndDetectImageType(photo);
         String normalizedEmail = dto.getEmail().trim().toLowerCase();
 
-        // Anti-enumeration protection (UC-AUTH-01): return identical response & match computation timing
         if (userRepository.existsByEmail(normalizedEmail)) {
             log.warn("Registration attempt with existing email: {}", normalizedEmail);
-            // Execute dummy password hash to prevent timing-based user enumeration attacks
             passwordEncoder.encode(dto.getPassword());
             return new RegisterResponseDto(REGISTRATION_SUCCESS_MESSAGE, normalizedEmail);
         }
@@ -66,11 +66,9 @@ public class AuthService {
         Dormitory dormitory = dormitoryRepository.findById(dto.getDormitoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("Dormitory not found with the provided ID"));
 
-        // Upload avatar to MinIO S3
-        String avatarUrl = minioStorageService.uploadAvatar(photo);
+        String avatarUrl = minioStorageService.uploadAvatar(photo, detectedMime);
 
         try {
-            // Create resident in PENDING_EMAIL state
             User user = User.builder()
                     .email(normalizedEmail)
                     .passwordHash(passwordEncoder.encode(dto.getPassword()))
@@ -86,7 +84,6 @@ public class AuthService {
 
             User savedUser = userRepository.save(user);
 
-            // Generate signed HMAC token (TTL 24h) and send email
             String token = signedEmailTokenService.generateToken(savedUser.getId(), savedUser.getEmail());
             emailService.sendVerificationEmail(savedUser.getEmail(), token);
 
@@ -139,7 +136,6 @@ public class AuthService {
             throw new BadCredentialsException("Invalid email or password");
         }
 
-        // Validate account status against lifecycle rules (BR-06, FR-AUTH-03)
         switch (user.getStatus()) {
             case PENDING_EMAIL ->
                     throw new AccountStatusException("Please confirm your email address by clicking the link sent to your inbox.");
@@ -150,11 +146,10 @@ public class AuthService {
             case CHECKED_OUT ->
                     throw new AccountStatusException("Account has expired (checked out). Please contact the dormitory administration.");
             case ACTIVE -> {
-                // Account is active, proceed to login
+                // proceed
             }
         }
 
-        // Determine room number from active room assignment if present
         String roomNumber = roomAssignmentRepository.findByUserIdAndIsActiveTrue(user.getId())
                 .map(ra -> ra.getRoom().getRoomNumber())
                 .orElse(user.getDeclaredRoomNumber());
@@ -199,12 +194,25 @@ public class AuthService {
 
     @Transactional
     public void logout(UUID userId, String rawRefreshToken) {
-        if (userId != null) {
+        boolean hasUser = userId != null;
+        boolean hasRefresh = rawRefreshToken != null && !rawRefreshToken.isBlank();
+
+        if (!hasUser && !hasRefresh) {
+            throw new IllegalArgumentException("Logout requires a Bearer access token or a refresh token");
+        }
+
+        if (hasUser) {
             tokenRevocationService.revokeUser(userId);
         }
-        if (rawRefreshToken != null && !rawRefreshToken.isBlank()) {
-            refreshTokenService.revokeRefreshToken(rawRefreshToken);
+
+        if (hasRefresh) {
+            refreshTokenService.revokeRefreshToken(rawRefreshToken).ifPresent(tokenOwnerId -> {
+                if (!hasUser) {
+                    tokenRevocationService.blacklistAccessToken(tokenOwnerId);
+                }
+            });
         }
+
         log.info("User {} successfully logged out.", userId);
     }
 

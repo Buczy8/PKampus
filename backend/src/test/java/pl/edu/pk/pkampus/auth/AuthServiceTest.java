@@ -124,7 +124,8 @@ class AuthServiceTest {
     void shouldRegisterResidentSuccessfully() {
         when(userRepository.existsByEmail("student@pk.edu.pl")).thenReturn(false);
         when(dormitoryRepository.findById(registerDto.getDormitoryId())).thenReturn(Optional.of(testDormitory));
-        when(minioStorageService.uploadAvatar(testPhoto)).thenReturn("avatar-uuid.jpg");
+        when(minioStorageService.validateAndDetectImageType(testPhoto)).thenReturn("image/jpeg");
+        when(minioStorageService.uploadAvatar(testPhoto, "image/jpeg")).thenReturn("avatar-uuid.jpg");
         when(passwordEncoder.encode(registerDto.getPassword())).thenReturn("hashedPass123!");
         when(userRepository.save(any(User.class))).thenReturn(testUser);
         when(signedEmailTokenService.generateToken(testUser.getId(), testUser.getEmail())).thenReturn("signed-token-xyz");
@@ -142,7 +143,8 @@ class AuthServiceTest {
     void shouldCompensateAndRemoveUploadedAvatarWhenDatabaseSaveFails() {
         when(userRepository.existsByEmail("student@pk.edu.pl")).thenReturn(false);
         when(dormitoryRepository.findById(registerDto.getDormitoryId())).thenReturn(Optional.of(testDormitory));
-        when(minioStorageService.uploadAvatar(testPhoto)).thenReturn("avatar-uuid.jpg");
+        when(minioStorageService.validateAndDetectImageType(testPhoto)).thenReturn("image/jpeg");
+        when(minioStorageService.uploadAvatar(testPhoto, "image/jpeg")).thenReturn("avatar-uuid.jpg");
         when(passwordEncoder.encode(registerDto.getPassword())).thenReturn("hashedPass123!");
         when(userRepository.save(any(User.class))).thenThrow(new RuntimeException("DB error"));
 
@@ -153,17 +155,17 @@ class AuthServiceTest {
 
     @Test
     void shouldHandleAntiEnumerationWhenEmailAlreadyExists() {
+        when(minioStorageService.validateAndDetectImageType(testPhoto)).thenReturn("image/jpeg");
         when(userRepository.existsByEmail("student@pk.edu.pl")).thenReturn(true);
 
         RegisterResponseDto response = authService.registerResident(registerDto, testPhoto);
 
         assertNotNull(response);
         assertEquals("student@pk.edu.pl", response.getEmail());
-        // Verify anti-enumeration returns identical message as successful registration
         assertEquals(AuthService.REGISTRATION_SUCCESS_MESSAGE, response.getMessage());
-        // Verify dummy hash is calculated to mitigate timing attacks
         verify(passwordEncoder).encode(registerDto.getPassword());
-        verify(minioStorageService, never()).uploadAvatar(any());
+        verify(minioStorageService).validateAndDetectImageType(testPhoto);
+        verify(minioStorageService, never()).uploadAvatar(any(), any());
         verify(userRepository, never()).save(any());
         verify(emailService, never()).sendVerificationEmail(any(), any());
     }
@@ -260,9 +262,30 @@ class AuthServiceTest {
 
     @Test
     void shouldLogoutSuccessfully() {
+        when(refreshTokenService.revokeRefreshToken("some-refresh-token"))
+                .thenReturn(Optional.of(testUser.getId()));
+
         authService.logout(testUser.getId(), "some-refresh-token");
 
         verify(tokenRevocationService).revokeUser(testUser.getId());
         verify(refreshTokenService).revokeRefreshToken("some-refresh-token");
+        verify(tokenRevocationService, never()).blacklistAccessToken(any());
+    }
+
+    @Test
+    void shouldLogoutWithRefreshOnlyAndBlacklistAccess() {
+        when(refreshTokenService.revokeRefreshToken("some-refresh-token"))
+                .thenReturn(Optional.of(testUser.getId()));
+
+        authService.logout(null, "some-refresh-token");
+
+        verify(tokenRevocationService, never()).revokeUser(any());
+        verify(tokenRevocationService).blacklistAccessToken(testUser.getId());
+    }
+
+    @Test
+    void shouldRejectLogoutWithoutCredentials() {
+        assertThrows(IllegalArgumentException.class, () -> authService.logout(null, null));
+        assertThrows(IllegalArgumentException.class, () -> authService.logout(null, "  "));
     }
 }

@@ -61,7 +61,15 @@ app:
   security:
     email-token-secret: ${EMAIL_TOKEN_SECRET:pkampus_email_activation_secret_key_dev_min_32_chars_2026!}
     email-token-ttl-hours: 24
+    trust-forwarded-headers: ${TRUST_FORWARDED_HEADERS:false}
+    max-active-refresh-tokens: ${MAX_ACTIVE_REFRESH_TOKENS:5}
     rate-limit:
       login:
         capacity: ${LOGIN_RATE_LIMIT_CAPACITY:5}
         duration-minutes: ${LOGIN_RATE_LIMIT_DURATION_MINUTES:1}
+      register:
+        capacity: ${REGISTER_RATE_LIMIT_CAPACITY:3}
+        duration-minutes: ${REGISTER_RATE_LIMIT_DURATION_MINUTES:10}
+      refresh:
+        capacity: ${REFRESH_RATE_LIMIT_CAPACITY:30}
+        duration-minutes: ${REFRESH_RATE_LIMIT_DURATION_MINUTES:1}

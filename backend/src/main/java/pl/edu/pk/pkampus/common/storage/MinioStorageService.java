@@ -70,6 +70,10 @@ public class MinioStorageService {
 
     public String uploadAvatar(MultipartFile file) {
         String detectedMime = validateAndDetectImageType(file);
+        return uploadAvatar(file, detectedMime);
+    }
+
+    public String uploadAvatar(MultipartFile file, String detectedMime) {
         String extension = extractExtension(detectedMime);
         String objectName = UUID.randomUUID() + extension;
         uploadFile(avatarBucket, objectName, file, detectedMime);

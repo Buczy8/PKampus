@@ -20,12 +20,15 @@ public class TokenRevocationService {
 
     private final Cache<UUID, Boolean> revocationCache;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final AuthenticatedUserCache authenticatedUserCache;
 
     public TokenRevocationService(
             @Value("${jwt.expiration-minutes:15}") long expirationMinutes,
-            RefreshTokenRepository refreshTokenRepository
+            RefreshTokenRepository refreshTokenRepository,
+            AuthenticatedUserCache authenticatedUserCache
     ) {
         this.refreshTokenRepository = refreshTokenRepository;
+        this.authenticatedUserCache = authenticatedUserCache;
         this.revocationCache = Caffeine.newBuilder()
                 .expireAfterWrite(expirationMinutes, TimeUnit.MINUTES)
                 .maximumSize(10_000)
@@ -35,8 +38,18 @@ public class TokenRevocationService {
     @Transactional
     public void revokeUser(UUID userId) {
         if (userId != null) {
-            revocationCache.put(userId, Boolean.TRUE);
+            blacklistAccessToken(userId);
             refreshTokenRepository.revokeAllByUserId(userId);
+        }
+    }
+
+    /**
+     * Blacklists access JWTs for the user without revoking all refresh tokens.
+     */
+    public void blacklistAccessToken(UUID userId) {
+        if (userId != null) {
+            revocationCache.put(userId, Boolean.TRUE);
+            authenticatedUserCache.invalidate(userId);
         }
     }
 
