@@ -7,8 +7,15 @@
     <meta name="theme-color" content="#004785" />
     <meta name="description" content="PKampus - Campus Information & Organization Platform" />
     <title>PKampus</title>
+    <script>
+      (() => {
+        const dark = window.matchMedia('(prefers-color-scheme: dark)').matches
+        document.documentElement.classList.toggle('dark', dark)
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+      })()
+    </script>
   </head>
-  <body class="bg-slate-50 text-slate-900 antialiased">
+  <body class="bg-background text-foreground antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
