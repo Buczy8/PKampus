@@ -184,22 +184,7 @@ class AdminResidentServiceTest {
         }
 
         @Test
-        void superAdminWithDormitoryContextCanList() {
-            User superAdmin = User.builder()
-                    .id(UUID.randomUUID())
-                    .email("super@pk.edu.pl")
-                    .role(UserRole.SUPER_ADMIN)
-                    .status(UserStatus.ACTIVE)
-                    .dormitory(dormitory)
-                    .build();
-            when(userRepository.findAllByDormitoryIdAndStatus(dormitory.getId(), UserStatus.PENDING_APPROVAL))
-                    .thenReturn(List.of(pendingResident));
-
-            assertEquals(1, adminResidentService.listPendingResidents(superAdmin).size());
-        }
-
-        @Test
-        void superAdminWithoutDormitoryThrows() {
+        void superAdminListsPendingAcrossAllDormitories() {
             User superAdmin = User.builder()
                     .id(UUID.randomUUID())
                     .email("super@pk.edu.pl")
@@ -207,9 +192,12 @@ class AdminResidentServiceTest {
                     .status(UserStatus.ACTIVE)
                     .dormitory(null)
                     .build();
+            when(userRepository.findAllByStatus(UserStatus.PENDING_APPROVAL))
+                    .thenReturn(List.of(pendingResident));
 
-            assertThrows(IllegalArgumentException.class,
-                    () -> adminResidentService.listPendingResidents(superAdmin));
+            assertEquals(1, adminResidentService.listPendingResidents(superAdmin).size());
+            verify(userRepository).findAllByStatus(UserStatus.PENDING_APPROVAL);
+            verify(userRepository, never()).findAllByDormitoryIdAndStatus(any(), any());
         }
 
         @Test

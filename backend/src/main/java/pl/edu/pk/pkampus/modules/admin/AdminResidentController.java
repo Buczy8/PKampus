@@ -37,7 +37,7 @@ public class AdminResidentController {
     @GetMapping("/pending")
     @Operation(
             summary = "List pending residency applications",
-            description = "Returns PENDING_APPROVAL residents for the administrator's dormitory, including declared room and MinIO avatar URL."
+            description = "Returns PENDING_APPROVAL residents. DORM_ADMIN sees only their dormitory; SUPER_ADMIN sees all dormitories."
     )
     public ResponseEntity<ApiResponse<List<PendingResidentDto>>> listPending(
             @AuthenticationPrincipal User admin

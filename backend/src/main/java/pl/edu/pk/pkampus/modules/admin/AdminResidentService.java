@@ -42,10 +42,17 @@ public class AdminResidentService {
 
     @Transactional(readOnly = true)
     public List<PendingResidentDto> listPendingResidents(User admin) {
-        UUID dormitoryId = resolveAdminDormitoryId(admin);
+        List<User> pending = switch (admin.getRole()) {
+            case SUPER_ADMIN -> userRepository.findAllByStatus(UserStatus.PENDING_APPROVAL);
+            case DORM_ADMIN -> {
+                UUID dormitoryId = requireAdminDormitoryId(admin);
+                yield userRepository.findAllByDormitoryIdAndStatus(dormitoryId, UserStatus.PENDING_APPROVAL);
+            }
+            default -> throw new AccessDeniedException(
+                    "Only dormitory administrators can manage residency applications");
+        };
 
-        return userRepository.findAllByDormitoryIdAndStatus(dormitoryId, UserStatus.PENDING_APPROVAL)
-                .stream()
+        return pending.stream()
                 .filter(u -> u.getRole() == UserRole.RESIDENT)
                 .map(this::toPendingDto)
                 .toList();
@@ -144,7 +151,11 @@ public class AdminResidentService {
             throw new AccountStatusException("Resident has no dormitory assigned");
         }
 
-        UUID adminDormId = resolveAdminDormitoryId(admin);
+        if (admin.getRole() == UserRole.SUPER_ADMIN) {
+            return resident;
+        }
+
+        UUID adminDormId = requireAdminDormitoryId(admin);
         if (!adminDormId.equals(resident.getDormitory().getId())) {
             throw new AccessDeniedException("Resident does not belong to your dormitory");
         }
@@ -152,14 +163,7 @@ public class AdminResidentService {
         return resident;
     }
 
-    private UUID resolveAdminDormitoryId(User admin) {
-        if (admin.getRole() == UserRole.SUPER_ADMIN) {
-            if (admin.getDormitory() != null) {
-                return admin.getDormitory().getId();
-            }
-            throw new IllegalArgumentException(
-                    "SUPER_ADMIN must have a dormitory context to manage pending residents in MVP");
-        }
+    private UUID requireAdminDormitoryId(User admin) {
         if (admin.getRole() != UserRole.DORM_ADMIN) {
             throw new AccessDeniedException("Only dormitory administrators can manage residency applications");
         }

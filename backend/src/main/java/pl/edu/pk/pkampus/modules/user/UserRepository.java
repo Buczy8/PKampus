@@ -18,6 +18,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"dormitory"})
     List<User> findAllByDormitoryIdAndStatus(UUID dormitoryId, UserStatus status);
 
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"dormitory"})
     List<User> findAllByStatus(UserStatus status);
 
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"dormitory"})
