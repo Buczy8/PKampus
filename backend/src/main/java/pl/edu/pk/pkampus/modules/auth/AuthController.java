@@ -25,6 +25,8 @@ import pl.edu.pk.pkampus.modules.user.dto.UserProfileDto;
 import pl.edu.pk.pkampus.modules.auth.dto.VerifyEmailResponseDto;
 import pl.edu.pk.pkampus.modules.user.User;
 
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
@@ -61,11 +63,36 @@ public class AuthController {
     @PostMapping("/login")
     @Operation(
             summary = "User authentication (login)",
-            description = "Verifies user credentials and account status (ACTIVE status required). Returns JWT token (TTL 15 min) and user profile."
+            description = "Verifies user credentials and account status (ACTIVE status required). Returns JWT token (TTL 15 min), refresh token (TTL 7 days), and user profile."
     )
     public ResponseEntity<ApiResponse<AuthResponseDto>> login(@Valid @RequestBody LoginRequestDto loginRequestDto) {
         AuthResponseDto response = authService.login(loginRequestDto);
         return ResponseEntity.ok(ApiResponse.ok(response, "Logged in successfully"));
+    }
+
+    @PostMapping("/refresh")
+    @Operation(
+            summary = "Refresh access token",
+            description = "Rotates refresh token (TTL 7 days) and issues a new access token (TTL 15 min). Invalidates old refresh token."
+    )
+    public ResponseEntity<ApiResponse<AuthResponseDto>> refresh(@Valid @RequestBody pl.edu.pk.pkampus.modules.auth.dto.RefreshTokenRequestDto request) {
+        AuthResponseDto response = authService.refreshToken(request.getRefreshToken());
+        return ResponseEntity.ok(ApiResponse.ok(response, "Token refreshed successfully"));
+    }
+
+    @PostMapping("/logout")
+    @Operation(
+            summary = "User logout",
+            description = "Revokes user session, invalidates current refresh token, and adds user ID to in-memory Caffeine blacklist."
+    )
+    public ResponseEntity<ApiResponse<Void>> logout(
+            @AuthenticationPrincipal User user,
+            @RequestBody(required = false) pl.edu.pk.pkampus.modules.auth.dto.RefreshTokenRequestDto request
+    ) {
+        String refreshToken = request != null ? request.getRefreshToken() : null;
+        UUID userId = user != null ? user.getId() : null;
+        authService.logout(userId, refreshToken);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Logged out successfully"));
     }
 
     @GetMapping("/me")

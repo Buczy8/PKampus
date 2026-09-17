@@ -19,5 +19,9 @@ public class AuthResponseDto {
 
     private long expiresInSeconds;
 
+    private String refreshToken;
+
+    private long refreshExpiresInSeconds;
+
     private UserProfileDto user;
 }

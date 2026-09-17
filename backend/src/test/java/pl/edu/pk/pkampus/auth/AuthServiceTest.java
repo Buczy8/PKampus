@@ -63,6 +63,12 @@ class AuthServiceTest {
     private JwtService jwtService;
 
     @Mock
+    private pl.edu.pk.pkampus.security.jwt.RefreshTokenService refreshTokenService;
+
+    @Mock
+    private pl.edu.pk.pkampus.security.jwt.TokenRevocationService tokenRevocationService;
+
+    @Mock
     private EmailService emailService;
 
     @InjectMocks
@@ -172,6 +178,8 @@ class AuthServiceTest {
         when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(testUser.getId())).thenReturn(Optional.empty());
         when(jwtService.generateToken(testUser, "101")).thenReturn("valid-jwt-token");
         when(jwtService.getExpirationMinutes()).thenReturn(15L);
+        when(refreshTokenService.createRefreshToken(testUser)).thenReturn("valid-refresh-token");
+        when(refreshTokenService.getRefreshExpirationSeconds()).thenReturn(604800L);
 
         AuthResponseDto response = authService.login(loginDto);
 
@@ -179,6 +187,8 @@ class AuthServiceTest {
         assertEquals("valid-jwt-token", response.getToken());
         assertEquals("Bearer", response.getTokenType());
         assertEquals(900L, response.getExpiresInSeconds());
+        assertEquals("valid-refresh-token", response.getRefreshToken());
+        assertEquals(604800L, response.getRefreshExpiresInSeconds());
         assertEquals("student@pk.edu.pl", response.getUser().getEmail());
     }
 
@@ -214,5 +224,32 @@ class AuthServiceTest {
 
         AccountStatusException ex = assertThrows(AccountStatusException.class, () -> authService.login(loginDto));
         assertTrue(ex.getMessage().contains("suspended"));
+    }
+
+    @Test
+    void shouldRefreshTokenSuccessfully() {
+        testUser.setStatus(UserStatus.ACTIVE);
+        when(refreshTokenService.rotateRefreshToken("raw-refresh-token"))
+                .thenReturn(new pl.edu.pk.pkampus.security.jwt.RefreshTokenService.RefreshTokenResult("new-raw-token", testUser));
+        when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(testUser.getId())).thenReturn(Optional.empty());
+        when(jwtService.generateToken(testUser, "101")).thenReturn("new-jwt-token");
+        when(jwtService.getExpirationMinutes()).thenReturn(15L);
+        when(refreshTokenService.getRefreshExpirationSeconds()).thenReturn(604800L);
+
+        AuthResponseDto response = authService.refreshToken("raw-refresh-token");
+
+        assertNotNull(response);
+        assertEquals("new-jwt-token", response.getToken());
+        assertEquals("new-raw-token", response.getRefreshToken());
+        assertEquals(604800L, response.getRefreshExpiresInSeconds());
+        verify(refreshTokenService).rotateRefreshToken("raw-refresh-token");
+    }
+
+    @Test
+    void shouldLogoutSuccessfully() {
+        authService.logout(testUser.getId(), "some-refresh-token");
+
+        verify(tokenRevocationService).revokeUser(testUser.getId());
+        verify(refreshTokenService).revokeRefreshToken("some-refresh-token");
     }
 }

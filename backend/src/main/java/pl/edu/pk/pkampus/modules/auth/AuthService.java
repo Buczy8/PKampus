@@ -26,6 +26,8 @@ import pl.edu.pk.pkampus.common.storage.MinioStorageService;
 import pl.edu.pk.pkampus.security.token.SignedEmailTokenService;
 import pl.edu.pk.pkampus.security.token.EmailTokenPayload;
 import pl.edu.pk.pkampus.security.jwt.JwtService;
+import pl.edu.pk.pkampus.security.jwt.RefreshTokenService;
+import pl.edu.pk.pkampus.security.jwt.TokenRevocationService;
 import pl.edu.pk.pkampus.mail.EmailService;
 
 import java.util.UUID;
@@ -42,6 +44,8 @@ public class AuthService {
     private final MinioStorageService minioStorageService;
     private final SignedEmailTokenService signedEmailTokenService;
     private final JwtService jwtService;
+    private final RefreshTokenService refreshTokenService;
+    private final TokenRevocationService tokenRevocationService;
     private final EmailService emailService;
 
     public static final String REGISTRATION_SUCCESS_MESSAGE =
@@ -113,7 +117,7 @@ public class AuthService {
         );
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthResponseDto login(LoginRequestDto dto) {
         String normalizedEmail = dto.getEmail().trim().toLowerCase();
 
@@ -145,6 +149,7 @@ public class AuthService {
                 .orElse(user.getDeclaredRoomNumber());
 
         String jwt = jwtService.generateToken(user, roomNumber);
+        String refreshToken = refreshTokenService.createRefreshToken(user);
         UserProfileDto profile = buildUserProfileDto(user, roomNumber);
 
         log.info("User {} successfully logged in.", user.getId());
@@ -153,8 +158,43 @@ public class AuthService {
                 .token(jwt)
                 .tokenType("Bearer")
                 .expiresInSeconds(jwtService.getExpirationMinutes() * 60)
+                .refreshToken(refreshToken)
+                .refreshExpiresInSeconds(refreshTokenService.getRefreshExpirationSeconds())
                 .user(profile)
                 .build();
+    }
+
+    @Transactional
+    public AuthResponseDto refreshToken(String rawRefreshToken) {
+        RefreshTokenService.RefreshTokenResult result = refreshTokenService.rotateRefreshToken(rawRefreshToken);
+        User user = result.user();
+
+        String roomNumber = roomAssignmentRepository.findByUserIdAndIsActiveTrue(user.getId())
+                .map(ra -> ra.getRoom().getRoomNumber())
+                .orElse(user.getDeclaredRoomNumber());
+
+        String newJwt = jwtService.generateToken(user, roomNumber);
+        UserProfileDto profile = buildUserProfileDto(user, roomNumber);
+
+        return AuthResponseDto.builder()
+                .token(newJwt)
+                .tokenType("Bearer")
+                .expiresInSeconds(jwtService.getExpirationMinutes() * 60)
+                .refreshToken(result.newRawToken())
+                .refreshExpiresInSeconds(refreshTokenService.getRefreshExpirationSeconds())
+                .user(profile)
+                .build();
+    }
+
+    @Transactional
+    public void logout(UUID userId, String rawRefreshToken) {
+        if (userId != null) {
+            tokenRevocationService.revokeUser(userId);
+        }
+        if (rawRefreshToken != null && !rawRefreshToken.isBlank()) {
+            refreshTokenService.revokeRefreshToken(rawRefreshToken);
+        }
+        log.info("User {} successfully logged out.", userId);
     }
 
     @Transactional(readOnly = true)
