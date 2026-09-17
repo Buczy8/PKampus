@@ -4,6 +4,7 @@ import { cn } from 'cn'
 
 import { login } from '@/api/auth'
 import { getApiErrorMessage } from '@/api/errors'
+import { isAdminRole } from '@/api/types'
 import { setAuthTokens } from '@/lib/auth-storage'
 import { Button } from '@/components/ui/button'
 import {
@@ -59,7 +60,7 @@ export function LoginForm({
     try {
       const auth = await login({ email: email.trim(), password })
       setAuthTokens(auth.token, auth.refreshToken)
-      navigate('/dashboard')
+      navigate(isAdminRole(auth.user.role) ? '/admin' : '/dashboard')
     } catch (error) {
       setErrors({ form: getApiErrorMessage(error, 'Login failed') })
     } finally {

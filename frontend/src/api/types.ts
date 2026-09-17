@@ -63,3 +63,39 @@ export interface Dormitory {
   address: string
   floorsCount: number
 }
+
+export interface PendingResident {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+  phoneNumber: string
+  declaredRoomNumber: string
+  dormitoryId: string
+  dormitoryName: string
+  avatarUrl?: string | null
+  createdAt: string
+}
+
+export interface ActivateResidentRequest {
+  roomNumber?: string
+}
+
+export interface ActivateResidentResponse {
+  message: string
+  userId: string
+  roomNumber: string
+  status: string
+  roomAssignmentId?: string
+  academicYear?: string
+}
+
+export interface RejectResidentRequest {
+  reason: string
+}
+
+export const ADMIN_ROLES = ['DORM_ADMIN', 'SUPER_ADMIN'] as const
+
+export function isAdminRole(role: string | undefined | null): boolean {
+  return role === 'DORM_ADMIN' || role === 'SUPER_ADMIN'
+}

@@ -5,7 +5,13 @@ import type {
   LoginRequest,
   RegisterRequest,
   RegisterResponse,
+  UserProfile,
 } from '@/api/types'
+
+export interface VerifyEmailResponse {
+  message: string
+  status: string
+}
 
 export async function login(request: LoginRequest): Promise<AuthResponse> {
   const { data } = await apiClient.post<ApiResponse<AuthResponse>>('/auth/login', request)
@@ -37,11 +43,6 @@ export async function registerResident(
   return data.data
 }
 
-export interface VerifyEmailResponse {
-  message: string
-  status: string
-}
-
 export async function verifyEmail(token: string): Promise<VerifyEmailResponse> {
   const { data } = await apiClient.get<ApiResponse<VerifyEmailResponse>>(
     '/auth/verify-email',
@@ -52,4 +53,16 @@ export async function verifyEmail(token: string): Promise<VerifyEmailResponse> {
     throw new Error(data.message ?? 'Email verification failed')
   }
   return data.data
+}
+
+export async function getCurrentUser(): Promise<UserProfile> {
+  const { data } = await apiClient.get<ApiResponse<UserProfile>>('/auth/me')
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to load current user')
+  }
+  return data.data
+}
+
+export async function logout(refreshToken?: string | null): Promise<void> {
+  await apiClient.post('/auth/logout', refreshToken ? { refreshToken } : {})
 }
