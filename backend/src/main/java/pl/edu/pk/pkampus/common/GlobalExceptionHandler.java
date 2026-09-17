@@ -9,6 +9,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import pl.edu.pk.pkampus.exception.EmailVerificationTokenInvalidException;
+import pl.edu.pk.pkampus.exception.FileStorageException;
+import pl.edu.pk.pkampus.exception.InvalidFileException;
 
 import java.time.OffsetDateTime;
 import java.util.HashMap;
@@ -50,6 +52,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(EmailVerificationTokenInvalidException.class)
     public ResponseEntity<ApiResponse<Void>> handleEmailVerificationTokenInvalid(EmailVerificationTokenInvalidException ex) {
         return ResponseEntity.status(HttpStatus.GONE)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidFileException.class)
+    public ResponseEntity<ApiResponse<Void>> handleInvalidFile(InvalidFileException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(FileStorageException.class)
+    public ResponseEntity<ApiResponse<Void>> handleFileStorage(FileStorageException ex) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
