@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { verifyEmail } from '@/api/auth'
 import { getApiErrorMessage } from '@/api/errors'
@@ -19,6 +19,7 @@ type VerifyState =
   | { status: 'error'; message: string }
 
 export function VerifyEmailPage() {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token')
   const [state, setState] = useState<VerifyState>({ status: 'loading' })
@@ -78,16 +79,21 @@ export function VerifyEmailPage() {
               <p className="text-sm text-muted-foreground">{state.message}</p>
             )}
 
-            {state.status !== 'loading' ? (
-              <Button asChild>
-                <Link to="/login">Go to login</Link>
+            {state.status === 'success' ? (
+              <Button type="button" onClick={() => navigate('/pending-approval')}>
+                Continue
               </Button>
             ) : null}
 
             {state.status === 'error' ? (
-              <FieldDescription className="text-center">
-                Need a new account? <Link to="/register">Sign up</Link>
-              </FieldDescription>
+              <>
+                <Button asChild>
+                  <Link to="/login">Go to login</Link>
+                </Button>
+                <FieldDescription className="text-center">
+                  Need a new account? <Link to="/register">Sign up</Link>
+                </FieldDescription>
+              </>
             ) : null}
           </CardContent>
         </Card>

@@ -62,7 +62,12 @@ export function LoginForm({
       setAuthTokens(auth.token, auth.refreshToken)
       navigate(isAdminRole(auth.user.role) ? '/admin' : '/dashboard')
     } catch (error) {
-      setErrors({ form: getApiErrorMessage(error, 'Login failed') })
+      const message = getApiErrorMessage(error, 'Login failed')
+      if (/awaiting residency approval|PENDING_APPROVAL/i.test(message)) {
+        navigate('/pending-approval')
+        return
+      }
+      setErrors({ form: message })
     } finally {
       setIsSubmitting(false)
     }
