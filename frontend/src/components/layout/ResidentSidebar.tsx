@@ -1,6 +1,5 @@
 import { NavLink } from "react-router-dom"
 import {
-  Building2,
   ChevronLeft,
   ChevronRight,
   DoorClosed,
@@ -14,6 +13,7 @@ import {
 } from "lucide-react"
 
 import type { UserProfile } from "@/api/types"
+import { PkLogo } from "@/components/brand/PkLogo"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -124,9 +124,7 @@ export function ResidentSidebar({
         {!collapsed ? (
           <>
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm shrink-0">
-                <Building2 className="size-5" />
-              </div>
+              <PkLogo variant="icon" className="size-9 shrink-0 rounded-lg" />
               <div className="flex flex-col min-w-0">
                 <span className="font-semibold text-sm tracking-tight truncate leading-tight flex items-center gap-1.5">
                   PKampus

@@ -1,12 +1,12 @@
 import * as React from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import {
-  Building2,
   LogOut,
   Settings,
 } from "lucide-react"
 
 import type { UserProfile } from "@/api/types"
+import { PkLogo } from "@/components/brand/PkLogo"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -86,9 +86,10 @@ export function ResidentHeader({ user, onLogout }: ResidentHeaderProps) {
     <header className="sticky top-0 z-30 flex h-16 w-full shrink-0 items-center justify-between border-b border-border/60 bg-background/90 px-4 backdrop-blur-md transition-all">
       {/* Left side: Route Title / Mobile brand */}
       <div className="flex items-center gap-3 min-w-0">
-        <div className="flex md:hidden size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shrink-0 shadow-xs">
-          <Building2 className="size-4" />
-        </div>
+        <PkLogo
+          variant="icon"
+          className="flex md:hidden size-8 shrink-0 rounded-lg shadow-xs"
+        />
 
         <div className="flex flex-col min-w-0">
           <h1 className="text-sm md:text-base font-semibold text-foreground tracking-tight truncate leading-tight">
