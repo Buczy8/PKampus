@@ -260,3 +260,41 @@ export interface UpdateCampusEventRequest {
   eventDate?: string
   endDate?: string | null
 }
+
+export type ThematicRoomStatus = 'AVAILABLE' | 'MAINTENANCE'
+
+export interface ThematicRoom {
+  id: string
+  dormitoryId: string
+  name: string
+  maxCapacity: number
+  openingTime: string
+  closingTime: string
+  spansMidnight: boolean
+  maxDurationHours: number
+  description: string | null
+  status: ThematicRoomStatus
+  createdAt: string
+}
+
+export interface CreateThematicRoomRequest {
+  name: string
+  maxCapacity: number
+  openingTime: string
+  closingTime: string
+  spansMidnight?: boolean
+  maxDurationHours: number
+  description?: string
+  status?: ThematicRoomStatus
+}
+
+export interface UpdateThematicRoomRequest {
+  name?: string
+  maxCapacity?: number
+  openingTime?: string
+  closingTime?: string
+  spansMidnight?: boolean
+  maxDurationHours?: number
+  description?: string | null
+  status?: ThematicRoomStatus
+}
