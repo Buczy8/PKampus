@@ -2,12 +2,14 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import {
   clearAuthTokens,
   getAccessToken,
+  getAuthSessionEpoch,
   getRefreshToken,
   setAuthTokens,
 } from '@/lib/auth-storage'
 import type { ApiResponse, AuthResponse } from '@/api/types'
 
 const API_BASE_URL = '/api/v1'
+const REFRESH_LOCK_NAME = 'pkampus-token-refresh'
 
 type RetriableConfig = InternalAxiosRequestConfig & {
   _retry?: boolean
@@ -38,23 +40,53 @@ function isPublicAuthRequest(url?: string): boolean {
   )
 }
 
-async function rotateTokens(): Promise<string> {
+async function rotateTokensUnlocked(): Promise<string> {
+  const epochAtStart = getAuthSessionEpoch()
+  // Re-read after lock — another tab / login may have already rotated.
   const refreshToken = getRefreshToken()
   if (!refreshToken) {
     throw new Error('No refresh token available')
   }
 
-  const { data } = await refreshClient.post<ApiResponse<AuthResponse>>(
-    '/auth/refresh',
-    { refreshToken },
-  )
+  try {
+    const { data } = await refreshClient.post<ApiResponse<AuthResponse>>(
+      '/auth/refresh',
+      { refreshToken },
+    )
 
-  if (!data.success || !data.data?.token || !data.data.refreshToken) {
-    throw new Error(data.message ?? 'Token refresh failed')
+    if (!data.success || !data.data?.token || !data.data.refreshToken) {
+      throw new Error(data.message ?? 'Token refresh failed')
+    }
+
+    // Newer login/session won the race — keep its tokens.
+    if (epochAtStart !== getAuthSessionEpoch()) {
+      const current = getAccessToken()
+      if (current) return current
+    }
+
+    setAuthTokens(data.data.token, data.data.refreshToken)
+    return data.data.token
+  } catch (error) {
+    // If tokens changed (e.g. user logged in again), do not treat this as logout.
+    if (epochAtStart !== getAuthSessionEpoch()) {
+      const current = getAccessToken()
+      if (current) return current
+    }
+    // Another tab may have rotated successfully while we held a stale RT.
+    if (getRefreshToken() && getRefreshToken() !== refreshToken) {
+      const current = getAccessToken()
+      if (current) return current
+    }
+    throw error
   }
+}
 
-  setAuthTokens(data.data.token, data.data.refreshToken)
-  return data.data.token
+async function rotateTokens(): Promise<string> {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined
+  if (locks?.request) {
+    return locks.request(REFRESH_LOCK_NAME, () => rotateTokensUnlocked())
+  }
+  return rotateTokensUnlocked()
 }
 
 function redirectToLogin() {
@@ -99,6 +131,7 @@ apiClient.interceptors.response.use(
     }
 
     original._retry = true
+    const epochAtStart = getAuthSessionEpoch()
 
     try {
       if (!refreshInFlight) {
@@ -111,7 +144,10 @@ apiClient.interceptors.response.use(
       original.headers.Authorization = `Bearer ${accessToken}`
       return apiClient(original)
     } catch {
-      redirectToLogin()
+      // Only wipe session if nothing newer replaced tokens during the attempt.
+      if (epochAtStart === getAuthSessionEpoch()) {
+        redirectToLogin()
+      }
       return Promise.reject(error)
     }
   },

@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.exception.AccountStatusException;
+import pl.edu.pk.pkampus.common.exception.InvalidTokenException;
 import pl.edu.pk.pkampus.modules.user.User;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
 
@@ -62,17 +63,18 @@ public class RefreshTokenService {
         String tokenHash = hashToken(rawToken);
 
         RefreshToken existingToken = refreshTokenRepository.findByTokenHash(tokenHash)
-                .orElseThrow(() -> new AccountStatusException("Invalid refresh token"));
+                .orElseThrow(() -> new InvalidTokenException("Invalid refresh token"));
 
         if (existingToken.isRevoked()) {
-            log.warn("Attempted reuse of revoked refresh token! Revoking all sessions for user {}",
+            // Do not revoke sibling sessions — concurrent tab refresh races are common in SPAs
+            // and "reuse = theft" wipeouts cause false logouts. Reject this token only.
+            log.warn("Rejected revoked refresh token for user {} (no global revoke)",
                     existingToken.getUser().getId());
-            refreshTokenRepository.revokeAllByUserId(existingToken.getUser().getId());
-            throw new AccountStatusException("Refresh token has been revoked due to security violation");
+            throw new InvalidTokenException("Refresh token is no longer valid");
         }
 
         if (existingToken.isExpired()) {
-            throw new AccountStatusException("Refresh token has expired");
+            throw new InvalidTokenException("Refresh token has expired");
         }
 
         User user = existingToken.getUser();

@@ -205,6 +205,8 @@ class AuthServiceTest {
         assertEquals("valid-refresh-token", response.getRefreshToken());
         assertEquals(604800L, response.getRefreshExpiresInSeconds());
         assertEquals("student@pk.edu.pl", response.getUser().getEmail());
+        verify(tokenRevocationService).clearRevocation(testUser.getId());
+        verify(refreshTokenService).revokeAllUserTokens(testUser.getId());
     }
 
     @Test

@@ -150,6 +150,11 @@ public class AuthService {
             }
         }
 
+        // Logout blacklists access JWTs for ~TTL; clear so a fresh login works immediately.
+        tokenRevocationService.clearRevocation(user.getId());
+        // Drop previous refresh sessions so only this login's token remains current.
+        refreshTokenService.revokeAllUserTokens(user.getId());
+
         String roomNumber = roomAssignmentRepository.findByUserIdAndIsActiveTrue(user.getId())
                 .map(ra -> ra.getRoom().getRoomNumber())
                 .orElse(user.getDeclaredRoomNumber());

@@ -1,5 +1,6 @@
 import { useState, type ComponentProps, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { cn } from 'cn'
 
 import { login } from '@/api/auth'
@@ -40,6 +41,7 @@ export function LoginForm({
   ...props
 }: ComponentProps<'div'>) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errors, setErrors] = useState<LoginErrors>({})
@@ -60,7 +62,9 @@ export function LoginForm({
     try {
       const auth = await login({ email: email.trim(), password })
       setAuthTokens(auth.token, auth.refreshToken)
-      navigate(isAdminRole(auth.user.role) ? '/admin' : '/dashboard')
+      // Seed cache so ProtectedRoute does not reuse a previous failed /me error.
+      queryClient.setQueryData(['auth', 'me'], auth.user)
+      navigate(isAdminRole(auth.user.role) ? '/admin' : '/dashboard', { replace: true })
     } catch (error) {
       const message = getApiErrorMessage(error, 'Login failed')
       if (/awaiting residency approval|PENDING_APPROVAL/i.test(message)) {

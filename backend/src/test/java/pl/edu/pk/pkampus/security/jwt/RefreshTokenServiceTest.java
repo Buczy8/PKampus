@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import pl.edu.pk.pkampus.common.exception.AccountStatusException;
+import pl.edu.pk.pkampus.common.exception.InvalidTokenException;
 import pl.edu.pk.pkampus.modules.user.User;
 import pl.edu.pk.pkampus.modules.user.UserRole;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
@@ -85,7 +85,7 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    void shouldDetectBreachWhenRevokedTokenIsReused() {
+    void shouldRejectRevokedTokenWithoutRevokingOtherSessions() {
         RefreshToken revokedToken = RefreshToken.builder()
                 .id(UUID.randomUUID())
                 .user(testUser)
@@ -96,11 +96,11 @@ class RefreshTokenServiceTest {
 
         when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(revokedToken));
 
-        AccountStatusException ex = assertThrows(AccountStatusException.class,
+        InvalidTokenException ex = assertThrows(InvalidTokenException.class,
                 () -> refreshTokenService.rotateRefreshToken("reused-token"));
 
-        assertTrue(ex.getMessage().contains("security violation"));
-        verify(refreshTokenRepository).revokeAllByUserId(testUser.getId());
+        assertTrue(ex.getMessage().contains("no longer valid"));
+        verify(refreshTokenRepository, never()).revokeAllByUserId(any());
     }
 
     @Test
@@ -115,7 +115,7 @@ class RefreshTokenServiceTest {
 
         when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(expiredToken));
 
-        AccountStatusException ex = assertThrows(AccountStatusException.class,
+        InvalidTokenException ex = assertThrows(InvalidTokenException.class,
                 () -> refreshTokenService.rotateRefreshToken("expired-token"));
 
         assertTrue(ex.getMessage().contains("expired"));
