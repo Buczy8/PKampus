@@ -186,7 +186,7 @@ class AdminResidentIntegrationTest {
     @Test
     void unauthenticatedRequestIsRejected() throws Exception {
         mockMvc.perform(get("/api/v1/admin/residents/pending"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

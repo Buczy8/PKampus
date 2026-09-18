@@ -55,6 +55,9 @@ class AdminResidentControllerTest {
     private AdminResidentService adminResidentService;
 
     @MockBean
+    private AdminResidentDirectoryService adminResidentDirectoryService;
+
+    @MockBean
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @MockBean

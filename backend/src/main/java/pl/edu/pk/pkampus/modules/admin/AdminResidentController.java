@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -17,8 +18,11 @@ import org.springframework.web.bind.annotation.RestController;
 import pl.edu.pk.pkampus.common.ApiResponse;
 import pl.edu.pk.pkampus.modules.admin.dto.ActivateResidentRequestDto;
 import pl.edu.pk.pkampus.modules.admin.dto.ActivateResidentResponseDto;
+import pl.edu.pk.pkampus.modules.admin.dto.CreateRoomBanRequestDto;
+import pl.edu.pk.pkampus.modules.admin.dto.ManagedResidentDto;
 import pl.edu.pk.pkampus.modules.admin.dto.PendingResidentDto;
 import pl.edu.pk.pkampus.modules.admin.dto.RejectResidentRequestDto;
+import pl.edu.pk.pkampus.modules.admin.dto.SanctionDto;
 import pl.edu.pk.pkampus.modules.user.User;
 
 import java.util.List;
@@ -33,6 +37,78 @@ import java.util.UUID;
 public class AdminResidentController {
 
     private final AdminResidentService adminResidentService;
+    private final AdminResidentDirectoryService adminResidentDirectoryService;
+
+    @GetMapping
+    @PreAuthorize("hasRole('DORM_ADMIN')")
+    @Operation(summary = "List ACTIVE/BLOCKED residents in the admin's dormitory")
+    public ResponseEntity<ApiResponse<List<ManagedResidentDto>>> list(
+            @AuthenticationPrincipal User admin
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(adminResidentDirectoryService.listResidents(admin)));
+    }
+
+    @PostMapping("/{id}/block")
+    @PreAuthorize("hasRole('DORM_ADMIN')")
+    @Operation(summary = "Block resident account")
+    public ResponseEntity<ApiResponse<ManagedResidentDto>> block(
+            @AuthenticationPrincipal User admin,
+            @PathVariable("id") UUID residentId
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                adminResidentDirectoryService.block(admin, residentId),
+                "Resident blocked"));
+    }
+
+    @PostMapping("/{id}/unblock")
+    @PreAuthorize("hasRole('DORM_ADMIN')")
+    @Operation(summary = "Unblock resident account")
+    public ResponseEntity<ApiResponse<ManagedResidentDto>> unblock(
+            @AuthenticationPrincipal User admin,
+            @PathVariable("id") UUID residentId
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                adminResidentDirectoryService.unblock(admin, residentId),
+                "Resident unblocked"));
+    }
+
+    @PostMapping("/{id}/checkout")
+    @PreAuthorize("hasRole('DORM_ADMIN')")
+    @Operation(summary = "Check out resident from dormitory")
+    public ResponseEntity<ApiResponse<ManagedResidentDto>> checkout(
+            @AuthenticationPrincipal User admin,
+            @PathVariable("id") UUID residentId
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                adminResidentDirectoryService.checkout(admin, residentId),
+                "Resident checked out"));
+    }
+
+    @PostMapping("/{id}/room-ban")
+    @PreAuthorize("hasRole('DORM_ADMIN')")
+    @Operation(summary = "Issue ROOM_BAN sanction (1–3 months)")
+    public ResponseEntity<ApiResponse<SanctionDto>> issueRoomBan(
+            @AuthenticationPrincipal User admin,
+            @PathVariable("id") UUID residentId,
+            @Valid @RequestBody CreateRoomBanRequestDto request
+    ) {
+        SanctionDto created = adminResidentDirectoryService.issueRoomBan(admin, residentId, request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok(created, "ROOM_BAN issued"));
+    }
+
+    @PostMapping("/{id}/room-ban/{sanctionId}/revoke")
+    @PreAuthorize("hasRole('DORM_ADMIN')")
+    @Operation(summary = "Revoke active ROOM_BAN")
+    public ResponseEntity<ApiResponse<SanctionDto>> revokeRoomBan(
+            @AuthenticationPrincipal User admin,
+            @PathVariable("id") UUID residentId,
+            @PathVariable UUID sanctionId
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                adminResidentDirectoryService.revokeRoomBan(admin, residentId, sanctionId),
+                "ROOM_BAN revoked"));
+    }
 
     @GetMapping("/pending")
     @Operation(
