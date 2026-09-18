@@ -223,6 +223,33 @@ export interface UpdateDormAdminRequest {
   phoneNumber?: string
 }
 
+export interface ReceptionistAccount {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+  phoneNumber: string
+  status: string
+  dormitoryId: string | null
+  dormitoryName: string | null
+  createdAt: string
+}
+
+export interface CreateReceptionistRequest {
+  firstName: string
+  lastName: string
+  email: string
+  phoneNumber: string
+  password: string
+}
+
+export interface UpdateReceptionistRequest {
+  status?: 'ACTIVE' | 'BLOCKED'
+  firstName?: string
+  lastName?: string
+  phoneNumber?: string
+}
+
 export type DormEventCategory = 'BED_LINEN' | 'TECHNICAL_OUTAGE' | 'ADMIN_NOTICE' | 'STUDENT_EVENT'
 export type DormEventPriority = 'INFO' | 'WARNING' | 'CRITICAL'
 

@@ -18,13 +18,20 @@ import {
   listAdminEvents,
   updateAdminEvent,
 } from '@/api/admin-events'
+import {
+  createReceptionist,
+  listReceptionists,
+  updateReceptionist,
+} from '@/api/admin-receptionists'
 import { logout } from '@/api/auth'
 import { getApiErrorMessage } from '@/api/errors'
 import type {
   CreateDormEventRequest,
+  CreateReceptionistRequest,
   CreateThematicRoomRequest,
   DormEvent,
   PendingResident,
+  ReceptionistAccount,
   ThematicRoom,
   UserProfile,
 } from '@/api/types'
@@ -66,7 +73,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 
-type Section = 'residents' | 'rooms' | 'events'
+type Section = 'residents' | 'rooms' | 'events' | 'porters'
 
 function initials(firstName: string, lastName: string) {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
@@ -92,6 +99,14 @@ function emptyEventForm(): CreateDormEventRequest {
     eventDate: new Date().toISOString().slice(0, 16),
     endDate: '',
   }
+}
+
+const emptyPorterForm: CreateReceptionistRequest = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  phoneNumber: '',
+  password: '',
 }
 
 function toIsoFromLocalInput(value: string): string {
@@ -151,6 +166,9 @@ export function AdminPage() {
   const [editingEvent, setEditingEvent] = useState<DormEvent | null>(null)
   const [eventForm, setEventForm] = useState<CreateDormEventRequest>(emptyEventForm)
 
+  const [porterDialogOpen, setPorterDialogOpen] = useState(false)
+  const [porterForm, setPorterForm] = useState<CreateReceptionistRequest>(emptyPorterForm)
+
   const pendingQuery = useQuery({
     queryKey: ['admin', 'pending-residents'],
     queryFn: listPendingResidents,
@@ -166,6 +184,12 @@ export function AdminPage() {
     queryKey: ['admin', 'events'],
     queryFn: listAdminEvents,
     enabled: section === 'events',
+  })
+
+  const portersQuery = useQuery({
+    queryKey: ['admin', 'receptionists'],
+    queryFn: listReceptionists,
+    enabled: section === 'porters',
   })
 
   const activateMutation = useMutation({
@@ -276,6 +300,33 @@ export function AdminPage() {
     onError: (error) => setActionError(getApiErrorMessage(error, 'Delete failed')),
   })
 
+  const savePorterMutation = useMutation({
+    mutationFn: () =>
+      createReceptionist({
+        ...porterForm,
+        firstName: porterForm.firstName.trim(),
+        lastName: porterForm.lastName.trim(),
+        email: porterForm.email.trim(),
+        phoneNumber: porterForm.phoneNumber.trim(),
+      }),
+    onSuccess: async () => {
+      setPorterDialogOpen(false)
+      setPorterForm(emptyPorterForm)
+      setActionError(null)
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'receptionists'] })
+    },
+    onError: (error) => setActionError(getApiErrorMessage(error, 'Create failed')),
+  })
+
+  const togglePorterMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'ACTIVE' | 'BLOCKED' }) =>
+      updateReceptionist(id, { status }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'receptionists'] })
+    },
+    onError: (error) => setActionError(getApiErrorMessage(error, 'Update failed')),
+  })
+
   async function handleLogout() {
     try {
       await logout(getRefreshToken())
@@ -329,9 +380,16 @@ export function AdminPage() {
     setEventDialogOpen(true)
   }
 
+  function openCreatePorter() {
+    setPorterForm(emptyPorterForm)
+    setActionError(null)
+    setPorterDialogOpen(true)
+  }
+
   const pending = pendingQuery.data ?? []
   const rooms = roomsQuery.data ?? []
   const events = eventsQuery.data ?? []
+  const porters = portersQuery.data ?? []
 
   return (
     <main className="flex min-h-svh w-full items-start justify-center p-6 md:p-10">
@@ -377,6 +435,14 @@ export function AdminPage() {
             onClick={() => setSection('events')}
           >
             Komunikaty
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={section === 'porters' ? 'default' : 'outline'}
+            onClick={() => setSection('porters')}
+          >
+            Portierzy
           </Button>
         </div>
 
@@ -615,6 +681,88 @@ export function AdminPage() {
                             onClick={() => deleteEventMutation.mutate(event.id)}
                           >
                             Usuń
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {section === 'porters' && (
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <div>
+                <CardTitle>Portierzy</CardTitle>
+                <CardDescription>
+                  Konta RECEPTIONIST dla {user.dormitoryName ?? 'Twojego DS'}
+                </CardDescription>
+              </div>
+              <Button type="button" onClick={openCreatePorter}>
+                Dodaj portiera
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {portersQuery.isLoading ? (
+                <p className="text-sm text-muted-foreground">Ładowanie…</p>
+              ) : portersQuery.isError ? (
+                <p className="text-sm text-destructive">
+                  {getApiErrorMessage(portersQuery.error)}
+                </p>
+              ) : porters.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Brak portierów — dodaj pierwsze konto.
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Osoba</TableHead>
+                      <TableHead>Telefon</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Akcje</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {porters.map((porter: ReceptionistAccount) => (
+                      <TableRow key={porter.id}>
+                        <TableCell>
+                          <div className="min-w-0">
+                            <p className="font-medium">
+                              {porter.firstName} {porter.lastName}
+                            </p>
+                            <p className="truncate text-sm text-muted-foreground">
+                              {porter.email}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>{porter.phoneNumber}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              porter.status === 'ACTIVE' ? 'secondary' : 'destructive'
+                            }
+                          >
+                            {porter.status === 'ACTIVE' ? 'Aktywny' : 'Zablokowany'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={togglePorterMutation.isPending}
+                            onClick={() =>
+                              togglePorterMutation.mutate({
+                                id: porter.id,
+                                status: porter.status === 'ACTIVE' ? 'BLOCKED' : 'ACTIVE',
+                              })
+                            }
+                          >
+                            {porter.status === 'ACTIVE' ? 'Zablokuj' : 'Odblokuj'}
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -921,6 +1069,87 @@ export function AdminPage() {
               onClick={() => saveEventMutation.mutate()}
             >
               Zapisz
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={porterDialogOpen} onOpenChange={setPorterDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Nowe konto portiera</DialogTitle>
+            <DialogDescription>
+              Konto z rolą RECEPTIONIST zostanie przypisane do{' '}
+              {user.dormitoryName ?? 'Twojego DS'}.
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="porter-first">Imię</FieldLabel>
+              <Input
+                id="porter-first"
+                value={porterForm.firstName}
+                onChange={(e) =>
+                  setPorterForm((f) => ({ ...f, firstName: e.target.value }))
+                }
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="porter-last">Nazwisko</FieldLabel>
+              <Input
+                id="porter-last"
+                value={porterForm.lastName}
+                onChange={(e) =>
+                  setPorterForm((f) => ({ ...f, lastName: e.target.value }))
+                }
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="porter-email">E-mail</FieldLabel>
+              <Input
+                id="porter-email"
+                type="email"
+                value={porterForm.email}
+                onChange={(e) => setPorterForm((f) => ({ ...f, email: e.target.value }))}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="porter-phone">Telefon</FieldLabel>
+              <Input
+                id="porter-phone"
+                value={porterForm.phoneNumber}
+                onChange={(e) =>
+                  setPorterForm((f) => ({ ...f, phoneNumber: e.target.value }))
+                }
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="porter-password">Hasło</FieldLabel>
+              <Input
+                id="porter-password"
+                type="password"
+                value={porterForm.password}
+                onChange={(e) =>
+                  setPorterForm((f) => ({ ...f, password: e.target.value }))
+                }
+              />
+            </Field>
+            {actionError ? <FieldError>{actionError}</FieldError> : null}
+          </FieldGroup>
+          <DialogFooter>
+            <Button
+              type="button"
+              disabled={
+                savePorterMutation.isPending ||
+                !porterForm.firstName.trim() ||
+                !porterForm.lastName.trim() ||
+                !porterForm.email.trim() ||
+                !porterForm.phoneNumber.trim() ||
+                !porterForm.password
+              }
+              onClick={() => savePorterMutation.mutate()}
+            >
+              Utwórz
             </Button>
           </DialogFooter>
         </DialogContent>
