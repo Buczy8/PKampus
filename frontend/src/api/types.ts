@@ -94,6 +94,62 @@ export interface RejectResidentRequest {
   reason: string
 }
 
+export type LaundryMachineStatus = 'AVAILABLE' | 'OUT_OF_ORDER'
+
+export type LaundrySlotState = 'FREE' | 'OCCUPIED' | 'MINE' | 'UNAVAILABLE'
+
+export type LaundryBookingStatus =
+  | 'CONFIRMED'
+  | 'KEY_ISSUED'
+  | 'COMPLETED'
+  | 'CANCELLED_USER'
+  | 'AUTO_CANCELLED_15MIN'
+  | 'CANCELLED_MACHINE_OUT_OF_ORDER'
+
+export interface LaundryMachine {
+  id: string
+  identifier: string
+  floorLocation: string
+  status: LaundryMachineStatus
+}
+
+export interface LaundrySlot {
+  machineId: string
+  startTime: string
+  endTime: string
+  state: LaundrySlotState
+}
+
+export interface LaundryScheduleDay {
+  date: string
+  slots: LaundrySlot[]
+}
+
+export interface LaundrySchedule {
+  openingTime: string
+  closingTime: string
+  slotDurationMinutes: number
+  machines: LaundryMachine[]
+  days: LaundryScheduleDay[]
+}
+
+export interface LaundryBooking {
+  id: string
+  machineId: string
+  machineIdentifier: string
+  userId: string
+  startTime: string
+  endTime: string
+  status: LaundryBookingStatus
+  createdAt: string
+}
+
+export interface CreateLaundryBookingRequest {
+  machineId: string
+  startTime: string
+  endTime: string
+}
+
 export const ADMIN_ROLES = ['DORM_ADMIN', 'SUPER_ADMIN'] as const
 
 export function isAdminRole(role: string | undefined | null): boolean {
