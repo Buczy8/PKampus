@@ -1,74 +1,110 @@
 import { useOutletContext } from "react-router-dom"
-import { Megaphone, Plus } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
+import { Megaphone } from "lucide-react"
 
-import type { UserProfile } from "@/api/types"
+import { getApiErrorMessage } from "@/api/errors"
+import { listEvents } from "@/api/events"
+import type { DormEvent, DormEventPriority, UserProfile } from "@/api/types"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+
+function formatWhen(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("pl-PL", {
+      dateStyle: "short",
+      timeStyle: "short",
+    })
+  } catch {
+    return iso
+  }
+}
+
+function priorityLabel(priority: DormEventPriority): string {
+  switch (priority) {
+    case "CRITICAL":
+      return "Krytyczny"
+    case "WARNING":
+      return "Ostrzeżenie"
+    default:
+      return "Informacja"
+  }
+}
+
+function scopeBadge(event: DormEvent): { label: string; variant: "default" | "secondary" } {
+  if (event.dormitoryId == null) {
+    return { label: "AOS · kampus", variant: "secondary" }
+  }
+  return { label: "ADS · Twój DS", variant: "default" }
+}
 
 export function BoardPage() {
   const user = useOutletContext<UserProfile>()
 
-  const announcements = [
-    {
-      id: "1",
-      title: "Przegląd instalacji ppoż i wentylacji",
-      author: "Administracja DS",
-      date: "Dzisiaj, 09:30",
-      category: "ADMIN",
-      content: "W najbliższy czwartek w godzinach 10:00–14:00 odbędzie się okresowy przegląd czujników dymu w pokojach. Prosimy o udostępnienie pomieszczeń.",
-    },
-    {
-      id: "2",
-      title: "Poszukuję żelazka / deski do prasowania",
-      author: "Katarzyna (pok. 312)",
-      date: "Wczoraj",
-      category: "HELP",
-      content: "Czy ktoś na 3. piętrze mógłby pożyczyć żelazko na 30 minut przed obroną projektu? Z góry dziękuję!",
-    },
-  ]
+  const eventsQuery = useQuery({
+    queryKey: ["events", "feed"],
+    queryFn: listEvents,
+  })
+
+  const events = eventsQuery.data ?? []
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Megaphone className="size-5 text-rose-500" />
-            Tablica Ogłoszeń i Pomoc Sąsiedzka
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Oficjalne komunikaty Kierownictwa {user.dormitoryName ?? "DS"} oraz ogłoszenia mieszkańców.
-          </p>
+      <div>
+        <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+          <Megaphone className="size-5 text-muted-foreground" />
+          Oficjalne komunikaty — {user.dormitoryName ?? "Twój akademik"}
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Ogłoszenia Administracji Domu Studenckiego oraz komunikaty kampusowe AOS.
+        </p>
+      </div>
+
+      {eventsQuery.isLoading ? (
+        <p className="text-sm text-muted-foreground">Ładowanie…</p>
+      ) : eventsQuery.isError ? (
+        <p className="text-sm text-destructive">{getApiErrorMessage(eventsQuery.error)}</p>
+      ) : events.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Brak oficjalnych komunikatów.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {events.map((event) => {
+            const scope = scopeBadge(event)
+            return (
+              <Card key={event.id}>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant={scope.variant} className="text-[10px]">
+                        {scope.label}
+                      </Badge>
+                      <Badge
+                        variant={event.priority === "CRITICAL" ? "destructive" : "outline"}
+                        className="text-[10px]"
+                      >
+                        {priorityLabel(event.priority)}
+                      </Badge>
+                    </div>
+                    <span className="text-[11px] text-muted-foreground">
+                      {formatWhen(event.eventDate)}
+                    </span>
+                  </div>
+                  <CardTitle className="text-base mt-2">{event.title}</CardTitle>
+                  {event.authorName ? (
+                    <CardDescription className="text-xs">
+                      Dodał(a): {event.authorName}
+                    </CardDescription>
+                  ) : null}
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
+                    {event.description}
+                  </p>
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
-
-        <Button className="gap-2">
-          <Plus className="size-4" />
-          <span>Dodaj wpis</span>
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {announcements.map((item) => (
-          <Card key={item.id} className="shadow-xs">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between gap-2">
-                <Badge
-                  variant={item.category === "ADMIN" ? "default" : "secondary"}
-                  className="text-[10px]"
-                >
-                  {item.category === "ADMIN" ? "Oficjalny komunikat" : "Pomoc sąsiedzka"}
-                </Badge>
-                <span className="text-[11px] text-muted-foreground">{item.date}</span>
-              </div>
-              <CardTitle className="text-base mt-2">{item.title}</CardTitle>
-              <CardDescription className="text-xs">Dodał(a): {item.author}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-foreground/90 leading-relaxed">{item.content}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      )}
     </div>
   )
 }

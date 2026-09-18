@@ -12,10 +12,18 @@ import {
   listAdminThematicRooms,
   updateThematicRoom,
 } from '@/api/admin-rooms'
+import {
+  createAdminEvent,
+  deleteAdminEvent,
+  listAdminEvents,
+  updateAdminEvent,
+} from '@/api/admin-events'
 import { logout } from '@/api/auth'
 import { getApiErrorMessage } from '@/api/errors'
 import type {
+  CreateDormEventRequest,
   CreateThematicRoomRequest,
+  DormEvent,
   PendingResident,
   ThematicRoom,
   UserProfile,
@@ -42,6 +50,13 @@ import {
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Table,
   TableBody,
   TableCell,
@@ -51,7 +66,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 
-type Section = 'residents' | 'rooms'
+type Section = 'residents' | 'rooms' | 'events'
 
 function initials(firstName: string, lastName: string) {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
@@ -67,6 +82,44 @@ function toApiTime(value: string): string {
   if (/^\d{2}:\d{2}:\d{2}$/.test(trimmed)) return trimmed
   if (/^\d{2}:\d{2}$/.test(trimmed)) return `${trimmed}:00`
   return trimmed
+}
+
+function emptyEventForm(): CreateDormEventRequest {
+  return {
+    title: '',
+    description: '',
+    priority: 'INFO',
+    eventDate: new Date().toISOString().slice(0, 16),
+    endDate: '',
+  }
+}
+
+function toIsoFromLocalInput(value: string): string {
+  if (!value) return new Date().toISOString()
+  return new Date(value).toISOString()
+}
+
+function formatWhen(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  try {
+    return new Date(iso).toLocaleString('pl-PL', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    })
+  } catch {
+    return iso
+  }
+}
+
+function toLocalInputValue(iso: string | null | undefined): string {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  } catch {
+    return ''
+  }
 }
 
 const emptyRoomForm: CreateThematicRoomRequest = {
@@ -94,6 +147,10 @@ export function AdminPage() {
   const [editingRoom, setEditingRoom] = useState<ThematicRoom | null>(null)
   const [roomForm, setRoomForm] = useState<CreateThematicRoomRequest>(emptyRoomForm)
 
+  const [eventDialogOpen, setEventDialogOpen] = useState(false)
+  const [editingEvent, setEditingEvent] = useState<DormEvent | null>(null)
+  const [eventForm, setEventForm] = useState<CreateDormEventRequest>(emptyEventForm)
+
   const pendingQuery = useQuery({
     queryKey: ['admin', 'pending-residents'],
     queryFn: listPendingResidents,
@@ -103,6 +160,12 @@ export function AdminPage() {
     queryKey: ['admin', 'thematic-rooms'],
     queryFn: listAdminThematicRooms,
     enabled: section === 'rooms',
+  })
+
+  const eventsQuery = useQuery({
+    queryKey: ['admin', 'events'],
+    queryFn: listAdminEvents,
+    enabled: section === 'events',
   })
 
   const activateMutation = useMutation({
@@ -177,6 +240,42 @@ export function AdminPage() {
     onError: (error) => setActionError(getApiErrorMessage(error, 'Update failed')),
   })
 
+  const saveEventMutation = useMutation({
+    mutationFn: async () => {
+      const payload: CreateDormEventRequest = {
+        title: eventForm.title.trim(),
+        description: eventForm.description.trim(),
+        priority: eventForm.priority,
+        eventDate: toIsoFromLocalInput(eventForm.eventDate),
+        endDate: eventForm.endDate ? toIsoFromLocalInput(eventForm.endDate) : null,
+      }
+      if (editingEvent) {
+        return updateAdminEvent(editingEvent.id, payload)
+      }
+      return createAdminEvent(payload)
+    },
+    onSuccess: async () => {
+      setEventDialogOpen(false)
+      setEditingEvent(null)
+      setEventForm(emptyEventForm())
+      setActionError(null)
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'events'] })
+      await queryClient.invalidateQueries({ queryKey: ['events'] })
+      await queryClient.invalidateQueries({ queryKey: ['events', 'banner'] })
+    },
+    onError: (error) => setActionError(getApiErrorMessage(error, 'Save failed')),
+  })
+
+  const deleteEventMutation = useMutation({
+    mutationFn: (id: string) => deleteAdminEvent(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'events'] })
+      await queryClient.invalidateQueries({ queryKey: ['events'] })
+      await queryClient.invalidateQueries({ queryKey: ['events', 'banner'] })
+    },
+    onError: (error) => setActionError(getApiErrorMessage(error, 'Delete failed')),
+  })
+
   async function handleLogout() {
     try {
       await logout(getRefreshToken())
@@ -210,8 +309,29 @@ export function AdminPage() {
     setRoomDialogOpen(true)
   }
 
+  function openCreateEvent() {
+    setEditingEvent(null)
+    setEventForm(emptyEventForm())
+    setActionError(null)
+    setEventDialogOpen(true)
+  }
+
+  function openEditEvent(event: DormEvent) {
+    setEditingEvent(event)
+    setEventForm({
+      title: event.title,
+      description: event.description,
+      priority: event.priority,
+      eventDate: toLocalInputValue(event.eventDate),
+      endDate: toLocalInputValue(event.endDate),
+    })
+    setActionError(null)
+    setEventDialogOpen(true)
+  }
+
   const pending = pendingQuery.data ?? []
   const rooms = roomsQuery.data ?? []
+  const events = eventsQuery.data ?? []
 
   return (
     <main className="flex min-h-svh w-full items-start justify-center p-6 md:p-10">
@@ -249,6 +369,14 @@ export function AdminPage() {
             onClick={() => setSection('rooms')}
           >
             Salki
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={section === 'events' ? 'default' : 'outline'}
+            onClick={() => setSection('events')}
+          >
+            Komunikaty
           </Button>
         </div>
 
@@ -421,6 +549,79 @@ export function AdminPage() {
                     ))}
                   </TableBody>
                 </Table>              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {section === 'events' && (
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <div>
+                <CardTitle>Komunikaty DS</CardTitle>
+                <CardDescription>
+                  Oficjalne ogłoszenia dla {user.dormitoryName ?? 'Twojego DS'}
+                </CardDescription>
+              </div>
+              <Button type="button" onClick={openCreateEvent}>
+                Nowy komunikat
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {eventsQuery.isLoading ? (
+                <p className="text-sm text-muted-foreground">Ładowanie…</p>
+              ) : eventsQuery.isError ? (
+                <p className="text-sm text-destructive">
+                  {getApiErrorMessage(eventsQuery.error)}
+                </p>
+              ) : events.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Brak komunikatów.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tytuł</TableHead>
+                      <TableHead>Priorytet</TableHead>
+                      <TableHead>Termin</TableHead>
+                      <TableHead className="text-right">Akcje</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {events.map((event) => (
+                      <TableRow key={event.id}>
+                        <TableCell>
+                          <div className="min-w-0">
+                            <p className="font-medium">{event.title}</p>
+                            <p className="truncate text-sm text-muted-foreground">
+                              {event.description}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>{event.priority}</TableCell>
+                        <TableCell>{formatWhen(event.eventDate)}</TableCell>
+                        <TableCell className="text-right space-x-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openEditEvent(event)}
+                          >
+                            Edytuj
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            disabled={deleteEventMutation.isPending}
+                            onClick={() => deleteEventMutation.mutate(event.id)}
+                          >
+                            Usuń
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         )}
@@ -627,6 +828,97 @@ export function AdminPage() {
               type="button"
               disabled={saveRoomMutation.isPending || !roomForm.name.trim()}
               onClick={() => saveRoomMutation.mutate()}
+            >
+              Zapisz
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={eventDialogOpen} onOpenChange={setEventDialogOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingEvent ? 'Edytuj komunikat' : 'Nowy komunikat DS'}
+            </DialogTitle>
+            <DialogDescription>
+              Komunikaty ADS są zawsze przypięte. Priorytet CRITICAL pokazuje się jako baner u
+              mieszkańców.
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="evt-title">Tytuł</FieldLabel>
+              <Input
+                id="evt-title"
+                value={eventForm.title}
+                onChange={(e) => setEventForm((f) => ({ ...f, title: e.target.value }))}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="evt-desc">Treść</FieldLabel>
+              <Textarea
+                id="evt-desc"
+                value={eventForm.description}
+                onChange={(e) =>
+                  setEventForm((f) => ({ ...f, description: e.target.value }))
+                }
+              />
+            </Field>
+            <Field>
+              <FieldLabel>Priorytet</FieldLabel>
+              <Select
+                value={eventForm.priority}
+                onValueChange={(value) =>
+                  setEventForm((f) => ({
+                    ...f,
+                    priority: value as CreateDormEventRequest['priority'],
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="INFO">Informacja</SelectItem>
+                  <SelectItem value="WARNING">Ostrzeżenie</SelectItem>
+                  <SelectItem value="CRITICAL">Krytyczny</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="evt-start">Data od</FieldLabel>
+              <Input
+                id="evt-start"
+                type="datetime-local"
+                value={eventForm.eventDate}
+                onChange={(e) =>
+                  setEventForm((f) => ({ ...f, eventDate: e.target.value }))
+                }
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="evt-end">Data do (opcjonalnie)</FieldLabel>
+              <Input
+                id="evt-end"
+                type="datetime-local"
+                value={eventForm.endDate ?? ''}
+                onChange={(e) =>
+                  setEventForm((f) => ({ ...f, endDate: e.target.value }))
+                }
+              />
+            </Field>
+            {actionError ? <FieldError>{actionError}</FieldError> : null}
+          </FieldGroup>
+          <DialogFooter>
+            <Button
+              type="button"
+              disabled={
+                saveEventMutation.isPending ||
+                !eventForm.title.trim() ||
+                !eventForm.description.trim()
+              }
+              onClick={() => saveEventMutation.mutate()}
             >
               Zapisz
             </Button>

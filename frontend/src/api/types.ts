@@ -261,6 +261,23 @@ export interface UpdateCampusEventRequest {
   endDate?: string | null
 }
 
+/** ADS dorm notice — category/pin set server-side (ADMIN_NOTICE, pinned). */
+export interface CreateDormEventRequest {
+  title: string
+  description: string
+  priority: DormEventPriority
+  eventDate: string
+  endDate?: string | null
+}
+
+export interface UpdateDormEventRequest {
+  title?: string
+  description?: string
+  priority?: DormEventPriority
+  eventDate?: string
+  endDate?: string | null
+}
+
 export type ThematicRoomStatus = 'AVAILABLE' | 'MAINTENANCE'
 
 export interface ThematicRoom {
