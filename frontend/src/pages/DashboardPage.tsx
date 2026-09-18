@@ -1,5 +1,6 @@
 import * as React from "react"
 import { Link, useOutletContext } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import {
   CheckCircle2,
   ChevronRight,
@@ -8,6 +9,7 @@ import {
   Wrench,
 } from "lucide-react"
 
+import { getActiveBanner } from "@/api/events"
 import type { UserProfile } from "@/api/types"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -219,12 +221,13 @@ function NoticeBanner({ announcement }: { announcement: ActiveAnnouncement }) {
       className={cn(
         "flex items-center gap-3 w-full px-4 py-2.5 -mx-0",
         "rounded-xl border border-border bg-muted/50",
+        announcement.isUrgent && "border-destructive/40 bg-destructive/5",
         "hover:bg-muted transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       )}
     >
-      <Badge variant="outline" className="shrink-0">
-        ADS
+      <Badge variant={announcement.isUrgent ? "destructive" : "outline"} className="shrink-0">
+        {announcement.isUrgent ? "ALERT" : "AOS"}
       </Badge>
       <span className="min-w-0 flex-1 text-sm">
         <span className="font-medium">{announcement.title}</span>
@@ -256,16 +259,6 @@ const defaultRoom: ActiveRoom = {
   status: "CONFIRMED",
 }
 
-const defaultAnnouncement: ActiveAnnouncement = {
-  id: "ann-1",
-  title: "Przegląd okresowy czujników dymu i wentylacji",
-  author: "Administracja DS",
-  date: "czw. 10:00–14:00",
-  content:
-    "W najbliższy czwartek w godz. 10:00–14:00 odbędzie się obowiązkowy przegląd instalacji ppoż.",
-  isUrgent: false,
-}
-
 function defaultIssue(roomNumber?: string | null): ActiveIssue {
   return {
     id: "issue-1",
@@ -275,6 +268,17 @@ function defaultIssue(roomNumber?: string | null): ActiveIssue {
     status: "IN_PROGRESS",
     statusLabel: "W trakcie realizacji (Konserwator)",
     lastNote: "Części zamienne pobrane z magazynu. Wymiana jutro do 12:00.",
+  }
+}
+
+function formatBannerDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("pl-PL", {
+      dateStyle: "short",
+      timeStyle: "short",
+    })
+  } catch {
+    return iso
   }
 }
 
@@ -290,8 +294,27 @@ export function DashboardPage() {
   const [activeIssue, setActiveIssue] = React.useState<ActiveIssue | null>(() =>
     defaultIssue(user.roomNumber)
   )
-  const [activeAnnouncement, setActiveAnnouncement] =
-    React.useState<ActiveAnnouncement | null>(defaultAnnouncement)
+  const [hideBannerPreview, setHideBannerPreview] = React.useState(false)
+
+  const bannerQuery = useQuery({
+    queryKey: ["events", "banner"],
+    queryFn: getActiveBanner,
+  })
+
+  const liveAnnouncement: ActiveAnnouncement | null = React.useMemo(() => {
+    const event = bannerQuery.data
+    if (!event) return null
+    return {
+      id: event.id,
+      title: event.title,
+      author: event.authorName ?? "Administracja Osiedla",
+      date: formatBannerDate(event.eventDate),
+      content: event.description,
+      isUrgent: event.priority === "CRITICAL",
+    }
+  }, [bannerQuery.data])
+
+  const activeAnnouncement = hideBannerPreview ? null : liveAnnouncement
 
   const agenda = groupDashboardAgenda({
     laundry: activeLaundry,
@@ -307,14 +330,14 @@ export function DashboardPage() {
     setActiveLaundry(null)
     setActiveRoom(null)
     setActiveIssue(null)
-    setActiveAnnouncement(null)
+    setHideBannerPreview(true)
   }
 
   const restoreAllForTesting = () => {
     setActiveLaundry(defaultLaundry)
     setActiveRoom(defaultRoom)
     setActiveIssue(defaultIssue(user.roomNumber))
-    setActiveAnnouncement(defaultAnnouncement)
+    setHideBannerPreview(false)
   }
 
   return (
