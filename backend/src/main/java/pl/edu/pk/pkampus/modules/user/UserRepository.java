@@ -25,6 +25,12 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     List<User> findAllByRoleOrderByLastNameAscFirstNameAsc(UserRole role);
 
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"dormitory"})
+    List<User> findAllByDormitoryIdAndRoleOrderByLastNameAscFirstNameAsc(UUID dormitoryId, UserRole role);
+
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"dormitory"})
+    Optional<User> findByIdAndDormitoryIdAndRole(UUID id, UUID dormitoryId, UserRole role);
+
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"dormitory"})
     @Override
     Optional<User> findById(UUID id);
 }
