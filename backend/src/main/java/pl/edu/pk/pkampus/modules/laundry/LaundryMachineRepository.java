@@ -13,4 +13,12 @@ public interface LaundryMachineRepository extends JpaRepository<LaundryMachine, 
     List<LaundryMachine> findAllByDormitoryIdOrderByMachineIdentifierAsc(UUID dormitoryId);
 
     Optional<LaundryMachine> findByIdAndDormitoryId(UUID id, UUID dormitoryId);
+
+    boolean existsByDormitoryIdAndMachineIdentifierIgnoreCase(UUID dormitoryId, String machineIdentifier);
+
+    boolean existsByDormitoryIdAndMachineIdentifierIgnoreCaseAndIdNot(
+            UUID dormitoryId,
+            String machineIdentifier,
+            UUID id
+    );
 }
