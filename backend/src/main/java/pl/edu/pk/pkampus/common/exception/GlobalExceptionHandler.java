@@ -1,5 +1,7 @@
 package pl.edu.pk.pkampus.common.exception;
 
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -10,12 +12,15 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import pl.edu.pk.pkampus.common.ApiResponse;
 
+import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final String EXCLUSION_VIOLATION_SQLSTATE = "23P01";
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationExceptions(MethodArgumentNotValidException ex) {
@@ -45,6 +50,28 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(BusinessRuleException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBusinessRule(BusinessRuleException ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(SlotConflictException.class)
+    public ResponseEntity<ApiResponse<Void>> handleSlotConflict(SlotConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrity(DataIntegrityViolationException ex) {
+        if (isExclusionViolation(ex)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.error("Slot was just taken by another resident"));
+        }
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error("Data integrity constraint violated"));
     }
 
     @ExceptionHandler(EmailVerificationTokenInvalidException.class)
@@ -90,5 +117,28 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleGeneralException(Exception ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error("An unexpected server error occurred: " + ex.getMessage()));
+    }
+
+    private static boolean isExclusionViolation(DataIntegrityViolationException ex) {
+        Throwable cause = ex.getCause();
+        while (cause != null) {
+            if (cause instanceof ConstraintViolationException hibernateEx) {
+                SQLException sqlEx = hibernateEx.getSQLException();
+                if (sqlEx != null && EXCLUSION_VIOLATION_SQLSTATE.equals(sqlEx.getSQLState())) {
+                    return true;
+                }
+            }
+            if (cause instanceof SQLException sqlEx
+                    && EXCLUSION_VIOLATION_SQLSTATE.equals(sqlEx.getSQLState())) {
+                return true;
+            }
+            cause = cause.getCause();
+        }
+        String message = ex.getMostSpecificCause().getMessage();
+        return message != null && (
+                message.contains("chk_laundry_no_overlap")
+                        || message.contains("chk_room_no_overlap")
+                        || message.contains("exclusion_violation")
+        );
     }
 }
