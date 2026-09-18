@@ -28,6 +28,14 @@ import {
   listReceptionists,
   updateReceptionist,
 } from '@/api/admin-receptionists'
+import {
+  blockResident,
+  checkoutResident,
+  issueRoomBan,
+  listManagedResidents,
+  revokeRoomBan,
+  unblockResident,
+} from '@/api/admin-residents'
 import { logout } from '@/api/auth'
 import { getApiErrorMessage } from '@/api/errors'
 import type {
@@ -37,6 +45,7 @@ import type {
   CreateReceptionistRequest,
   CreateThematicRoomRequest,
   DormEvent,
+  ManagedResident,
   PendingResident,
   ReceptionistAccount,
   ThematicRoom,
@@ -80,7 +89,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 
-type Section = 'residents' | 'rooms' | 'laundry' | 'events' | 'porters'
+type Section = 'checkins' | 'residents' | 'rooms' | 'laundry' | 'events' | 'porters'
 
 function initials(firstName: string, lastName: string) {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
@@ -170,6 +179,12 @@ export function AdminPage() {
   const [rejectReason, setRejectReason] = useState('')
   const [actionError, setActionError] = useState<string | null>(null)
 
+  const [checkoutTarget, setCheckoutTarget] = useState<ManagedResident | null>(null)
+  const [banTarget, setBanTarget] = useState<ManagedResident | null>(null)
+  const [banMonths, setBanMonths] = useState<'1' | '2' | '3'>('1')
+  const [banReason, setBanReason] = useState('')
+  const [revokeBanTarget, setRevokeBanTarget] = useState<ManagedResident | null>(null)
+
   const [roomDialogOpen, setRoomDialogOpen] = useState(false)
   const [editingRoom, setEditingRoom] = useState<ThematicRoom | null>(null)
   const [roomForm, setRoomForm] = useState<CreateThematicRoomRequest>(emptyRoomForm)
@@ -189,6 +204,13 @@ export function AdminPage() {
   const pendingQuery = useQuery({
     queryKey: ['admin', 'pending-residents'],
     queryFn: listPendingResidents,
+    enabled: section === 'checkins',
+  })
+
+  const managedResidentsQuery = useQuery({
+    queryKey: ['admin', 'managed-residents'],
+    queryFn: listManagedResidents,
+    enabled: section === 'residents',
   })
 
   const roomsQuery = useQuery({
@@ -225,6 +247,7 @@ export function AdminPage() {
       setRoomNumber('')
       setActionError(null)
       await queryClient.invalidateQueries({ queryKey: ['admin', 'pending-residents'] })
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'managed-residents'] })
     },
     onError: (error) => {
       setActionError(getApiErrorMessage(error, 'Activation failed'))
@@ -242,6 +265,75 @@ export function AdminPage() {
     },
     onError: (error) => {
       setActionError(getApiErrorMessage(error, 'Rejection failed'))
+    },
+  })
+
+  const invalidateManagedResidents = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['admin', 'managed-residents'] })
+  }
+
+  const blockMutation = useMutation({
+    mutationFn: (id: string) => blockResident(id),
+    onSuccess: async () => {
+      setActionError(null)
+      await invalidateManagedResidents()
+    },
+    onError: (error) => {
+      setActionError(getApiErrorMessage(error, 'Blokada nie powiodła się'))
+    },
+  })
+
+  const unblockMutation = useMutation({
+    mutationFn: (id: string) => unblockResident(id),
+    onSuccess: async () => {
+      setActionError(null)
+      await invalidateManagedResidents()
+    },
+    onError: (error) => {
+      setActionError(getApiErrorMessage(error, 'Odblokowanie nie powiodło się'))
+    },
+  })
+
+  const checkoutMutation = useMutation({
+    mutationFn: () => checkoutResident(checkoutTarget!.id),
+    onSuccess: async () => {
+      setCheckoutTarget(null)
+      setActionError(null)
+      await invalidateManagedResidents()
+    },
+    onError: (error) => {
+      setActionError(getApiErrorMessage(error, 'Wymeldowanie nie powiodło się'))
+    },
+  })
+
+  const roomBanMutation = useMutation({
+    mutationFn: () =>
+      issueRoomBan(banTarget!.id, {
+        durationMonths: Number(banMonths) as 1 | 2 | 3,
+        reason: banReason.trim(),
+      }),
+    onSuccess: async () => {
+      setBanTarget(null)
+      setBanReason('')
+      setBanMonths('1')
+      setActionError(null)
+      await invalidateManagedResidents()
+    },
+    onError: (error) => {
+      setActionError(getApiErrorMessage(error, 'Nałożenie kary nie powiodło się'))
+    },
+  })
+
+  const revokeBanMutation = useMutation({
+    mutationFn: () =>
+      revokeRoomBan(revokeBanTarget!.id, revokeBanTarget!.activeRoomBan!.id),
+    onSuccess: async () => {
+      setRevokeBanTarget(null)
+      setActionError(null)
+      await invalidateManagedResidents()
+    },
+    onError: (error) => {
+      setActionError(getApiErrorMessage(error, 'Uchylenie kary nie powiodło się'))
     },
   })
 
@@ -461,10 +553,27 @@ export function AdminPage() {
   }
 
   const pending = pendingQuery.data ?? []
+  const managedResidents = managedResidentsQuery.data ?? []
   const rooms = roomsQuery.data ?? []
   const machines = laundryQuery.data ?? []
   const events = eventsQuery.data ?? []
   const porters = portersQuery.data ?? []
+
+  const residentActionPending =
+    blockMutation.isPending ||
+    unblockMutation.isPending ||
+    checkoutMutation.isPending ||
+    roomBanMutation.isPending ||
+    revokeBanMutation.isPending
+
+  function formatDate(value: string | null | undefined): string {
+    if (!value) return '—'
+    try {
+      return new Date(value).toLocaleDateString('pl-PL')
+    } catch {
+      return value
+    }
+  }
 
   return (
     <main className="flex min-h-svh w-full items-start justify-center p-6 md:p-10">
@@ -492,6 +601,14 @@ export function AdminPage() {
             size="sm"
             variant={section === 'residents' ? 'default' : 'outline'}
             onClick={() => setSection('residents')}
+          >
+            Mieszkańcy
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={section === 'checkins' ? 'default' : 'outline'}
+            onClick={() => setSection('checkins')}
           >
             Meldunki
           </Button>
@@ -530,6 +647,169 @@ export function AdminPage() {
         </div>
 
         {section === 'residents' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Mieszkańcy</CardTitle>
+              <CardDescription>
+                Konta ACTIVE/BLOCKED w {user.dormitoryName ?? 'Twoim DS'} — blokady,
+                wymeldowanie, kara ROOM_BAN
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {actionError && section === 'residents' ? (
+                <p className="text-sm text-destructive">{actionError}</p>
+              ) : null}
+              {managedResidentsQuery.isLoading ? (
+                <p className="text-sm text-muted-foreground">Ładowanie…</p>
+              ) : managedResidentsQuery.isError ? (
+                <p className="text-sm text-destructive">
+                  {getApiErrorMessage(managedResidentsQuery.error)}
+                </p>
+              ) : managedResidents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Brak aktywnych lub zablokowanych mieszkańców.
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Mieszkaniec</TableHead>
+                      <TableHead>Pokój</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Salki</TableHead>
+                      <TableHead className="text-right">Akcje</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {managedResidents.map((resident) => (
+                      <TableRow key={resident.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              {resident.avatarUrl ? (
+                                <AvatarImage
+                                  src={resident.avatarUrl}
+                                  alt={`${resident.firstName} ${resident.lastName}`}
+                                />
+                              ) : null}
+                              <AvatarFallback>
+                                {initials(resident.firstName, resident.lastName)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <p className="truncate font-medium">
+                                {resident.firstName} {resident.lastName}
+                              </p>
+                              <p className="truncate text-muted-foreground text-sm">
+                                {resident.email}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>{resident.roomNumber ?? '—'}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              resident.status === 'ACTIVE' ? 'secondary' : 'destructive'
+                            }
+                          >
+                            {resident.status === 'ACTIVE' ? 'Aktywny' : 'Zablokowany'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {resident.activeRoomBan ? (
+                            <div className="space-y-1">
+                              <Badge variant="destructive">ROOM_BAN</Badge>
+                              <p className="text-xs text-muted-foreground">
+                                do {formatDate(resident.activeRoomBan.endDate)}
+                              </p>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">OK</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex flex-wrap justify-end gap-2">
+                            {resident.status === 'ACTIVE' ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={residentActionPending}
+                                onClick={() => {
+                                  setActionError(null)
+                                  blockMutation.mutate(resident.id)
+                                }}
+                              >
+                                Zablokuj
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={residentActionPending}
+                                onClick={() => {
+                                  setActionError(null)
+                                  unblockMutation.mutate(resident.id)
+                                }}
+                              >
+                                Odblokuj
+                              </Button>
+                            )}
+                            {resident.activeRoomBan ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={residentActionPending}
+                                onClick={() => {
+                                  setActionError(null)
+                                  setRevokeBanTarget(resident)
+                                }}
+                              >
+                                Uchyl ban
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={residentActionPending}
+                                onClick={() => {
+                                  setActionError(null)
+                                  setBanMonths('1')
+                                  setBanReason('')
+                                  setBanTarget(resident)
+                                }}
+                              >
+                                Ban na salki
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="destructive"
+                              disabled={residentActionPending}
+                              onClick={() => {
+                                setActionError(null)
+                                setCheckoutTarget(resident)
+                              }}
+                            >
+                              Wymeldowanie
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {section === 'checkins' && (
           <Card>
             <CardHeader>
               <CardTitle>Oczekujące meldunki</CardTitle>
@@ -1039,6 +1319,161 @@ export function AdminPage() {
               disabled={rejectMutation.isPending || rejectReason.trim().length === 0}
             >
               {rejectMutation.isPending ? 'Odrzucanie…' : 'Odrzuć'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(checkoutTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCheckoutTarget(null)
+            setActionError(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Wymeldowanie</DialogTitle>
+            <DialogDescription>
+              {checkoutTarget
+                ? `Wymeldować ${checkoutTarget.firstName} ${checkoutTarget.lastName} z akademika? Konto przejdzie w CHECKED_OUT, przypisanie do pokoju zostanie dezaktywowane.`
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          {actionError ? (
+            <p className="text-sm text-destructive">{actionError}</p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCheckoutTarget(null)}
+              disabled={checkoutMutation.isPending}
+            >
+              Anuluj
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => checkoutMutation.mutate()}
+              disabled={checkoutMutation.isPending}
+            >
+              {checkoutMutation.isPending ? 'Wymeldowywanie…' : 'Wymelduj'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(banTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setBanTarget(null)
+            setActionError(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Kara ROOM_BAN</DialogTitle>
+            <DialogDescription>
+              {banTarget
+                ? `Zablokuj rezerwacje salek dla ${banTarget.firstName} ${banTarget.lastName} (1–3 miesiące).`
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup>
+            <Field>
+              <FieldLabel>Czas trwania</FieldLabel>
+              <Select
+                value={banMonths}
+                onValueChange={(value) => setBanMonths(value as '1' | '2' | '3')}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 miesiąc</SelectItem>
+                  <SelectItem value="2">2 miesiące</SelectItem>
+                  <SelectItem value="3">3 miesiące</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="banReason">Uzasadnienie</FieldLabel>
+              <Textarea
+                id="banReason"
+                value={banReason}
+                onChange={(e) => setBanReason(e.target.value)}
+                maxLength={1000}
+                rows={4}
+                placeholder="np. pozostawienie nieporządku w salce"
+              />
+            </Field>
+            {actionError ? (
+              <Field data-invalid>
+                <FieldError>{actionError}</FieldError>
+              </Field>
+            ) : null}
+          </FieldGroup>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setBanTarget(null)}
+              disabled={roomBanMutation.isPending}
+            >
+              Anuluj
+            </Button>
+            <Button
+              type="button"
+              onClick={() => roomBanMutation.mutate()}
+              disabled={roomBanMutation.isPending || banReason.trim().length === 0}
+            >
+              {roomBanMutation.isPending ? 'Zapisywanie…' : 'Nałóż karę'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(revokeBanTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRevokeBanTarget(null)
+            setActionError(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Uchyl ROOM_BAN</DialogTitle>
+            <DialogDescription>
+              {revokeBanTarget?.activeRoomBan
+                ? `Uchylić ban salek dla ${revokeBanTarget.firstName} ${revokeBanTarget.lastName}? Obowiązywał do ${formatDate(revokeBanTarget.activeRoomBan.endDate)}.`
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          {actionError ? (
+            <p className="text-sm text-destructive">{actionError}</p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRevokeBanTarget(null)}
+              disabled={revokeBanMutation.isPending}
+            >
+              Anuluj
+            </Button>
+            <Button
+              type="button"
+              onClick={() => revokeBanMutation.mutate()}
+              disabled={revokeBanMutation.isPending}
+            >
+              {revokeBanMutation.isPending ? 'Uchylanie…' : 'Uchyl'}
             </Button>
           </DialogFooter>
         </DialogContent>

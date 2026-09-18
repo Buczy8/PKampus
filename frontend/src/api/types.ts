@@ -94,6 +94,43 @@ export interface RejectResidentRequest {
   reason: string
 }
 
+export type ManagedResidentStatus = 'ACTIVE' | 'BLOCKED'
+
+export interface ActiveRoomBan {
+  id: string
+  startDate: string
+  endDate: string
+  reason: string
+}
+
+export interface ManagedResident {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+  phoneNumber: string
+  roomNumber: string | null
+  status: ManagedResidentStatus
+  avatarUrl?: string | null
+  createdAt: string
+  activeRoomBan?: ActiveRoomBan | null
+}
+
+export interface CreateRoomBanRequest {
+  durationMonths: 1 | 2 | 3
+  reason: string
+}
+
+export interface Sanction {
+  id: string
+  userId: string
+  sanctionType: 'ROOM_BAN'
+  reason: string
+  startDate: string
+  endDate: string
+  active: boolean
+}
+
 export type LaundryMachineStatus = 'AVAILABLE' | 'OUT_OF_ORDER'
 
 export type LaundrySlotState = 'FREE' | 'OCCUPIED' | 'MINE' | 'UNAVAILABLE'
