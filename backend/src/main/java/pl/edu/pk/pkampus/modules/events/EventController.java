@@ -13,6 +13,8 @@ import pl.edu.pk.pkampus.common.ApiResponse;
 import pl.edu.pk.pkampus.modules.events.dto.DormEventDto;
 import pl.edu.pk.pkampus.modules.user.User;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/v1/events")
 @RequiredArgsConstructor
@@ -21,6 +23,15 @@ import pl.edu.pk.pkampus.modules.user.User;
 public class EventController {
 
     private final EventService eventService;
+
+    @GetMapping
+    @Operation(
+            summary = "Official notices feed",
+            description = "Returns dormitory-scoped and campus-wide official notices visible to the caller."
+    )
+    public ResponseEntity<ApiResponse<List<DormEventDto>>> list(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(ApiResponse.ok(eventService.listVisible(user)));
+    }
 
     @GetMapping("/banner")
     @Operation(

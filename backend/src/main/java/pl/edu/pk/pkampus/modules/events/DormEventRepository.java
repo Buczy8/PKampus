@@ -1,5 +1,6 @@
 package pl.edu.pk.pkampus.modules.events;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -7,13 +8,28 @@ import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
 public interface DormEventRepository extends JpaRepository<DormEvent, UUID> {
 
-    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"author", "dormitory"})
+    @EntityGraph(attributePaths = {"author", "dormitory"})
     List<DormEvent> findAllByDormitoryIsNullOrderByEventDateDesc();
+
+    @EntityGraph(attributePaths = {"author", "dormitory"})
+    List<DormEvent> findAllByDormitoryIdOrderByEventDateDesc(UUID dormitoryId);
+
+    @EntityGraph(attributePaths = {"author", "dormitory"})
+    Optional<DormEvent> findByIdAndDormitoryId(UUID id, UUID dormitoryId);
+
+    @EntityGraph(attributePaths = {"author", "dormitory"})
+    @Query("""
+            SELECT e FROM DormEvent e
+            WHERE e.dormitory.id = :dormitoryId OR e.dormitory IS NULL
+            ORDER BY e.eventDate DESC
+            """)
+    List<DormEvent> findVisibleForDormitory(@Param("dormitoryId") UUID dormitoryId);
 
     @Query("""
             SELECT e FROM DormEvent e
