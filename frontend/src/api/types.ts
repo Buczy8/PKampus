@@ -113,6 +113,26 @@ export interface LaundryMachine {
   status: LaundryMachineStatus
 }
 
+export interface AdminLaundryMachine {
+  id: string
+  dormitoryId: string
+  machineIdentifier: string
+  floorLocation: string
+  status: LaundryMachineStatus
+  createdAt: string
+}
+
+export interface CreateLaundryMachineRequest {
+  machineIdentifier: string
+  floorLocation: string
+}
+
+export interface UpdateLaundryMachineRequest {
+  machineIdentifier?: string
+  floorLocation?: string
+  status?: LaundryMachineStatus
+}
+
 export interface LaundrySlot {
   machineId: string
   startTime: string

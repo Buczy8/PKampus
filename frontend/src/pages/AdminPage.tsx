@@ -13,6 +13,11 @@ import {
   updateThematicRoom,
 } from '@/api/admin-rooms'
 import {
+  createLaundryMachine,
+  listAdminLaundryMachines,
+  updateLaundryMachine,
+} from '@/api/admin-laundry'
+import {
   createAdminEvent,
   deleteAdminEvent,
   listAdminEvents,
@@ -26,7 +31,9 @@ import {
 import { logout } from '@/api/auth'
 import { getApiErrorMessage } from '@/api/errors'
 import type {
+  AdminLaundryMachine,
   CreateDormEventRequest,
+  CreateLaundryMachineRequest,
   CreateReceptionistRequest,
   CreateThematicRoomRequest,
   DormEvent,
@@ -73,7 +80,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 
-type Section = 'residents' | 'rooms' | 'events' | 'porters'
+type Section = 'residents' | 'rooms' | 'laundry' | 'events' | 'porters'
 
 function initials(firstName: string, lastName: string) {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
@@ -146,6 +153,11 @@ const emptyRoomForm: CreateThematicRoomRequest = {
   description: '',
 }
 
+const emptyLaundryForm: CreateLaundryMachineRequest = {
+  machineIdentifier: '',
+  floorLocation: '',
+}
+
 export function AdminPage() {
   const user = useOutletContext<UserProfile>()
   const navigate = useNavigate()
@@ -161,6 +173,11 @@ export function AdminPage() {
   const [roomDialogOpen, setRoomDialogOpen] = useState(false)
   const [editingRoom, setEditingRoom] = useState<ThematicRoom | null>(null)
   const [roomForm, setRoomForm] = useState<CreateThematicRoomRequest>(emptyRoomForm)
+
+  const [laundryDialogOpen, setLaundryDialogOpen] = useState(false)
+  const [editingMachine, setEditingMachine] = useState<AdminLaundryMachine | null>(null)
+  const [laundryForm, setLaundryForm] =
+    useState<CreateLaundryMachineRequest>(emptyLaundryForm)
 
   const [eventDialogOpen, setEventDialogOpen] = useState(false)
   const [editingEvent, setEditingEvent] = useState<DormEvent | null>(null)
@@ -178,6 +195,12 @@ export function AdminPage() {
     queryKey: ['admin', 'thematic-rooms'],
     queryFn: listAdminThematicRooms,
     enabled: section === 'rooms',
+  })
+
+  const laundryQuery = useQuery({
+    queryKey: ['admin', 'laundry-machines'],
+    queryFn: listAdminLaundryMachines,
+    enabled: section === 'laundry',
   })
 
   const eventsQuery = useQuery({
@@ -260,6 +283,40 @@ export function AdminPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['admin', 'thematic-rooms'] })
       await queryClient.invalidateQueries({ queryKey: ['rooms', 'catalog'] })
+    },
+    onError: (error) => setActionError(getApiErrorMessage(error, 'Update failed')),
+  })
+
+  const saveLaundryMutation = useMutation({
+    mutationFn: async () => {
+      const payload: CreateLaundryMachineRequest = {
+        machineIdentifier: laundryForm.machineIdentifier.trim(),
+        floorLocation: laundryForm.floorLocation.trim(),
+      }
+      if (editingMachine) {
+        return updateLaundryMachine(editingMachine.id, payload)
+      }
+      return createLaundryMachine(payload)
+    },
+    onSuccess: async () => {
+      setLaundryDialogOpen(false)
+      setEditingMachine(null)
+      setLaundryForm(emptyLaundryForm)
+      setActionError(null)
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'laundry-machines'] })
+      await queryClient.invalidateQueries({ queryKey: ['laundry'] })
+    },
+    onError: (error) => setActionError(getApiErrorMessage(error, 'Save failed')),
+  })
+
+  const toggleMachineStatusMutation = useMutation({
+    mutationFn: (machine: AdminLaundryMachine) =>
+      updateLaundryMachine(machine.id, {
+        status: machine.status === 'AVAILABLE' ? 'OUT_OF_ORDER' : 'AVAILABLE',
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'laundry-machines'] })
+      await queryClient.invalidateQueries({ queryKey: ['laundry'] })
     },
     onError: (error) => setActionError(getApiErrorMessage(error, 'Update failed')),
   })
@@ -360,6 +417,23 @@ export function AdminPage() {
     setRoomDialogOpen(true)
   }
 
+  function openCreateLaundry() {
+    setEditingMachine(null)
+    setLaundryForm(emptyLaundryForm)
+    setActionError(null)
+    setLaundryDialogOpen(true)
+  }
+
+  function openEditLaundry(machine: AdminLaundryMachine) {
+    setEditingMachine(machine)
+    setLaundryForm({
+      machineIdentifier: machine.machineIdentifier,
+      floorLocation: machine.floorLocation,
+    })
+    setActionError(null)
+    setLaundryDialogOpen(true)
+  }
+
   function openCreateEvent() {
     setEditingEvent(null)
     setEventForm(emptyEventForm())
@@ -388,6 +462,7 @@ export function AdminPage() {
 
   const pending = pendingQuery.data ?? []
   const rooms = roomsQuery.data ?? []
+  const machines = laundryQuery.data ?? []
   const events = eventsQuery.data ?? []
   const porters = portersQuery.data ?? []
 
@@ -427,6 +502,14 @@ export function AdminPage() {
             onClick={() => setSection('rooms')}
           >
             Salki
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={section === 'laundry' ? 'default' : 'outline'}
+            onClick={() => setSection('laundry')}
+          >
+            Pralki
           </Button>
           <Button
             type="button"
@@ -615,6 +698,82 @@ export function AdminPage() {
                     ))}
                   </TableBody>
                 </Table>              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {section === 'laundry' && (
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <div>
+                <CardTitle>Pralki</CardTitle>
+                <CardDescription>
+                  Maszyny w {user.dormitoryName ?? 'Twoim DS'}
+                </CardDescription>
+              </div>
+              <Button type="button" onClick={openCreateLaundry}>
+                Dodaj pralkę
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {laundryQuery.isLoading ? (
+                <p className="text-sm text-muted-foreground">Ładowanie…</p>
+              ) : laundryQuery.isError ? (
+                <p className="text-sm text-destructive">
+                  {getApiErrorMessage(laundryQuery.error)}
+                </p>
+              ) : machines.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Brak pralek — dodaj pierwszą.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Oznaczenie</TableHead>
+                      <TableHead>Lokalizacja</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Akcje</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {machines.map((machine) => (
+                      <TableRow key={machine.id}>
+                        <TableCell className="font-medium">
+                          {machine.machineIdentifier}
+                        </TableCell>
+                        <TableCell>{machine.floorLocation}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              machine.status === 'AVAILABLE' ? 'secondary' : 'destructive'
+                            }
+                          >
+                            {machine.status === 'AVAILABLE' ? 'Dostępna' : 'Awaria'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right space-x-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openEditLaundry(machine)}
+                          >
+                            Edytuj
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={toggleMachineStatusMutation.isPending}
+                            onClick={() => toggleMachineStatusMutation.mutate(machine)}
+                          >
+                            {machine.status === 'AVAILABLE' ? 'Awaria' : 'Przywróć'}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         )}
@@ -976,6 +1135,57 @@ export function AdminPage() {
               type="button"
               disabled={saveRoomMutation.isPending || !roomForm.name.trim()}
               onClick={() => saveRoomMutation.mutate()}
+            >
+              Zapisz
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={laundryDialogOpen} onOpenChange={setLaundryDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingMachine ? 'Edytuj pralkę' : 'Nowa pralka'}
+            </DialogTitle>
+            <DialogDescription>
+              Oznaczenie musi być unikalne w Twoim DS (np. P1, P2).
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="lm-id">Oznaczenie</FieldLabel>
+              <Input
+                id="lm-id"
+                value={laundryForm.machineIdentifier}
+                onChange={(e) =>
+                  setLaundryForm((f) => ({ ...f, machineIdentifier: e.target.value }))
+                }
+                placeholder="P1"
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="lm-floor">Lokalizacja / piętro</FieldLabel>
+              <Input
+                id="lm-floor"
+                value={laundryForm.floorLocation}
+                onChange={(e) =>
+                  setLaundryForm((f) => ({ ...f, floorLocation: e.target.value }))
+                }
+                placeholder="Piwnica / 1. piętro"
+              />
+            </Field>
+            {actionError ? <FieldError>{actionError}</FieldError> : null}
+          </FieldGroup>
+          <DialogFooter>
+            <Button
+              type="button"
+              disabled={
+                saveLaundryMutation.isPending ||
+                !laundryForm.machineIdentifier.trim() ||
+                !laundryForm.floorLocation.trim()
+              }
+              onClick={() => saveLaundryMutation.mutate()}
             >
               Zapisz
             </Button>
