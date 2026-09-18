@@ -19,7 +19,6 @@ import pl.edu.pk.pkampus.modules.laundry.dto.LaundrySlotState;
 import pl.edu.pk.pkampus.modules.user.User;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
 
-import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -27,7 +26,6 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
-import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -42,7 +40,8 @@ public class LaundryService {
 
     public static final ZoneId WARSAW = ZoneId.of("Europe/Warsaw");
     private static final int MAX_HORIZON_DAYS = 7;
-    private static final int MAX_ACTIVE_PER_WEEK = 2;
+    private static final int MAX_ACTIVE_IN_ROLLING_DAYS = 2;
+    private static final int ROLLING_WINDOW_DAYS = 7;
     private static final Set<LaundryBookingStatus> ACTIVE_STATUSES =
             EnumSet.of(LaundryBookingStatus.CONFIRMED, LaundryBookingStatus.KEY_ISSUED);
 
@@ -78,10 +77,7 @@ public class LaundryService {
         for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
             List<LaundrySlotDto> slots = new ArrayList<>();
             for (LaundryMachine machine : machines) {
-                for (LocalTime slotStart = opening;
-                     !slotStart.plusMinutes(durationMinutes).isAfter(closing);
-                     slotStart = slotStart.plusMinutes(durationMinutes)) {
-
+                for (LocalTime slotStart : slotStarts(opening, closing, durationMinutes)) {
                     Instant startInstant = date.atTime(slotStart).atZone(WARSAW).toInstant();
                     Instant endInstant = startInstant.plus(durationMinutes, ChronoUnit.MINUTES);
 
@@ -93,7 +89,6 @@ public class LaundryService {
                         LaundryBooking booking = bookingByMachineAndStart.get(
                                 bookingKey(machine.getId(), startInstant));
                         if (booking == null) {
-                            // Also match by overlap in case of slight timestamp differences
                             booking = findOverlapping(bookings, machine.getId(), startInstant, endInstant);
                         }
                         if (booking == null) {
@@ -164,16 +159,7 @@ public class LaundryService {
 
         validateSlotOnGrid(dorm, start, end);
         validateHorizon(start, now);
-
-        Instant[] weekBounds = weekBoundsContaining(start);
-        long activeInWeek = laundryBookingRepository.countActiveInWeek(
-                user.getId(), weekBounds[0], weekBounds[1], ACTIVE_STATUSES);
-        if (activeInWeek >= MAX_ACTIVE_PER_WEEK) {
-            throw new BusinessRuleException(
-                    "Weekly limit of " + MAX_ACTIVE_PER_WEEK
-                            + " active laundry bookings (CONFIRMED/KEY_ISSUED) reached"
-            );
-        }
+        validateBookingLimits(user.getId(), start);
 
         if (laundryBookingRepository.existsOverlapping(machine.getId(), start, end, ACTIVE_STATUSES)) {
             throw new SlotConflictException("Slot was just taken by another resident");
@@ -242,6 +228,40 @@ public class LaundryService {
         }
     }
 
+    /**
+     * Limits relative to the new reservation date D (Europe/Warsaw):
+     * <ul>
+     *   <li>at most one active booking on calendar day D</li>
+     *   <li>at most {@value #MAX_ACTIVE_IN_ROLLING_DAYS} active bookings with start date in
+     *       [{@code D - 6}, {@code D + 6}] (any 7-day span that includes D)</li>
+     * </ul>
+     */
+    private void validateBookingLimits(UUID userId, Instant start) {
+        LocalDate day = start.atZone(WARSAW).toLocalDate();
+        Instant dayStart = day.atStartOfDay(WARSAW).toInstant();
+        Instant dayEnd = day.plusDays(1).atStartOfDay(WARSAW).toInstant();
+        Instant rollingStart = day.minusDays(ROLLING_WINDOW_DAYS - 1L).atStartOfDay(WARSAW).toInstant();
+        Instant rollingEnd = day.plusDays(ROLLING_WINDOW_DAYS).atStartOfDay(WARSAW).toInstant();
+
+        long sameDay = laundryBookingRepository.countActiveStartingBetween(
+                userId, dayStart, dayEnd, ACTIVE_STATUSES);
+        if (sameDay >= 1) {
+            throw new BusinessRuleException(
+                    "Only one laundry booking per calendar day is allowed"
+            );
+        }
+
+        long inRollingWindow = laundryBookingRepository.countActiveStartingBetween(
+                userId, rollingStart, rollingEnd, ACTIVE_STATUSES);
+        if (inRollingWindow >= MAX_ACTIVE_IN_ROLLING_DAYS) {
+            throw new BusinessRuleException(
+                    "Limit of " + MAX_ACTIVE_IN_ROLLING_DAYS
+                            + " active laundry bookings within " + ROLLING_WINDOW_DAYS
+                            + " days from the reservation date reached"
+            );
+        }
+    }
+
     private void validateHorizon(Instant start, Instant now) {
         if (!start.isAfter(now)) {
             throw new BusinessRuleException("Slot start must be in the future");
@@ -275,18 +295,36 @@ public class LaundryService {
         if (minutesFromOpening < 0 || minutesFromOpening % durationMinutes != 0) {
             throw new BusinessRuleException("Slot start is not aligned to the laundry slot grid");
         }
+        if (!slotStarts(opening, closing, durationMinutes).contains(startTime)) {
+            throw new BusinessRuleException("Slot start is not aligned to the laundry slot grid");
+        }
     }
 
     /**
-     * @return [weekStartInclusive, weekEndExclusive) in UTC Instant for Europe/Warsaw Monday–Sunday week
+     * Slot starts from opening until a full duration fits before closing.
+     * Does not use {@link LocalTime#plusMinutes(long)} in the loop condition — that wraps at midnight
+     * (e.g. 22:00 + 180 min → 01:00) and would spin forever for 3h slots with closing 23:00.
      */
-    static Instant[] weekBoundsContaining(Instant instant) {
-        LocalDate date = instant.atZone(WARSAW).toLocalDate();
-        LocalDate monday = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-        LocalDate nextMonday = monday.plusWeeks(1);
-        Instant weekStart = monday.atStartOfDay(WARSAW).toInstant();
-        Instant weekEnd = nextMonday.atStartOfDay(WARSAW).toInstant();
-        return new Instant[]{weekStart, weekEnd};
+    static List<LocalTime> slotStarts(LocalTime opening, LocalTime closing, int durationMinutes) {
+        if (durationMinutes <= 0 || !opening.isBefore(closing)) {
+            return List.of();
+        }
+        List<LocalTime> starts = new ArrayList<>();
+        LocalTime slotStart = opening;
+        while (true) {
+            long minutesUntilClose = ChronoUnit.MINUTES.between(slotStart, closing);
+            if (minutesUntilClose < durationMinutes) {
+                break;
+            }
+            starts.add(slotStart);
+            LocalTime next = slotStart.plusMinutes(durationMinutes);
+            // Safety: LocalTime wraps; stop if advancement did not move forward on the clock
+            if (!next.isAfter(slotStart)) {
+                break;
+            }
+            slotStart = next;
+        }
+        return starts;
     }
 
     private LaundryBooking findOverlapping(

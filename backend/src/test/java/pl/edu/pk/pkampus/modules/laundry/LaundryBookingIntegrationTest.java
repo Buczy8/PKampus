@@ -207,11 +207,27 @@ class LaundryBookingIntegrationTest {
     }
 
     @Test
-    @DisplayName("Third active booking in same Warsaw week returns 422")
-    void weeklyLimitReturns422() throws Exception {
+    @DisplayName("Second booking on the same Warsaw day returns 422")
+    void sameDayLimitReturns422() throws Exception {
         OffsetDateTime s1 = slotStart(1, LocalTime.of(7, 0));
         OffsetDateTime s2 = slotStart(1, LocalTime.of(8, 30));
-        OffsetDateTime s3 = slotStart(2, LocalTime.of(7, 0));
+
+        bookOk(resident, machine1.getId(), s1, s1.plusMinutes(90));
+
+        mockMvc.perform(post("/api/v1/laundry/bookings")
+                        .header("Authorization", bearer(resident))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bookingJson(machine1.getId(), s2, s2.plusMinutes(90))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("per calendar day")));
+    }
+
+    @Test
+    @DisplayName("Third active booking within 7 days from reservation date returns 422")
+    void rollingSevenDayLimitReturns422() throws Exception {
+        OffsetDateTime s1 = slotStart(1, LocalTime.of(7, 0));
+        OffsetDateTime s2 = slotStart(2, LocalTime.of(7, 0));
+        OffsetDateTime s3 = slotStart(3, LocalTime.of(7, 0));
 
         bookOk(resident, machine1.getId(), s1, s1.plusMinutes(90));
         bookOk(resident, machine1.getId(), s2, s2.plusMinutes(90));
@@ -221,7 +237,7 @@ class LaundryBookingIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(bookingJson(machine1.getId(), s3, s3.plusMinutes(90))))
                 .andExpect(status().isUnprocessableEntity())
-                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Weekly limit")));
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("within 7 days")));
     }
 
     @Test

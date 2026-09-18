@@ -34,13 +34,13 @@ public interface LaundryBookingRepository extends JpaRepository<LaundryBooking, 
             SELECT COUNT(b) FROM LaundryBooking b
             WHERE b.user.id = :userId
               AND b.status IN :statuses
-              AND b.startTime >= :weekStart
-              AND b.startTime < :weekEnd
+              AND b.startTime >= :rangeStart
+              AND b.startTime < :rangeEnd
             """)
-    long countActiveInWeek(
+    long countActiveStartingBetween(
             @Param("userId") UUID userId,
-            @Param("weekStart") Instant weekStart,
-            @Param("weekEnd") Instant weekEnd,
+            @Param("rangeStart") Instant rangeStart,
+            @Param("rangeEnd") Instant rangeEnd,
             @Param("statuses") Collection<LaundryBookingStatus> statuses
     );
 

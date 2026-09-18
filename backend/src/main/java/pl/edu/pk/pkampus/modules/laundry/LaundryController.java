@@ -62,7 +62,7 @@ public class LaundryController {
     @PostMapping("/bookings")
     @Operation(
             summary = "Book a laundry slot",
-            description = "Creates a CONFIRMED booking. Enforces BR-01 and PostgreSQL exclusion overlap (HTTP 409)."
+            description = "Creates a CONFIRMED booking. Enforces one booking per day, max 2 in a 7-day window from the reservation date, and overlap conflict (HTTP 409)."
     )
     public ResponseEntity<ApiResponse<LaundryBookingDto>> createBooking(
             @AuthenticationPrincipal User user,
