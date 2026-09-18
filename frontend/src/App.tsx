@@ -12,6 +12,7 @@ import { PendingApprovalPage } from '@/pages/PendingApprovalPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { RoomsPage } from '@/pages/RoomsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { SuperAdminPage } from '@/pages/SuperAdminPage'
 import { VerifyEmailPage } from '@/pages/VerifyEmailPage'
 
 export function App() {
@@ -37,9 +38,14 @@ export function App() {
           </Route>
         </Route>
 
-        {/* Administration Portal */}
+        {/* Dormitory Admin Portal */}
         <Route element={<ProtectedRoute adminOnly />}>
           <Route path="/admin" element={<AdminPage />} />
+        </Route>
+
+        {/* Super Admin (AOS) Portal */}
+        <Route element={<ProtectedRoute superAdminOnly />}>
+          <Route path="/superadmin" element={<SuperAdminPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

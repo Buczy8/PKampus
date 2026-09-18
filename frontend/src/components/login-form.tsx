@@ -5,7 +5,7 @@ import { cn } from 'cn'
 
 import { login } from '@/api/auth'
 import { getApiErrorMessage } from '@/api/errors'
-import { isAdminRole } from '@/api/types'
+import { isAdminRole, isSuperAdminRole } from '@/api/types'
 import { setAuthTokens } from '@/lib/auth-storage'
 import { Button } from '@/components/ui/button'
 import {
@@ -64,7 +64,12 @@ export function LoginForm({
       setAuthTokens(auth.token, auth.refreshToken)
       // Seed cache so ProtectedRoute does not reuse a previous failed /me error.
       queryClient.setQueryData(['auth', 'me'], auth.user)
-      navigate(isAdminRole(auth.user.role) ? '/admin' : '/dashboard', { replace: true })
+      const destination = isSuperAdminRole(auth.user.role)
+        ? '/superadmin'
+        : isAdminRole(auth.user.role)
+          ? '/admin'
+          : '/dashboard'
+      navigate(destination, { replace: true })
     } catch (error) {
       const message = getApiErrorMessage(error, 'Login failed')
       if (/awaiting residency approval|PENDING_APPROVAL/i.test(message)) {

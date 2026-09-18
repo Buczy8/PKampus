@@ -3,11 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 
 import { getCurrentUser } from '@/api/auth'
-import { isAdminRole } from '@/api/types'
+import { isAdminRole, isSuperAdminRole } from '@/api/types'
 import { getAccessToken } from '@/lib/auth-storage'
 
 type ProtectedRouteProps = {
   adminOnly?: boolean
+  superAdminOnly?: boolean
 }
 
 function isAuthFailure(error: unknown): boolean {
@@ -16,7 +17,10 @@ function isAuthFailure(error: unknown): boolean {
   return error.response?.status === 401
 }
 
-export function ProtectedRoute({ adminOnly = false }: ProtectedRouteProps) {
+export function ProtectedRoute({
+  adminOnly = false,
+  superAdminOnly = false,
+}: ProtectedRouteProps) {
   const token = getAccessToken()
 
   const meQuery = useQuery({
@@ -60,8 +64,22 @@ export function ProtectedRoute({ adminOnly = false }: ProtectedRouteProps) {
     )
   }
 
+  if (superAdminOnly && !isSuperAdminRole(meQuery.data.role)) {
+    return (
+      <Navigate
+        to={isAdminRole(meQuery.data.role) ? '/admin' : '/dashboard'}
+        replace
+      />
+    )
+  }
+
   if (adminOnly && !isAdminRole(meQuery.data.role)) {
     return <Navigate to="/dashboard" replace />
+  }
+
+  // DORM_ADMIN stays on /admin; SUPER_ADMIN belongs on /superadmin
+  if (adminOnly && isSuperAdminRole(meQuery.data.role)) {
+    return <Navigate to="/superadmin" replace />
   }
 
   return <Outlet context={meQuery.data} />

@@ -155,3 +155,108 @@ export const ADMIN_ROLES = ['DORM_ADMIN', 'SUPER_ADMIN'] as const
 export function isAdminRole(role: string | undefined | null): boolean {
   return role === 'DORM_ADMIN' || role === 'SUPER_ADMIN'
 }
+
+export function isSuperAdminRole(role: string | undefined | null): boolean {
+  return role === 'SUPER_ADMIN'
+}
+
+export function isDormAdminRole(role: string | undefined | null): boolean {
+  return role === 'DORM_ADMIN'
+}
+
+export interface SuperAdminDormitory {
+  id: string
+  name: string
+  code: string
+  address: string
+  floorsCount: number
+  laundryOpeningTime: string
+  laundryClosingTime: string
+  laundrySlotDurationMinutes: number
+  createdAt: string
+}
+
+export interface CreateDormitoryRequest {
+  code: string
+  name: string
+  address: string
+  floorsCount: number
+}
+
+export interface UpdateDormitoryRequest {
+  code?: string
+  name?: string
+  address?: string
+  floorsCount?: number
+  laundryOpeningTime?: string
+  laundryClosingTime?: string
+  laundrySlotDurationMinutes?: number
+}
+
+export interface DormAdminAccount {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+  phoneNumber: string
+  status: string
+  dormitoryId: string | null
+  dormitoryName: string | null
+  dormitoryCode: string | null
+  createdAt: string
+}
+
+export interface CreateDormAdminRequest {
+  firstName: string
+  lastName: string
+  email: string
+  phoneNumber: string
+  password: string
+  dormitoryId: string
+}
+
+export interface UpdateDormAdminRequest {
+  dormitoryId?: string
+  status?: 'ACTIVE' | 'BLOCKED'
+  firstName?: string
+  lastName?: string
+  phoneNumber?: string
+}
+
+export type DormEventCategory = 'BED_LINEN' | 'TECHNICAL_OUTAGE' | 'ADMIN_NOTICE' | 'STUDENT_EVENT'
+export type DormEventPriority = 'INFO' | 'WARNING' | 'CRITICAL'
+
+export interface DormEvent {
+  id: string
+  authorId: string | null
+  authorName: string | null
+  dormitoryId: string | null
+  title: string
+  description: string
+  category: DormEventCategory
+  priority: DormEventPriority
+  pinned: boolean
+  eventDate: string
+  endDate: string | null
+  createdAt: string
+}
+
+export interface CreateCampusEventRequest {
+  title: string
+  description: string
+  category: Exclude<DormEventCategory, 'STUDENT_EVENT'>
+  priority: DormEventPriority
+  pinned?: boolean
+  eventDate: string
+  endDate?: string | null
+}
+
+export interface UpdateCampusEventRequest {
+  title?: string
+  description?: string
+  category?: Exclude<DormEventCategory, 'STUDENT_EVENT'>
+  priority?: DormEventPriority
+  pinned?: boolean
+  eventDate?: string
+  endDate?: string | null
+}
