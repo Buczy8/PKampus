@@ -77,4 +77,46 @@ public interface LaundryBookingRepository extends JpaRepository<LaundryBooking, 
             WHERE b.id = :id AND b.user.id = :userId
             """)
     Optional<LaundryBooking> findByIdAndUserId(@Param("id") UUID id, @Param("userId") UUID userId);
+
+    @Query("""
+            SELECT b FROM LaundryBooking b
+            JOIN FETCH b.machine m
+            JOIN FETCH m.dormitory
+            JOIN FETCH b.user
+            WHERE m.dormitory.id = :dormitoryId
+              AND b.status IN :statuses
+              AND b.startTime >= :dayStart
+              AND b.startTime < :dayEnd
+            ORDER BY b.startTime ASC
+            """)
+    List<LaundryBooking> findDeskBookingsForDormitoryDay(
+            @Param("dormitoryId") UUID dormitoryId,
+            @Param("dayStart") Instant dayStart,
+            @Param("dayEnd") Instant dayEnd,
+            @Param("statuses") Collection<LaundryBookingStatus> statuses
+    );
+
+    @Query("""
+            SELECT b FROM LaundryBooking b
+            JOIN FETCH b.machine m
+            JOIN FETCH m.dormitory
+            JOIN FETCH b.user
+            WHERE b.id = :id
+            """)
+    Optional<LaundryBooking> findByIdWithDetails(@Param("id") UUID id);
+
+    @Query("""
+            SELECT b FROM LaundryBooking b
+            JOIN FETCH b.user
+            JOIN FETCH b.machine
+            WHERE b.machine.id = :machineId
+              AND b.status = :status
+              AND b.startTime > :now
+            ORDER BY b.startTime ASC
+            """)
+    List<LaundryBooking> findFutureByMachineIdAndStatus(
+            @Param("machineId") UUID machineId,
+            @Param("status") LaundryBookingStatus status,
+            @Param("now") Instant now
+    );
 }

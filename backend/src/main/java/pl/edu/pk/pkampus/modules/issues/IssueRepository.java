@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,6 +21,18 @@ public interface IssueRepository extends JpaRepository<Issue, UUID> {
             ORDER BY i.createdAt DESC
             """)
     List<Issue> findByReporterIdWithDetailsOrderByCreatedAtDesc(@Param("reporterId") UUID reporterId);
+
+    @Query("""
+            SELECT i FROM Issue i
+            LEFT JOIN FETCH i.room
+            WHERE i.dormitory.id = :dormitoryId
+              AND i.status IN :statuses
+            ORDER BY i.createdAt DESC
+            """)
+    List<Issue> findByDormitoryIdAndStatusInOrderByCreatedAtDesc(
+            @Param("dormitoryId") UUID dormitoryId,
+            @Param("statuses") Collection<IssueStatus> statuses
+    );
 
     @Query("""
             SELECT i FROM Issue i

@@ -1,0 +1,353 @@
+package pl.edu.pk.pkampus.modules.receptionist;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
+import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
+import pl.edu.pk.pkampus.mail.EmailService;
+import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
+import pl.edu.pk.pkampus.modules.issues.Issue;
+import pl.edu.pk.pkampus.modules.issues.IssueCategory;
+import pl.edu.pk.pkampus.modules.issues.IssueRepository;
+import pl.edu.pk.pkampus.modules.issues.IssueStatus;
+import pl.edu.pk.pkampus.modules.issues.IssueUrgency;
+import pl.edu.pk.pkampus.modules.laundry.LaundryBooking;
+import pl.edu.pk.pkampus.modules.laundry.LaundryBookingRepository;
+import pl.edu.pk.pkampus.modules.laundry.LaundryBookingStatus;
+import pl.edu.pk.pkampus.modules.laundry.LaundryMachine;
+import pl.edu.pk.pkampus.modules.laundry.LaundryMachineRepository;
+import pl.edu.pk.pkampus.modules.laundry.LaundryMachineStatus;
+import pl.edu.pk.pkampus.modules.laundry.LaundryService;
+import pl.edu.pk.pkampus.modules.laundry.dto.LaundryScheduleResponseDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.DeskLaundryBookingDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.DeskLaundryMachineDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.DeskOpenIssueDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.DeskRoomBookingDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.MachineBreakdownResponseDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.ReceptionistDeskDto;
+import pl.edu.pk.pkampus.modules.rooms.RoomBooking;
+import pl.edu.pk.pkampus.modules.rooms.RoomBookingRepository;
+import pl.edu.pk.pkampus.modules.rooms.RoomBookingStatus;
+import pl.edu.pk.pkampus.modules.user.User;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.UUID;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class ReceptionistService {
+
+    public static final ZoneId WARSAW = ZoneId.of("Europe/Warsaw");
+    private static final DateTimeFormatter SLOT_LABEL =
+            DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm").withZone(WARSAW);
+
+    private static final Set<LaundryBookingStatus> DESK_LAUNDRY_STATUSES =
+            EnumSet.of(LaundryBookingStatus.CONFIRMED, LaundryBookingStatus.KEY_ISSUED);
+
+    private static final Set<RoomBookingStatus> DESK_ROOM_STATUSES =
+            EnumSet.of(RoomBookingStatus.CONFIRMED, RoomBookingStatus.KEY_ISSUED);
+
+    private static final Set<IssueStatus> OPEN_ISSUE_STATUSES = EnumSet.of(
+            IssueStatus.NEW,
+            IssueStatus.ASSIGNED_TO_MAINTENANCE,
+            IssueStatus.IN_PROGRESS,
+            IssueStatus.PARTS_REQUIRED
+    );
+
+    private final LaundryBookingRepository laundryBookingRepository;
+    private final LaundryMachineRepository laundryMachineRepository;
+    private final LaundryService laundryService;
+    private final RoomBookingRepository roomBookingRepository;
+    private final IssueRepository issueRepository;
+    private final EmailService emailService;
+
+    @Transactional(readOnly = true)
+    public ReceptionistDeskDto getDesk(User actor) {
+        UUID dormitoryId = requireActorDormitoryId(actor);
+
+        LocalDate today = LocalDate.now(WARSAW);
+        Instant dayStart = today.atStartOfDay(WARSAW).toInstant();
+        Instant dayEnd = today.plusDays(1).atStartOfDay(WARSAW).toInstant();
+
+        List<DeskLaundryBookingDto> laundry = laundryBookingRepository
+                .findDeskBookingsForDormitoryDay(dormitoryId, dayStart, dayEnd, DESK_LAUNDRY_STATUSES)
+                .stream()
+                .map(this::toLaundryDto)
+                .toList();
+
+        List<DeskRoomBookingDto> rooms = roomBookingRepository
+                .findDeskBookingsForDormitoryDay(dormitoryId, dayStart, dayEnd, DESK_ROOM_STATUSES)
+                .stream()
+                .map(this::toRoomDto)
+                .toList();
+
+        List<DeskOpenIssueDto> openIssues = issueRepository
+                .findByDormitoryIdAndStatusInOrderByCreatedAtDesc(dormitoryId, OPEN_ISSUE_STATUSES)
+                .stream()
+                .map(this::toOpenIssueDto)
+                .toList();
+
+        return new ReceptionistDeskDto(laundry, rooms, openIssues.size(), openIssues);
+    }
+
+    @Transactional(readOnly = true)
+    public LaundryScheduleResponseDto getLaundrySchedule(User actor, LocalDate from, LocalDate to) {
+        Dormitory dorm = requireActorDormitory(actor);
+        return laundryService.getStaffSchedule(dorm, from, to);
+    }
+
+    @Transactional
+    public DeskLaundryBookingDto cancelLaundryBooking(User actor, UUID bookingId) {
+        LaundryBooking booking = requireLaundryInDorm(actor, bookingId);
+        if (booking.getStatus() != LaundryBookingStatus.CONFIRMED) {
+            throw new BusinessRuleException("Only CONFIRMED laundry bookings can be cancelled by staff");
+        }
+        booking.setStatus(LaundryBookingStatus.CANCELLED_USER);
+        return toLaundryDto(laundryBookingRepository.save(booking));
+    }
+
+    @Transactional
+    public MachineBreakdownResponseDto reportMachineBreakdown(User actor, UUID machineId, String reason) {
+        Dormitory dorm = requireActorDormitory(actor);
+        LaundryMachine machine = laundryMachineRepository.findByIdAndDormitoryId(machineId, dorm.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Laundry machine not found"));
+
+        if (machine.getStatus() == LaundryMachineStatus.OUT_OF_ORDER) {
+            throw new BusinessRuleException("Laundry machine is already out of order");
+        }
+
+        String trimmedReason = reason == null ? "" : reason.trim();
+        if (trimmedReason.isEmpty()) {
+            throw new BusinessRuleException("Breakdown reason is required");
+        }
+
+        Instant now = Instant.now();
+        machine.setStatus(LaundryMachineStatus.OUT_OF_ORDER);
+        machine.setNotes(trimmedReason);
+        laundryMachineRepository.save(machine);
+
+        List<LaundryBooking> futureConfirmed = laundryBookingRepository.findFutureByMachineIdAndStatus(
+                machine.getId(), LaundryBookingStatus.CONFIRMED, now);
+
+        for (LaundryBooking booking : futureConfirmed) {
+            booking.setStatus(LaundryBookingStatus.CANCELLED_MACHINE_OUT_OF_ORDER);
+            laundryBookingRepository.save(booking);
+        }
+
+        String issueDescription = "Auto: laundry machine \"%s\" out of order. %s"
+                .formatted(machine.getMachineIdentifier(), trimmedReason);
+
+        Issue issue = Issue.builder()
+                .reporter(actor)
+                .dormitory(dorm)
+                .commonAreaName("pralnia")
+                .category(IssueCategory.OTHER)
+                .urgency(IssueUrgency.URGENT)
+                .description(issueDescription)
+                .status(IssueStatus.NEW)
+                .build();
+        Issue savedIssue = issueRepository.save(issue);
+
+        for (LaundryBooking booking : futureConfirmed) {
+            User resident = booking.getUser();
+            emailService.sendLaundryMachineBreakdownEmail(
+                    resident.getEmail(),
+                    resident.getFirstName(),
+                    machine.getMachineIdentifier(),
+                    SLOT_LABEL.format(booking.getStartTime())
+            );
+        }
+
+        log.info("Staff {} marked machine {} OUT_OF_ORDER; cancelled {}; issue {}",
+                actor.getEmail(), machine.getId(), futureConfirmed.size(), savedIssue.getId());
+
+        return new MachineBreakdownResponseDto(
+                machine.getId(),
+                futureConfirmed.size(),
+                savedIssue.getId()
+        );
+    }
+
+    @Transactional
+    public DeskLaundryMachineDto restoreMachine(User actor, UUID machineId) {
+        Dormitory dorm = requireActorDormitory(actor);
+        LaundryMachine machine = laundryMachineRepository.findByIdAndDormitoryId(machineId, dorm.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Laundry machine not found"));
+
+        if (machine.getStatus() != LaundryMachineStatus.OUT_OF_ORDER) {
+            throw new BusinessRuleException("Laundry machine is not out of order");
+        }
+
+        machine.setStatus(LaundryMachineStatus.AVAILABLE);
+        machine.setNotes(null);
+        LaundryMachine saved = laundryMachineRepository.save(machine);
+        return toMachineDto(saved);
+    }
+
+    @Transactional
+    public DeskLaundryBookingDto issueLaundryKey(User actor, UUID bookingId) {
+        LaundryBooking booking = requireLaundryInDorm(actor, bookingId);
+        if (booking.getStatus() != LaundryBookingStatus.CONFIRMED) {
+            throw new BusinessRuleException("Only CONFIRMED laundry bookings can receive a key");
+        }
+        Instant now = Instant.now();
+        booking.setStatus(LaundryBookingStatus.KEY_ISSUED);
+        booking.setKeyIssuedAt(now);
+        return toLaundryDto(laundryBookingRepository.save(booking));
+    }
+
+    @Transactional
+    public DeskLaundryBookingDto returnLaundryKey(User actor, UUID bookingId) {
+        LaundryBooking booking = requireLaundryInDorm(actor, bookingId);
+        if (booking.getStatus() != LaundryBookingStatus.KEY_ISSUED) {
+            throw new BusinessRuleException("Only KEY_ISSUED laundry bookings can return a key");
+        }
+        Instant now = Instant.now();
+        booking.setStatus(LaundryBookingStatus.COMPLETED);
+        booking.setKeyReturnedAt(now);
+        return toLaundryDto(laundryBookingRepository.save(booking));
+    }
+
+    @Transactional
+    public DeskRoomBookingDto issueRoomKey(User actor, UUID bookingId) {
+        RoomBooking booking = requireRoomInDorm(actor, bookingId);
+        if (booking.getStatus() != RoomBookingStatus.CONFIRMED) {
+            throw new BusinessRuleException("Only CONFIRMED room bookings can receive a key");
+        }
+        Instant now = Instant.now();
+        booking.setStatus(RoomBookingStatus.KEY_ISSUED);
+        booking.setKeyIssuedAt(now);
+        return toRoomDto(roomBookingRepository.save(booking));
+    }
+
+    @Transactional
+    public DeskRoomBookingDto returnRoomKey(User actor, UUID bookingId) {
+        RoomBooking booking = requireRoomInDorm(actor, bookingId);
+        if (booking.getStatus() != RoomBookingStatus.KEY_ISSUED) {
+            throw new BusinessRuleException("Only KEY_ISSUED room bookings can return a key");
+        }
+        Instant now = Instant.now();
+        booking.setStatus(RoomBookingStatus.COMPLETED);
+        booking.setKeyReturnedAt(now);
+        return toRoomDto(roomBookingRepository.save(booking));
+    }
+
+    private LaundryBooking requireLaundryInDorm(User actor, UUID bookingId) {
+        UUID dormitoryId = requireActorDormitoryId(actor);
+        return laundryBookingRepository.findByIdWithDetails(bookingId)
+                .filter(b -> b.getMachine().getDormitory().getId().equals(dormitoryId))
+                .orElseThrow(() -> new ResourceNotFoundException("Laundry booking not found"));
+    }
+
+    private RoomBooking requireRoomInDorm(User actor, UUID bookingId) {
+        UUID dormitoryId = requireActorDormitoryId(actor);
+        return roomBookingRepository.findByIdWithDetails(bookingId)
+                .filter(b -> b.getRoom().getDormitory().getId().equals(dormitoryId))
+                .orElseThrow(() -> new ResourceNotFoundException("Room booking not found"));
+    }
+
+    private Dormitory requireActorDormitory(User actor) {
+        Dormitory dorm = actor.getDormitory();
+        if (dorm == null || dorm.getId() == null) {
+            throw new BusinessRuleException("Staff user is not assigned to a dormitory");
+        }
+        return dorm;
+    }
+
+    private UUID requireActorDormitoryId(User actor) {
+        return requireActorDormitory(actor).getId();
+    }
+
+    private DeskLaundryBookingDto toLaundryDto(LaundryBooking booking) {
+        User resident = booking.getUser();
+        return new DeskLaundryBookingDto(
+                booking.getId(),
+                booking.getMachine().getId(),
+                booking.getMachine().getMachineIdentifier(),
+                resident.getId(),
+                resident.getFirstName(),
+                resident.getLastName(),
+                resident.getDeclaredRoomNumber(),
+                resident.getPhoneNumber(),
+                toOffset(booking.getStartTime()),
+                toOffset(booking.getEndTime()),
+                booking.getStatus(),
+                toOffset(booking.getKeyIssuedAt())
+        );
+    }
+
+    private DeskRoomBookingDto toRoomDto(RoomBooking booking) {
+        User resident = booking.getUser();
+        return new DeskRoomBookingDto(
+                booking.getId(),
+                booking.getRoom().getId(),
+                booking.getRoom().getName(),
+                resident.getId(),
+                resident.getFirstName(),
+                resident.getLastName(),
+                resident.getDeclaredRoomNumber(),
+                resident.getPhoneNumber(),
+                booking.getParticipantsCount(),
+                toOffset(booking.getStartTime()),
+                toOffset(booking.getEndTime()),
+                booking.getStatus(),
+                toOffset(booking.getKeyIssuedAt())
+        );
+    }
+
+    private DeskLaundryMachineDto toMachineDto(LaundryMachine machine) {
+        return new DeskLaundryMachineDto(
+                machine.getId(),
+                machine.getMachineIdentifier(),
+                machine.getFloorLocation(),
+                machine.getStatus(),
+                machine.getNotes()
+        );
+    }
+
+    private DeskOpenIssueDto toOpenIssueDto(Issue issue) {
+        String locationLabel;
+        if (issue.getRoom() != null) {
+            locationLabel = "Pokój " + issue.getRoom().getRoomNumber();
+        } else {
+            String commonArea = issue.getCommonAreaName();
+            locationLabel = commonArea == null || commonArea.isBlank()
+                    ? "—"
+                    : capitalizeCommonArea(commonArea);
+        }
+        return new DeskOpenIssueDto(
+                issue.getId(),
+                locationLabel,
+                issue.getCategory(),
+                issue.getUrgency(),
+                issue.getDescription(),
+                issue.getStatus(),
+                toOffset(issue.getCreatedAt())
+        );
+    }
+
+    private static String capitalizeCommonArea(String value) {
+        if (value == null || value.isBlank()) {
+            return value;
+        }
+        return value.substring(0, 1).toUpperCase(Locale.ROOT) + value.substring(1);
+    }
+
+    private static OffsetDateTime toOffset(Instant instant) {
+        if (instant == null) {
+            return null;
+        }
+        return instant.atZone(WARSAW).toOffsetDateTime();
+    }
+}
