@@ -64,6 +64,11 @@ const receptionistBottomNavItems: BottomNavItem[] = [
     icon: Waves,
   },
   {
+    title: "Salki",
+    to: "/receptionist/rooms",
+    icon: DoorClosed,
+  },
+  {
     title: "Ustawienia",
     to: "/settings",
     icon: Settings,
@@ -84,7 +89,11 @@ export function ResidentBottomNav() {
       <div
         className={cn(
           "grid items-center max-w-md mx-auto",
-          items.length <= 3 ? "grid-cols-3" : "grid-cols-6",
+          items.length === 4
+            ? "grid-cols-4"
+            : items.length <= 3
+              ? "grid-cols-3"
+              : "grid-cols-6",
         )}
       >
         {items.map((item) => {

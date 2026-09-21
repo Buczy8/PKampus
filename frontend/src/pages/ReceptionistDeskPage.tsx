@@ -118,6 +118,10 @@ export function ReceptionistDeskPage() {
     desk?.laundry.filter((b) => b.status === "CONFIRMED") ?? []
   const laundryIssued =
     desk?.laundry.filter((b) => b.status === "KEY_ISSUED") ?? []
+  const roomsAwaiting =
+    desk?.rooms.filter((b) => b.status === "CONFIRMED") ?? []
+  const roomsIssued =
+    desk?.rooms.filter((b) => b.status === "KEY_ISSUED") ?? []
 
   return (
     <div className="space-y-8">
@@ -169,7 +173,14 @@ export function ReceptionistDeskPage() {
                   to="/receptionist/laundry"
                   className="text-primary underline-offset-4 hover:underline"
                 >
-                  Otwórz grafik pralni
+                  Grafik pralni
+                </Link>
+                {" · "}
+                <Link
+                  to="/receptionist/rooms"
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  grafik salek
                 </Link>
               </p>
             )}
@@ -231,21 +242,59 @@ export function ReceptionistDeskPage() {
           )}
 
           {desk.rooms.length > 0 && (
-            <DeskSection
-              title="Salki"
-              description={`${desk.rooms.length} aktywnych dziś`}
-              icon={<DoorClosed className="size-5 text-primary" />}
-            >
-              {desk.rooms.map((b) => (
-                <RoomCard
-                  key={b.id}
-                  booking={b}
-                  busy={busy}
-                  onIssue={() => roomIssue.mutate(b.id)}
-                  onReturn={() => roomReturn.mutate(b.id)}
-                />
-              ))}
-            </DeskSection>
+            <Card className="border-border/70 shadow-none">
+              <CardHeader className="pb-4 px-6 pt-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-xl flex items-center gap-2.5">
+                      <DoorClosed className="size-5 text-primary" />
+                      Salki — dziś
+                    </CardTitle>
+                    <CardDescription className="mt-2 text-base">
+                      {roomsAwaiting.length} do wydania · {roomsIssued.length} klucz
+                      wydany
+                    </CardDescription>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="lg"
+                    asChild
+                    className="shrink-0"
+                  >
+                    <Link to="/receptionist/rooms">Grafik →</Link>
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6 px-6 pb-6">
+                {roomsAwaiting.length > 0 && (
+                  <BookingGroup title="Do wydania klucza">
+                    {roomsAwaiting.map((b) => (
+                      <RoomCard
+                        key={b.id}
+                        booking={b}
+                        busy={busy}
+                        onIssue={() => roomIssue.mutate(b.id)}
+                        onReturn={() => roomReturn.mutate(b.id)}
+                      />
+                    ))}
+                  </BookingGroup>
+                )}
+                {roomsIssued.length > 0 && (
+                  <BookingGroup title="Klucz wydany — oczekuje zwrotu">
+                    {roomsIssued.map((b) => (
+                      <RoomCard
+                        key={b.id}
+                        booking={b}
+                        busy={busy}
+                        onIssue={() => roomIssue.mutate(b.id)}
+                        onReturn={() => roomReturn.mutate(b.id)}
+                      />
+                    ))}
+                  </BookingGroup>
+                )}
+              </CardContent>
+            </Card>
           )}
 
           {desk.openIssues.length > 0 && (

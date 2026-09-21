@@ -645,4 +645,46 @@ export interface DeskLaundryMachine {
   notes: string | null
 }
 
+export interface StaffThematicRoom {
+  id: string
+  name: string
+  status: ThematicRoomStatus
+  openingTime: string
+  closingTime: string
+  maxCapacity: number
+  spansMidnight: boolean
+}
+
+export interface StaffRoomBookingSlot {
+  id: string
+  roomId: string
+  startTime: string
+  endTime: string
+  status: RoomBookingStatus
+  residentLabel: string
+  participantsCount: number
+}
+
+export interface StaffRoomScheduleDay {
+  date: string
+  bookings: StaffRoomBookingSlot[]
+}
+
+export interface StaffRoomSchedule {
+  rooms: StaffThematicRoom[]
+  days: StaffRoomScheduleDay[]
+}
+
+export interface RoomMaintenanceResult {
+  roomId: string
+  cancelledCount: number
+  issueId: string
+}
+
+export interface DeskThematicRoom {
+  id: string
+  name: string
+  status: ThematicRoomStatus
+}
+
 

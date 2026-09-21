@@ -4,9 +4,12 @@ import type {
   DeskLaundryBooking,
   DeskLaundryMachine,
   DeskRoomBooking,
+  DeskThematicRoom,
   LaundrySchedule,
   MachineBreakdownResult,
   ReceptionistDesk,
+  RoomMaintenanceResult,
+  StaffRoomSchedule,
 } from '@/api/types'
 
 export async function getReceptionistDesk(): Promise<ReceptionistDesk> {
@@ -67,6 +70,56 @@ export async function restoreLaundryMachine(
   )
   if (!data.success || !data.data) {
     throw new Error(data.message ?? 'Failed to restore laundry machine')
+  }
+  return data.data
+}
+
+export async function getReceptionistRoomSchedule(
+  from: string,
+  to: string,
+): Promise<StaffRoomSchedule> {
+  const { data } = await apiClient.get<ApiResponse<StaffRoomSchedule>>(
+    '/receptionist/rooms/schedule',
+    { params: { from, to } },
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to load room schedule')
+  }
+  return data.data
+}
+
+export async function cancelReceptionistRoomBooking(
+  id: string,
+): Promise<DeskRoomBooking> {
+  const { data } = await apiClient.post<ApiResponse<DeskRoomBooking>>(
+    `/receptionist/rooms/${id}/cancel`,
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to cancel room booking')
+  }
+  return data.data
+}
+
+export async function reportRoomMaintenance(
+  id: string,
+  reason: string,
+): Promise<RoomMaintenanceResult> {
+  const { data } = await apiClient.post<ApiResponse<RoomMaintenanceResult>>(
+    `/receptionist/rooms/${id}/maintenance`,
+    { reason },
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to report room maintenance')
+  }
+  return data.data
+}
+
+export async function restoreThematicRoom(id: string): Promise<DeskThematicRoom> {
+  const { data } = await apiClient.post<ApiResponse<DeskThematicRoom>>(
+    `/receptionist/rooms/${id}/restore`,
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to restore thematic room')
   }
   return data.data
 }

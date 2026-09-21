@@ -13,6 +13,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { PendingApprovalPage } from '@/pages/PendingApprovalPage'
 import { ReceptionistDeskPage } from '@/pages/ReceptionistDeskPage'
 import { ReceptionistLaundryPage } from '@/pages/ReceptionistLaundryPage'
+import { ReceptionistRoomsPage } from '@/pages/ReceptionistRoomsPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { RoomsPage } from '@/pages/RoomsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
@@ -54,6 +55,7 @@ export function App() {
           <Route element={<ResidentShell />}>
             <Route path="/receptionist" element={<ReceptionistDeskPage />} />
             <Route path="/receptionist/laundry" element={<ReceptionistLaundryPage />} />
+            <Route path="/receptionist/rooms" element={<ReceptionistRoomsPage />} />
           </Route>
         </Route>
 
