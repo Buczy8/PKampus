@@ -1,12 +1,16 @@
-import { NavLink } from "react-router-dom"
+import { NavLink, useOutletContext } from "react-router-dom"
 import {
   DoorClosed,
   IdCard,
   LayoutDashboard,
   Megaphone,
+  Settings,
   Waves,
   Wrench,
 } from "lucide-react"
+
+import type { UserProfile } from "@/api/types"
+import { isReceptionistRole } from "@/api/types"
 import { cn } from "cn"
 
 interface BottomNavItem {
@@ -15,7 +19,7 @@ interface BottomNavItem {
   icon: React.ComponentType<{ className?: string }>
 }
 
-const bottomNavItems: BottomNavItem[] = [
+const residentBottomNavItems: BottomNavItem[] = [
   {
     title: "Pulpit",
     to: "/dashboard",
@@ -48,14 +52,42 @@ const bottomNavItems: BottomNavItem[] = [
   },
 ]
 
+const receptionistBottomNavItems: BottomNavItem[] = [
+  {
+    title: "Pulpit",
+    to: "/receptionist",
+    icon: LayoutDashboard,
+  },
+  {
+    title: "Pralnia",
+    to: "/receptionist/laundry",
+    icon: Waves,
+  },
+  {
+    title: "Ustawienia",
+    to: "/settings",
+    icon: Settings,
+  },
+]
+
 export function ResidentBottomNav() {
+  const user = useOutletContext<UserProfile>()
+  const items = isReceptionistRole(user?.role)
+    ? receptionistBottomNavItems
+    : residentBottomNavItems
+
   return (
     <nav
       className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-md border-t border-border/80 px-1 pt-1.5 pb-[calc(env(safe-area-inset-bottom,0px)+8px)] shadow-lg select-none"
       aria-label="Nawigacja mobilna"
     >
-      <div className="grid grid-cols-6 items-center max-w-md mx-auto">
-        {bottomNavItems.map((item) => {
+      <div
+        className={cn(
+          "grid items-center max-w-md mx-auto",
+          items.length <= 3 ? "grid-cols-3" : "grid-cols-6",
+        )}
+      >
+        {items.map((item) => {
           const Icon = item.icon
 
           return (

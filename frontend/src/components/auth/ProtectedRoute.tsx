@@ -3,12 +3,13 @@ import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 
 import { getCurrentUser } from '@/api/auth'
-import { isAdminRole, isSuperAdminRole, homePathForRole } from '@/api/types'
+import { isAdminRole, isReceptionistRole, isSuperAdminRole, homePathForRole } from '@/api/types'
 import { getAccessToken } from '@/lib/auth-storage'
 
 type ProtectedRouteProps = {
   adminOnly?: boolean
   superAdminOnly?: boolean
+  receptionistOnly?: boolean
   /** Allow MUST_CHANGE_PASSWORD users (change-password page only). */
   allowMustChangePassword?: boolean
 }
@@ -22,6 +23,7 @@ function isAuthFailure(error: unknown): boolean {
 export function ProtectedRoute({
   adminOnly = false,
   superAdminOnly = false,
+  receptionistOnly = false,
   allowMustChangePassword = false,
 }: ProtectedRouteProps) {
   const token = getAccessToken()
@@ -82,6 +84,10 @@ export function ProtectedRoute({
   }
 
   if (superAdminOnly && !isSuperAdminRole(user.role)) {
+    return <Navigate to={homePathForRole(user.role)} replace />
+  }
+
+  if (receptionistOnly && !isReceptionistRole(user.role)) {
     return <Navigate to={homePathForRole(user.role)} replace />
   }
 

@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 
 import type { UserProfile } from "@/api/types"
+import { isReceptionistRole } from "@/api/types"
 import { PkLogo } from "@/components/brand/PkLogo"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -99,6 +100,34 @@ const navSections: NavSection[] = [
   },
 ]
 
+const receptionistNavSections: NavSection[] = [
+  {
+    label: "Portiernia",
+    items: [
+      {
+        title: "Pulpit",
+        to: "/receptionist",
+        icon: LayoutDashboard,
+      },
+      {
+        title: "Pralnia",
+        to: "/receptionist/laundry",
+        icon: Waves,
+      },
+    ],
+  },
+  {
+    label: "Konto",
+    items: [
+      {
+        title: "Ustawienia",
+        to: "/settings",
+        icon: Settings,
+      },
+    ],
+  },
+]
+
 export function ResidentSidebar({
   user,
   collapsed,
@@ -106,6 +135,7 @@ export function ResidentSidebar({
   onLogout,
 }: ResidentSidebarProps) {
   const initials = `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase() || "M"
+  const sections = isReceptionistRole(user.role) ? receptionistNavSections : navSections
 
   return (
     <aside
@@ -175,7 +205,7 @@ export function ResidentSidebar({
           collapsed ? "px-0 w-full flex flex-col items-center" : "px-2"
         )}
       >
-        {navSections.map((section) => (
+        {sections.map((section) => (
           <div
             key={section.label}
             className={cn("w-full", collapsed ? "flex flex-col items-center space-y-1" : "space-y-1")}
@@ -192,6 +222,7 @@ export function ResidentSidebar({
                   <NavLink
                     key={item.to}
                     to={item.to}
+                    end={item.to === "/receptionist" || item.to === "/dashboard"}
                     className={({ isActive }) =>
                       cn(
                         "flex items-center rounded-lg text-sm transition-colors group relative",
@@ -249,10 +280,13 @@ export function ResidentSidebar({
       >
         {collapsed ? (
           <>
-            {/* Centered Avatar without awkward square button styling */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex size-10 items-center justify-center cursor-default">
+                <Link
+                  to="/settings"
+                  className="flex size-10 items-center justify-center rounded-lg hover:bg-sidebar-accent/60 transition-colors"
+                  aria-label="Ustawienia konta"
+                >
                   <Avatar className="size-8 ring-1 ring-border">
                     {user.avatarUrl && (
                       <AvatarImage src={user.avatarUrl} alt={user.firstName} />
@@ -261,7 +295,7 @@ export function ResidentSidebar({
                       {initials}
                     </AvatarFallback>
                   </Avatar>
-                </div>
+                </Link>
               </TooltipTrigger>
               <TooltipContent side="right" sideOffset={10}>
                 <div className="flex flex-col">
@@ -270,6 +304,9 @@ export function ResidentSidebar({
                   </span>
                   <span className="text-[11px] text-muted-foreground">
                     {user.dormitoryName ?? "DS PK"} {user.roomNumber ? `• pok. ${user.roomNumber}` : ""}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground mt-0.5">
+                    Ustawienia
                   </span>
                 </div>
               </TooltipContent>

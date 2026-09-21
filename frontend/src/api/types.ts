@@ -188,6 +188,9 @@ export interface LaundrySlot {
   startTime: string
   endTime: string
   state: LaundrySlotState
+  bookingId?: string | null
+  residentLabel?: string | null
+  bookingStatus?: LaundryBookingStatus | null
 }
 
 export interface LaundryScheduleDay {
@@ -234,10 +237,15 @@ export function isDormAdminRole(role: string | undefined | null): boolean {
   return role === 'DORM_ADMIN'
 }
 
+export function isReceptionistRole(role: string | undefined | null): boolean {
+  return role === 'RECEPTIONIST'
+}
+
 /** Default landing path after login / for unknown routes. */
 export function homePathForRole(role: string | undefined | null): string {
   if (isSuperAdminRole(role)) return '/superadmin'
   if (isAdminRole(role)) return '/admin'
+  if (isReceptionistRole(role)) return '/receptionist'
   return '/dashboard'
 }
 
@@ -574,3 +582,67 @@ export interface ListBoardPostsParams {
   scope?: BoardPostScope | ''
   status?: BoardPostStatusFilter
 }
+
+export interface DeskLaundryBooking {
+  id: string
+  machineId: string
+  machineIdentifier: string
+  residentId: string
+  residentFirstName: string
+  residentLastName: string
+  residentRoomNumber: string | null
+  residentPhoneNumber: string
+  startTime: string
+  endTime: string
+  status: LaundryBookingStatus
+  keyIssuedAt: string | null
+}
+
+export interface DeskRoomBooking {
+  id: string
+  roomId: string
+  roomName: string
+  residentId: string
+  residentFirstName: string
+  residentLastName: string
+  residentRoomNumber: string | null
+  residentPhoneNumber: string
+  participantsCount: number
+  startTime: string
+  endTime: string
+  status: RoomBookingStatus
+  keyIssuedAt: string | null
+}
+
+export interface DeskOpenIssue {
+  id: string
+  locationLabel: string
+  category: IssueCategory
+  urgency: IssueUrgency
+  description: string
+  status: IssueStatus
+  createdAt: string
+}
+
+export interface ReceptionistDesk {
+  laundry: DeskLaundryBooking[]
+  rooms: DeskRoomBooking[]
+  openIssuesCount: number
+  openIssues: DeskOpenIssue[]
+}
+
+export interface MachineBreakdownResult {
+  machineId: string
+  cancelledCount: number
+  issueId: string
+}
+
+export interface DeskLaundryMachine {
+  id: string
+  machineIdentifier: string
+  floorLocation: string
+  status: LaundryMachineStatus
+  notes: string | null
+}
+
+

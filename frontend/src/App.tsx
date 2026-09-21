@@ -11,6 +11,8 @@ import { IssuesPage } from '@/pages/IssuesPage'
 import { LaundryPage } from '@/pages/LaundryPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { PendingApprovalPage } from '@/pages/PendingApprovalPage'
+import { ReceptionistDeskPage } from '@/pages/ReceptionistDeskPage'
+import { ReceptionistLaundryPage } from '@/pages/ReceptionistLaundryPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { RoomsPage } from '@/pages/RoomsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
@@ -44,6 +46,14 @@ export function App() {
             <Route path="/issues" element={<IssuesPage />} />
             <Route path="/board" element={<BoardPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+          </Route>
+        </Route>
+
+        {/* Receptionist Desk */}
+        <Route element={<ProtectedRoute receptionistOnly />}>
+          <Route element={<ResidentShell />}>
+            <Route path="/receptionist" element={<ReceptionistDeskPage />} />
+            <Route path="/receptionist/laundry" element={<ReceptionistLaundryPage />} />
           </Route>
         </Route>
 
