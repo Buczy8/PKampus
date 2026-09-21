@@ -398,6 +398,46 @@ export interface ThematicRoom {
   createdAt: string
 }
 
+export type RoomBookingStatus =
+  | 'CONFIRMED'
+  | 'KEY_ISSUED'
+  | 'COMPLETED'
+  | 'CANCELLED_USER'
+  | 'AUTO_CANCELLED_15MIN'
+  | 'CANCELLED_ROOM_MAINTENANCE'
+
+export interface RoomBooking {
+  id: string
+  roomId: string
+  roomName: string
+  userId: string
+  startTime: string
+  endTime: string
+  participantsCount: number
+  purpose: string
+  status: RoomBookingStatus
+  createdAt: string
+}
+
+export interface CreateRoomBookingRequest {
+  roomId: string
+  startTime: string
+  endTime: string
+  participantsCount: number
+  purpose: string
+  termsAccepted: boolean
+}
+
+export interface RoomBusyInterval {
+  startTime: string
+  endTime: string
+}
+
+export interface RoomAvailability {
+  roomId: string
+  busy: RoomBusyInterval[]
+}
+
 export interface CreateThematicRoomRequest {
   name: string
   maxCapacity: number

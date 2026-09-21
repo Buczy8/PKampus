@@ -1,4 +1,4 @@
-import type { LaundryBooking } from '@/api/types'
+import type { LaundryBooking, RoomBusyInterval } from '@/api/types'
 
 const WARSAW = 'Europe/Warsaw'
 
@@ -75,6 +75,18 @@ function warsawMidnightInstant(isoDate: string): Date {
   return new Date(asIfUtcMidnight - (sh * 60 + sm) * 60 * 1000)
 }
 
+/** Convert Europe/Warsaw calendar date + HH:mm to an Instant ISO string. */
+export function warsawLocalDateTimeToIso(isoDate: string, hhMm: string): string {
+  const [hh, mm] = hhMm.split(':').map(Number)
+  const midnight = warsawMidnightInstant(isoDate)
+  return new Date(midnight.getTime() + (hh * 60 + mm) * 60_000).toISOString()
+}
+
+/** Add calendar days to a YYYY-MM-DD string (UTC calendar arithmetic). */
+export function addDaysToIsoDate(isoDate: string, days: number): string {
+  return addCalendarDays(isoDate, days)
+}
+
 export function countActiveBookingsInRollingWindow(
   bookings: LaundryBooking[],
   fromInstant: Date = new Date(),
@@ -95,4 +107,40 @@ export function isBookingCancellable(
   now = new Date(),
 ): boolean {
   return booking.status === 'CONFIRMED' && new Date(booking.startTime) > now
+}
+
+/** Warsaw wall-clock hour (0–23) of an Instant ISO string. */
+export function warsawHourOf(iso: string): number {
+  const hour = new Intl.DateTimeFormat('en-US', {
+    timeZone: WARSAW,
+    hour: 'numeric',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(iso)).find((p) => p.type === 'hour')?.value
+  return Number(hour)
+}
+
+/** Warsaw calendar date YYYY-MM-DD of an Instant ISO string. */
+export function warsawDateOf(iso: string): string {
+  return warsawDateString(new Date(iso))
+}
+
+export function intervalsOverlap(
+  aStart: string,
+  aEnd: string,
+  bStart: string,
+  bEnd: string,
+): boolean {
+  const as = new Date(aStart).getTime()
+  const ae = new Date(aEnd).getTime()
+  const bs = new Date(bStart).getTime()
+  const be = new Date(bEnd).getTime()
+  return as < be && ae > bs
+}
+
+export function overlapsAnyBusy(
+  startIso: string,
+  endIso: string,
+  busy: RoomBusyInterval[],
+): boolean {
+  return busy.some((b) => intervalsOverlap(startIso, endIso, b.startTime, b.endTime))
 }
