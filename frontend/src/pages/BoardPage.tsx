@@ -221,12 +221,75 @@ export function BoardPage() {
   return (
     <div className="space-y-8">
       <section className="space-y-4">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <Megaphone className="size-5 text-muted-foreground" />
+            Oficjalne komunikaty — {user.dormitoryName ?? "Twój akademik"}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Ogłoszenia ADS oraz komunikaty kampusowe AOS.
+          </p>
+        </div>
+
+        {eventsQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground">Ładowanie…</p>
+        ) : eventsQuery.isError ? (
+          <p className="text-sm text-destructive">
+            {getApiErrorMessage(eventsQuery.error)}
+          </p>
+        ) : events.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Brak oficjalnych komunikatów.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {events.map((event) => {
+              const scopeBadge = eventScopeBadge(event)
+              return (
+                <Card key={event.id}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant={scopeBadge.variant} className="text-[10px]">
+                          {scopeBadge.label}
+                        </Badge>
+                        <Badge
+                          variant={
+                            event.priority === "CRITICAL" ? "destructive" : "outline"
+                          }
+                          className="text-[10px]"
+                        >
+                          {priorityLabel(event.priority)}
+                        </Badge>
+                      </div>
+                      <span className="text-[11px] text-muted-foreground">
+                        {formatWhen(event.eventDate)}
+                      </span>
+                    </div>
+                    <CardTitle className="text-base mt-2">{event.title}</CardTitle>
+                    {event.authorName ? (
+                      <CardDescription className="text-xs">
+                        Dodał(a): {event.authorName}
+                      </CardDescription>
+                    ) : null}
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
+                      {event.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-              <Users className="size-5 text-muted-foreground" />
-              Tablica sąsiedzka — {user.dormitoryName ?? "Twój akademik"}
-            </h2>
+            <h3 className="text-lg font-semibold tracking-tight text-foreground flex items-center gap-2">
+              <Users className="size-4 text-muted-foreground" />
+              Tablica sąsiedzka
+            </h3>
             <p className="text-sm text-muted-foreground">
               Ogłoszenia mieszkańców (pomoc, kupno/sprzedaż, zguby). Bez anonimowości.
             </p>
@@ -322,69 +385,6 @@ export function BoardPage() {
                 onCommentsChanged={() => void invalidatePosts()}
               />
             ))}
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-lg font-semibold tracking-tight text-foreground flex items-center gap-2">
-            <Megaphone className="size-4 text-muted-foreground" />
-            Oficjalne komunikaty
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            Ogłoszenia ADS oraz komunikaty kampusowe AOS.
-          </p>
-        </div>
-
-        {eventsQuery.isLoading ? (
-          <p className="text-sm text-muted-foreground">Ładowanie…</p>
-        ) : eventsQuery.isError ? (
-          <p className="text-sm text-destructive">
-            {getApiErrorMessage(eventsQuery.error)}
-          </p>
-        ) : events.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Brak oficjalnych komunikatów.</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {events.map((event) => {
-              const scopeBadge = eventScopeBadge(event)
-              return (
-                <Card key={event.id}>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant={scopeBadge.variant} className="text-[10px]">
-                          {scopeBadge.label}
-                        </Badge>
-                        <Badge
-                          variant={
-                            event.priority === "CRITICAL" ? "destructive" : "outline"
-                          }
-                          className="text-[10px]"
-                        >
-                          {priorityLabel(event.priority)}
-                        </Badge>
-                      </div>
-                      <span className="text-[11px] text-muted-foreground">
-                        {formatWhen(event.eventDate)}
-                      </span>
-                    </div>
-                    <CardTitle className="text-base mt-2">{event.title}</CardTitle>
-                    {event.authorName ? (
-                      <CardDescription className="text-xs">
-                        Dodał(a): {event.authorName}
-                      </CardDescription>
-                    ) : null}
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
-                      {event.description}
-                    </p>
-                  </CardContent>
-                </Card>
-              )
-            })}
           </div>
         )}
       </section>
