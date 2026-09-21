@@ -523,3 +523,54 @@ export interface CreateIssueRequest {
   urgency: IssueUrgency
   description: string
 }
+
+export type BoardPostCategory =
+  | 'BORROW_HELP'
+  | 'BUY_SELL'
+  | 'LOST_FOUND'
+  | 'GENERAL'
+
+export type BoardPostScope = 'DORMITORY' | 'CAMPUS'
+
+export type BoardPostStatus = 'ACTIVE' | 'RESOLVED' | 'REMOVED_MODERATOR'
+
+export type BoardPostStatusFilter = 'ACTIVE' | 'RESOLVED' | 'ALL'
+
+export interface BoardPost {
+  id: string
+  title: string
+  content: string
+  category: BoardPostCategory
+  scope: BoardPostScope
+  status: BoardPostStatus
+  authorDisplayName: string
+  authorRoomNumber: string | null
+  authorDormitoryName: string | null
+  mine: boolean
+  commentCount: number
+  createdAt: string
+}
+
+export interface BoardComment {
+  id: string
+  postId: string
+  content: string
+  authorDisplayName: string
+  authorRoomNumber: string | null
+  authorDormitoryName: string | null
+  mine: boolean
+  createdAt: string
+}
+
+export interface CreateBoardPostRequest {
+  title: string
+  content: string
+  category: BoardPostCategory
+  scope: BoardPostScope
+}
+
+export interface ListBoardPostsParams {
+  category?: BoardPostCategory | ''
+  scope?: BoardPostScope | ''
+  status?: BoardPostStatusFilter
+}
