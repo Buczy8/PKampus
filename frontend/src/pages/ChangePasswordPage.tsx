@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 
 import { changePassword } from '@/api/auth'
 import { getApiErrorMessage } from '@/api/errors'
-import { isAdminRole, isSuperAdminRole } from '@/api/types'
+import { homePathForRole } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -21,12 +21,6 @@ import {
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { ChangePasswordFields, validateNewPassword } from '@/components/auth/ChangePasswordFields'
-
-function homeForRole(role: string): string {
-  if (isSuperAdminRole(role)) return '/superadmin'
-  if (isAdminRole(role)) return '/admin'
-  return '/dashboard'
-}
 
 export function ChangePasswordPage({ forced = false }: { forced?: boolean }) {
   const navigate = useNavigate()
@@ -55,7 +49,7 @@ export function ChangePasswordPage({ forced = false }: { forced?: boolean }) {
     try {
       const profile = await changePassword({ currentPassword, newPassword })
       queryClient.setQueryData(['auth', 'me'], profile)
-      navigate(homeForRole(profile.role), { replace: true })
+      navigate(homePathForRole(profile.role), { replace: true })
     } catch (err) {
       setError(getApiErrorMessage(err, 'Nie udało się zmienić hasła'))
     } finally {

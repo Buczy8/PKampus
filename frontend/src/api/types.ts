@@ -234,6 +234,13 @@ export function isDormAdminRole(role: string | undefined | null): boolean {
   return role === 'DORM_ADMIN'
 }
 
+/** Default landing path after login / for unknown routes. */
+export function homePathForRole(role: string | undefined | null): string {
+  if (isSuperAdminRole(role)) return '/superadmin'
+  if (isAdminRole(role)) return '/admin'
+  return '/dashboard'
+}
+
 export interface SuperAdminDormitory {
   id: string
   name: string

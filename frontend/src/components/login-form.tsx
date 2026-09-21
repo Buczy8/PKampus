@@ -5,7 +5,7 @@ import { cn } from 'cn'
 
 import { login } from '@/api/auth'
 import { getApiErrorMessage } from '@/api/errors'
-import { isAdminRole, isSuperAdminRole } from '@/api/types'
+import { homePathForRole } from '@/api/types'
 import { setAuthTokens } from '@/lib/auth-storage'
 import { Button } from '@/components/ui/button'
 import {
@@ -68,12 +68,7 @@ export function LoginForm({
         navigate('/change-password', { replace: true })
         return
       }
-      const destination = isSuperAdminRole(auth.user.role)
-        ? '/superadmin'
-        : isAdminRole(auth.user.role)
-          ? '/admin'
-          : '/dashboard'
-      navigate(destination, { replace: true })
+      navigate(homePathForRole(auth.user.role), { replace: true })
     } catch (error) {
       const message = getApiErrorMessage(error, 'Login failed')
       if (/awaiting residency approval|PENDING_APPROVAL/i.test(message)) {

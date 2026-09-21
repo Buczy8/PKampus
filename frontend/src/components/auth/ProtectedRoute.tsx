@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 
 import { getCurrentUser } from '@/api/auth'
-import { isAdminRole, isSuperAdminRole } from '@/api/types'
+import { isAdminRole, isSuperAdminRole, homePathForRole } from '@/api/types'
 import { getAccessToken } from '@/lib/auth-storage'
 
 type ProtectedRouteProps = {
@@ -78,25 +78,15 @@ export function ProtectedRoute({
   }
 
   if (allowMustChangePassword && user.status !== 'MUST_CHANGE_PASSWORD') {
-    const home = isSuperAdminRole(user.role)
-      ? '/superadmin'
-      : isAdminRole(user.role)
-        ? '/admin'
-        : '/dashboard'
-    return <Navigate to={home} replace />
+    return <Navigate to={homePathForRole(user.role)} replace />
   }
 
   if (superAdminOnly && !isSuperAdminRole(user.role)) {
-    return (
-      <Navigate
-        to={isAdminRole(user.role) ? '/admin' : '/dashboard'}
-        replace
-      />
-    )
+    return <Navigate to={homePathForRole(user.role)} replace />
   }
 
   if (adminOnly && !isAdminRole(user.role)) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to={homePathForRole(user.role)} replace />
   }
 
   // DORM_ADMIN stays on /admin; SUPER_ADMIN belongs on /superadmin

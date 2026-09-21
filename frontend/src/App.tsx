@@ -1,4 +1,5 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { FallbackRedirect } from '@/components/auth/FallbackRedirect'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { ResidentShell } from '@/components/layout/ResidentShell'
 import { AdminPage } from '@/pages/AdminPage'
@@ -20,7 +21,7 @@ export function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<FallbackRedirect />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
@@ -56,7 +57,7 @@ export function App() {
           <Route path="/superadmin" element={<SuperAdminPage />} />
         </Route>
 
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<FallbackRedirect />} />
       </Routes>
     </BrowserRouter>
   )
