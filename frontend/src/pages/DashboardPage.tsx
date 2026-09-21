@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Link, useOutletContext } from "react-router-dom"
+import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import {
   CheckCircle2,
@@ -9,8 +9,11 @@ import {
   Wrench,
 } from "lucide-react"
 
+import { getApiErrorMessage } from "@/api/errors"
 import { getActiveBanner } from "@/api/events"
-import type { UserProfile } from "@/api/types"
+import { listMyIssues } from "@/api/issues"
+import { listMyLaundryBookings } from "@/api/laundry"
+import { listMyRoomBookings } from "@/api/rooms"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -26,12 +29,13 @@ import { cn } from "cn"
 import {
   type ActiveAnnouncement,
   type ActiveIssue,
-  type ActiveLaundry,
-  type ActiveRoom,
   type AgendaReservation,
   groupDashboardAgenda,
   hasAgendaItems,
   leadingTime,
+  mapLaundryBooking,
+  mapOpenIssue,
+  mapRoomBooking,
 } from "./dashboard-agenda"
 
 function QuickActions() {
@@ -104,7 +108,9 @@ function TodayHeroCard({ entry }: { entry: AgendaReservation }) {
             {deadline ? (
               <Badge variant="outline">Klucz do {deadline}</Badge>
             ) : (
-              <Badge variant="outline">Potwierdzona</Badge>
+              <Badge variant="outline">
+                {entry.item.status === "KEY_ISSUED" ? "Klucz wydany" : "Potwierdzona"}
+              </Badge>
             )}
           </div>
           <CardDescription>{title}</CardDescription>
@@ -189,9 +195,11 @@ function IssuesListCard({ issues }: { issues: ActiveIssue[] }) {
               <Badge variant="outline" className="shrink-0">
                 {issue.status === "IN_PROGRESS"
                   ? "W toku"
-                  : issue.status === "ASSIGNED"
-                    ? "Przypisana"
-                    : "Nowa"}
+                  : issue.status === "ASSIGNED_TO_MAINTENANCE"
+                    ? "Przekazana"
+                    : issue.status === "PARTS_REQUIRED"
+                      ? "Części"
+                      : "Nowa"}
               </Badge>
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium truncate">
@@ -241,36 +249,6 @@ function NoticeBanner({ announcement }: { announcement: ActiveAnnouncement }) {
   )
 }
 
-const defaultLaundry: ActiveLaundry = {
-  id: "laundry-1",
-  machineName: "Pralka #2 (Samsung EcoBubble)",
-  slotTime: "18:00 – 19:30",
-  date: "Dzisiaj",
-  status: "CONFIRMED",
-  pickupDeadline: "18:15",
-}
-
-const defaultRoom: ActiveRoom = {
-  id: "room-1",
-  roomName: "Salka Cichej Nauki „Kujon”",
-  timeRange: "14:00 – 17:00",
-  date: "Jutro",
-  participants: 4,
-  status: "CONFIRMED",
-}
-
-function defaultIssue(roomNumber?: string | null): ActiveIssue {
-  return {
-    id: "issue-1",
-    title: "Nieszczelna uszczelka baterii umywalkowej",
-    category: "Hydraulika",
-    location: roomNumber ? `Pokój ${roomNumber}` : "Mój pokój",
-    status: "IN_PROGRESS",
-    statusLabel: "W trakcie realizacji (Konserwator)",
-    lastNote: "Części zamienne pobrane z magazynu. Wymiana jutro do 12:00.",
-  }
-}
-
 function formatBannerDate(iso: string): string {
   try {
     return new Date(iso).toLocaleString("pl-PL", {
@@ -283,19 +261,18 @@ function formatBannerDate(iso: string): string {
 }
 
 export function DashboardPage() {
-  const user = useOutletContext<UserProfile>()
-
-  const [activeLaundry, setActiveLaundry] = React.useState<ActiveLaundry | null>(
-    defaultLaundry
-  )
-  const [activeRoom, setActiveRoom] = React.useState<ActiveRoom | null>(
-    defaultRoom
-  )
-  const [activeIssue, setActiveIssue] = React.useState<ActiveIssue | null>(() =>
-    defaultIssue(user.roomNumber)
-  )
-  const [hideBannerPreview, setHideBannerPreview] = React.useState(false)
-
+  const laundryQuery = useQuery({
+    queryKey: ["laundry", "bookings", "me"],
+    queryFn: listMyLaundryBookings,
+  })
+  const roomsQuery = useQuery({
+    queryKey: ["rooms", "bookings", "me"],
+    queryFn: listMyRoomBookings,
+  })
+  const issuesQuery = useQuery({
+    queryKey: ["issues", "me"],
+    queryFn: listMyIssues,
+  })
   const bannerQuery = useQuery({
     queryKey: ["events", "banner"],
     queryFn: getActiveBanner,
@@ -314,49 +291,68 @@ export function DashboardPage() {
     }
   }, [bannerQuery.data])
 
-  const activeAnnouncement = hideBannerPreview ? null : liveAnnouncement
+  const laundry = React.useMemo(
+    () =>
+      (laundryQuery.data ?? [])
+        .map((b) => mapLaundryBooking(b))
+        .filter((b): b is NonNullable<typeof b> => b != null),
+    [laundryQuery.data],
+  )
+
+  const rooms = React.useMemo(
+    () =>
+      (roomsQuery.data ?? [])
+        .map((b) => mapRoomBooking(b))
+        .filter((b): b is NonNullable<typeof b> => b != null),
+    [roomsQuery.data],
+  )
+
+  const issues = React.useMemo(
+    () =>
+      (issuesQuery.data ?? [])
+        .map((i) => mapOpenIssue(i))
+        .filter((i): i is NonNullable<typeof i> => i != null),
+    [issuesQuery.data],
+  )
 
   const agenda = groupDashboardAgenda({
-    laundry: activeLaundry,
-    room: activeRoom,
-    issue: activeIssue,
-    announcement: activeAnnouncement,
+    laundry,
+    rooms,
+    issues,
+    announcement: liveAnnouncement,
   })
 
   const hasAgenda = hasAgendaItems(agenda)
   const hasAnything = hasAgenda || Boolean(agenda.banner)
 
-  const clearAllForTesting = () => {
-    setActiveLaundry(null)
-    setActiveRoom(null)
-    setActiveIssue(null)
-    setHideBannerPreview(true)
-  }
+  const isLoading =
+    laundryQuery.isLoading ||
+    roomsQuery.isLoading ||
+    issuesQuery.isLoading ||
+    bannerQuery.isLoading
 
-  const restoreAllForTesting = () => {
-    setActiveLaundry(defaultLaundry)
-    setActiveRoom(defaultRoom)
-    setActiveIssue(defaultIssue(user.roomNumber))
-    setHideBannerPreview(false)
-  }
+  const loadError =
+    (laundryQuery.isError && getApiErrorMessage(laundryQuery.error)) ||
+    (roomsQuery.isError && getApiErrorMessage(roomsQuery.error)) ||
+    (issuesQuery.isError && getApiErrorMessage(issuesQuery.error)) ||
+    (bannerQuery.isError && getApiErrorMessage(bannerQuery.error)) ||
+    null
 
   return (
     <div className="w-full flex flex-col py-2 md:py-6 max-w-5xl mx-auto space-y-6 animate-in fade-in-50 duration-300">
-      <div className="w-full flex items-center justify-end text-xs text-muted-foreground">
-        <button
-          type="button"
-          onClick={hasAnything ? clearAllForTesting : restoreAllForTesting}
-          className="underline hover:text-foreground cursor-pointer transition-colors"
-        >
-          {hasAnything
-            ? "Podgląd: symuluj brak aktywnych spraw"
-            : "Podgląd: przywróć aktywne sprawy"}
-        </button>
-      </div>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Ładowanie pulpitu…</p>
+      ) : null}
 
-      {agenda.banner && <NoticeBanner announcement={agenda.banner} />}
+      {loadError ? (
+        <p className="text-sm text-destructive">{loadError}</p>
+      ) : null}
 
-      {hasAgenda && (
+      {!isLoading && agenda.banner && (
+        <NoticeBanner announcement={agenda.banner} />
+      )}
+
+      {!isLoading && hasAgenda && (
         <div className="w-full space-y-6">
           {(agenda.todayHero || agenda.todayRest.length > 0) && (
             <section>
@@ -377,6 +373,13 @@ export function DashboardPage() {
             </section>
           )}
 
+          {agenda.upcoming.length > 0 && (
+            <section>
+              <SectionLabel>Nadchodzące</SectionLabel>
+              <ReservationListCard entries={agenda.upcoming} />
+            </section>
+          )}
+
           {agenda.openIssues.length > 0 && (
             <section>
               <SectionLabel>Otwarte</SectionLabel>
@@ -386,7 +389,7 @@ export function DashboardPage() {
         </div>
       )}
 
-      {!hasAnything && (
+      {!isLoading && !hasAnything && (
         <div className="flex flex-col items-center justify-center text-center p-8 md:p-12 rounded-2xl border border-dashed border-border bg-card/50 max-w-lg mx-auto">
           <div className="flex size-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground mb-4">
             <CheckCircle2 className="size-7" />
@@ -404,7 +407,7 @@ export function DashboardPage() {
         </div>
       )}
 
-      {agenda.banner && !hasAgenda && (
+      {!isLoading && agenda.banner && !hasAgenda && (
         <div className="flex flex-col items-center text-center gap-4 max-w-lg mx-auto py-4">
           <p className="text-sm text-muted-foreground">
             Brak zaplanowanych rezerwacji i usterek
