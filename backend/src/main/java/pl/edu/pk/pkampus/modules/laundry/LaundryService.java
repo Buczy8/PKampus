@@ -123,6 +123,106 @@ public class LaundryService {
         return new LaundryScheduleResponseDto(opening, closing, durationMinutes, machineDtos, days);
     }
 
+    /**
+     * Staff schedule for a dormitory: OCCUPIED slots carry booking id / resident label;
+     * past free slots are UNAVAILABLE; active bookings remain visible even after start.
+     */
+    @Transactional(readOnly = true)
+    public LaundryScheduleResponseDto getStaffSchedule(Dormitory dorm, LocalDate from, LocalDate to) {
+        validateScheduleRange(from, to);
+
+        List<LaundryMachine> machines =
+                laundryMachineRepository.findAllByDormitoryIdOrderByMachineIdentifierAsc(dorm.getId());
+
+        Instant rangeStart = from.atStartOfDay(WARSAW).toInstant();
+        Instant rangeEnd = to.plusDays(1).atStartOfDay(WARSAW).toInstant();
+
+        List<LaundryBooking> bookings = laundryBookingRepository.findActiveInRange(
+                dorm.getId(), rangeStart, rangeEnd, ACTIVE_STATUSES);
+
+        Map<String, LaundryBooking> bookingByMachineAndStart = new HashMap<>();
+        for (LaundryBooking booking : bookings) {
+            String key = bookingKey(booking.getMachine().getId(), booking.getStartTime());
+            bookingByMachineAndStart.put(key, booking);
+        }
+
+        int durationMinutes = dorm.getLaundrySlotDurationMinutes();
+        LocalTime opening = dorm.getLaundryOpeningTime();
+        LocalTime closing = dorm.getLaundryClosingTime();
+        Instant now = Instant.now();
+
+        List<LaundryScheduleDayDto> days = new ArrayList<>();
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+            List<LaundrySlotDto> slots = new ArrayList<>();
+            for (LaundryMachine machine : machines) {
+                for (LocalTime slotStart : slotStarts(opening, closing, durationMinutes)) {
+                    Instant startInstant = date.atTime(slotStart).atZone(WARSAW).toInstant();
+                    Instant endInstant = startInstant.plus(durationMinutes, ChronoUnit.MINUTES);
+
+                    if (machine.getStatus() == LaundryMachineStatus.OUT_OF_ORDER) {
+                        slots.add(new LaundrySlotDto(
+                                machine.getId(),
+                                toOffset(startInstant),
+                                toOffset(endInstant),
+                                LaundrySlotState.UNAVAILABLE
+                        ));
+                        continue;
+                    }
+
+                    LaundryBooking booking = bookingByMachineAndStart.get(
+                            bookingKey(machine.getId(), startInstant));
+                    if (booking == null) {
+                        booking = findOverlapping(bookings, machine.getId(), startInstant, endInstant);
+                    }
+
+                    if (booking != null) {
+                        User resident = booking.getUser();
+                        String label = resident.getFirstName() + " " + resident.getLastName();
+                        if (resident.getDeclaredRoomNumber() != null
+                                && !resident.getDeclaredRoomNumber().isBlank()) {
+                            label += " • pok. " + resident.getDeclaredRoomNumber();
+                        }
+                        slots.add(new LaundrySlotDto(
+                                machine.getId(),
+                                toOffset(startInstant),
+                                toOffset(endInstant),
+                                LaundrySlotState.OCCUPIED,
+                                booking.getId(),
+                                label,
+                                booking.getStatus()
+                        ));
+                    } else if (!startInstant.isAfter(now)) {
+                        slots.add(new LaundrySlotDto(
+                                machine.getId(),
+                                toOffset(startInstant),
+                                toOffset(endInstant),
+                                LaundrySlotState.UNAVAILABLE
+                        ));
+                    } else {
+                        slots.add(new LaundrySlotDto(
+                                machine.getId(),
+                                toOffset(startInstant),
+                                toOffset(endInstant),
+                                LaundrySlotState.FREE
+                        ));
+                    }
+                }
+            }
+            days.add(new LaundryScheduleDayDto(date, slots));
+        }
+
+        List<LaundryMachineDto> machineDtos = machines.stream()
+                .map(m -> new LaundryMachineDto(
+                        m.getId(),
+                        m.getMachineIdentifier(),
+                        m.getFloorLocation(),
+                        m.getStatus()
+                ))
+                .toList();
+
+        return new LaundryScheduleResponseDto(opening, closing, durationMinutes, machineDtos, days);
+    }
+
     @Transactional(readOnly = true)
     public List<LaundryBookingDto> listMyBookings(User user) {
         requireResidentDormitory(user);
