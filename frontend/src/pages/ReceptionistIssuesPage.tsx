@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react"
-import { Link, useOutletContext } from "react-router-dom"
+import { useEffect, useMemo, useState } from "react"
+import { Link, useOutletContext, useSearchParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft, ImageIcon, Wrench } from "lucide-react"
 
@@ -109,6 +109,7 @@ function urgencyLabel(urgency: IssueUrgency): string {
 export function ReceptionistIssuesPage() {
   const user = useOutletContext<UserProfile>()
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const [statusFilter, setStatusFilter] = useState<"open" | "all" | IssueStatus>(
     "open",
@@ -125,6 +126,22 @@ export function ReceptionistIssuesPage() {
   const [staffNotes, setStaffNotes] = useState("")
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionInfo, setActionInfo] = useState<string | null>(null)
+
+  useEffect(() => {
+    const id = searchParams.get("id")
+    if (id) {
+      setSelectedId(id)
+      setActionError(null)
+      setNextStatus("")
+    }
+  }, [searchParams])
+
+  const clearIssueParam = () => {
+    if (!searchParams.has("id")) return
+    const next = new URLSearchParams(searchParams)
+    next.delete("id")
+    setSearchParams(next, { replace: true })
+  }
 
   const filters = useMemo(() => {
     const status: IssueStatus[] | undefined =
@@ -158,6 +175,12 @@ export function ReceptionistIssuesPage() {
     enabled: selectedId != null,
   })
 
+  useEffect(() => {
+    if (detailQuery.data && detailQuery.data.id === selectedId) {
+      setStaffNotes(detailQuery.data.staffNotes ?? "")
+    }
+  }, [detailQuery.data, selectedId])
+
   const invalidate = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["receptionist", "issues"] }),
@@ -174,8 +197,7 @@ export function ReceptionistIssuesPage() {
     onSuccess: async () => {
       setActionError(null)
       setActionInfo("Status zgłoszenia zaktualizowany")
-      setSelectedId(null)
-      setNextStatus("")
+      closeDetail()
       setStaffNotes("")
       await invalidate()
     },
@@ -191,6 +213,13 @@ export function ReceptionistIssuesPage() {
     setActionError(null)
     setNextStatus("")
     setStaffNotes(issue.staffNotes ?? "")
+    setSearchParams({ id: issue.id }, { replace: true })
+  }
+
+  const closeDetail = () => {
+    setSelectedId(null)
+    setNextStatus("")
+    clearIssueParam()
   }
 
   const detail = detailQuery.data
@@ -372,10 +401,7 @@ export function ReceptionistIssuesPage() {
       <Dialog
         open={selectedId != null}
         onOpenChange={(open) => {
-          if (!open) {
-            setSelectedId(null)
-            setNextStatus("")
-          }
+          if (!open) closeDetail()
         }}
       >
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">

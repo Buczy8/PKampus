@@ -1,7 +1,14 @@
 import type { ReactNode } from "react"
 import { Link, useOutletContext } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { DoorClosed, KeyRound, RefreshCw, Waves, Wrench } from "lucide-react"
+import {
+  ChevronRight,
+  DoorClosed,
+  KeyRound,
+  RefreshCw,
+  Waves,
+  Wrench,
+} from "lucide-react"
 
 import { getApiErrorMessage } from "@/api/errors"
 import {
@@ -124,42 +131,42 @@ export function ReceptionistDeskPage() {
     desk?.rooms.filter((b) => b.status === "KEY_ISSUED") ?? []
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Pulpit portiera</h1>
-          <p className="text-base text-muted-foreground mt-2">
+          <h1 className="text-2xl font-semibold tracking-tight">Pulpit portiera</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             {user.dormitoryName ?? "Twój DS"} — rezerwacje na dziś i otwarte usterki
           </p>
         </div>
         <Button
           type="button"
           variant="outline"
-          size="lg"
+          size="sm"
           onClick={() => void deskQuery.refetch()}
           disabled={deskQuery.isFetching}
         >
           <RefreshCw
-            className={`size-4 mr-2 ${deskQuery.isFetching ? "animate-spin" : ""}`}
+            className={`size-3.5 mr-1.5 ${deskQuery.isFetching ? "animate-spin" : ""}`}
           />
           Odśwież
         </Button>
       </div>
 
       {deskQuery.isError && (
-        <p className="text-base text-destructive">
+        <p className="text-sm text-destructive">
           {getApiErrorMessage(deskQuery.error, "Nie udało się wczytać pulpitu")}
         </p>
       )}
 
       {actionError && (
-        <p className="text-base text-destructive">
+        <p className="text-sm text-destructive">
           {getApiErrorMessage(actionError, "Nie udało się wykonać akcji")}
         </p>
       )}
 
       {deskQuery.isPending && !desk && (
-        <p className="text-base text-muted-foreground">Ładowanie pulpitu…</p>
+        <p className="text-sm text-muted-foreground">Ładowanie pulpitu…</p>
       )}
 
       {desk && (
@@ -167,7 +174,7 @@ export function ReceptionistDeskPage() {
           {desk.laundry.length === 0 &&
             desk.rooms.length === 0 &&
             desk.openIssues.length === 0 && (
-              <p className="text-base text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Brak aktywnych rezerwacji i otwartych usterek na dziś.{" "}
                 <Link
                   to="/receptionist/laundry"
@@ -194,14 +201,14 @@ export function ReceptionistDeskPage() {
 
           {desk.laundry.length > 0 && (
             <Card className="border-border/70 shadow-none">
-              <CardHeader className="pb-4 px-6 pt-6">
+              <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <CardTitle className="text-xl flex items-center gap-2.5">
-                      <Waves className="size-5 text-primary" />
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Waves className="size-4 text-primary" />
                       Pralnia — dziś
                     </CardTitle>
-                    <CardDescription className="mt-2 text-base">
+                    <CardDescription className="mt-1">
                       {laundryAwaiting.length} do wydania · {laundryIssued.length}{" "}
                       klucz wydany
                     </CardDescription>
@@ -209,7 +216,7 @@ export function ReceptionistDeskPage() {
                   <Button
                     type="button"
                     variant="ghost"
-                    size="lg"
+                    size="sm"
                     asChild
                     className="shrink-0"
                   >
@@ -217,7 +224,7 @@ export function ReceptionistDeskPage() {
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-6 px-6 pb-6">
+              <CardContent className="space-y-4">
                 {laundryAwaiting.length > 0 && (
                   <BookingGroup title="Do wydania klucza">
                     {laundryAwaiting.map((b) => (
@@ -250,14 +257,14 @@ export function ReceptionistDeskPage() {
 
           {desk.rooms.length > 0 && (
             <Card className="border-border/70 shadow-none">
-              <CardHeader className="pb-4 px-6 pt-6">
+              <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <CardTitle className="text-xl flex items-center gap-2.5">
-                      <DoorClosed className="size-5 text-primary" />
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <DoorClosed className="size-4 text-primary" />
                       Salki — dziś
                     </CardTitle>
-                    <CardDescription className="mt-2 text-base">
+                    <CardDescription className="mt-1">
                       {roomsAwaiting.length} do wydania · {roomsIssued.length} klucz
                       wydany
                     </CardDescription>
@@ -265,7 +272,7 @@ export function ReceptionistDeskPage() {
                   <Button
                     type="button"
                     variant="ghost"
-                    size="lg"
+                    size="sm"
                     asChild
                     className="shrink-0"
                   >
@@ -273,7 +280,7 @@ export function ReceptionistDeskPage() {
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-6 px-6 pb-6">
+              <CardContent className="space-y-4">
                 {roomsAwaiting.length > 0 && (
                   <BookingGroup title="Do wydania klucza">
                     {roomsAwaiting.map((b) => (
@@ -306,21 +313,21 @@ export function ReceptionistDeskPage() {
 
           {desk.openIssues.length > 0 && (
             <Card className="border-border/70 shadow-none">
-              <CardHeader className="pb-4 px-6 pt-6">
+              <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <CardTitle className="text-xl flex items-center gap-2.5">
-                      <Wrench className="size-5 text-primary" />
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Wrench className="size-4 text-primary" />
                       Usterki
                     </CardTitle>
-                    <CardDescription className="mt-2 text-base">
+                    <CardDescription className="mt-1">
                       {desk.openIssuesCount} otwartych
                     </CardDescription>
                   </div>
                   <Button
                     type="button"
                     variant="ghost"
-                    size="lg"
+                    size="sm"
                     asChild
                     className="shrink-0"
                   >
@@ -328,7 +335,7 @@ export function ReceptionistDeskPage() {
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-3 px-6 pb-6">
+              <CardContent className="space-y-3">
                 {desk.openIssues.map((issue) => (
                   <IssueCard key={issue.id} issue={issue} />
                 ))}
@@ -370,11 +377,14 @@ function LaundryCard({
   onReturn: () => void
 }) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-card p-5 sm:p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 space-y-1.5">
+    <div className="rounded-xl border border-border/70 bg-card p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Link
+          to="/receptionist/laundry"
+          className="min-w-0 space-y-1 flex-1 rounded-md -m-1 p-1 hover:bg-muted/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-xl font-semibold truncate">
+            <p className="text-sm font-semibold truncate">
               {booking.machineIdentifier}
             </p>
             <Badge
@@ -384,29 +394,23 @@ function LaundryCard({
               {booking.status === "KEY_ISSUED" ? "Klucz wydany" : "Do wydania"}
             </Badge>
           </div>
-          <p className="text-base text-foreground/90">{residentLine(booking)}</p>
-          <p className="text-lg font-medium tabular-nums">
+          <p className="text-sm text-foreground/90">{residentLine(booking)}</p>
+          <p className="text-sm font-medium tabular-nums">
             {formatWarsawTimeRange(booking.startTime, booking.endTime)}
           </p>
-        </div>
+        </Link>
 
         <div className="flex flex-wrap gap-2 shrink-0">
           {booking.status === "CONFIRMED" && (
-            <Button
-              size="lg"
-              className="min-w-40 h-12 text-base"
-              disabled={busy}
-              onClick={onIssue}
-            >
-              <KeyRound className="size-5 mr-2" />
+            <Button size="sm" disabled={busy} onClick={onIssue}>
+              <KeyRound className="size-3.5 mr-1.5" />
               Wydaj klucz
             </Button>
           )}
           {booking.status === "KEY_ISSUED" && (
             <Button
-              size="lg"
+              size="sm"
               variant="secondary"
-              className="min-w-40 h-12 text-base"
               disabled={busy}
               onClick={onReturn}
             >
@@ -431,11 +435,14 @@ function RoomCard({
   onReturn: () => void
 }) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-card p-5 sm:p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 space-y-1.5">
+    <div className="rounded-xl border border-border/70 bg-card p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Link
+          to="/receptionist/rooms"
+          className="min-w-0 space-y-1 flex-1 rounded-md -m-1 p-1 hover:bg-muted/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-xl font-semibold truncate">{booking.roomName}</p>
+            <p className="text-sm font-semibold truncate">{booking.roomName}</p>
             <Badge
               variant={booking.status === "KEY_ISSUED" ? "default" : "secondary"}
               className="text-xs"
@@ -443,33 +450,27 @@ function RoomCard({
               {booking.status === "KEY_ISSUED" ? "Klucz wydany" : "Do wydania"}
             </Badge>
           </div>
-          <p className="text-base text-foreground/90">{residentLine(booking)}</p>
-          <p className="text-lg font-medium tabular-nums">
+          <p className="text-sm text-foreground/90">{residentLine(booking)}</p>
+          <p className="text-sm font-medium tabular-nums">
             {formatWarsawTimeRange(booking.startTime, booking.endTime)}
-            <span className="text-muted-foreground font-normal text-base">
+            <span className="text-muted-foreground font-normal">
               {" "}
               · {booking.participantsCount} os.
             </span>
           </p>
-        </div>
+        </Link>
 
         <div className="flex flex-wrap gap-2 shrink-0">
           {booking.status === "CONFIRMED" && (
-            <Button
-              size="lg"
-              className="min-w-40 h-12 text-base"
-              disabled={busy}
-              onClick={onIssue}
-            >
-              <KeyRound className="size-5 mr-2" />
+            <Button size="sm" disabled={busy} onClick={onIssue}>
+              <KeyRound className="size-3.5 mr-1.5" />
               Wydaj klucz
             </Button>
           )}
           {booking.status === "KEY_ISSUED" && (
             <Button
-              size="lg"
+              size="sm"
               variant="secondary"
-              className="min-w-40 h-12 text-base"
               disabled={busy}
               onClick={onReturn}
             >
@@ -484,21 +485,25 @@ function RoomCard({
 
 function IssueCard({ issue }: { issue: DeskOpenIssue }) {
   return (
-    <div className="rounded-2xl border border-border/60 p-5 space-y-2">
+    <Link
+      to={`/receptionist/issues?id=${encodeURIComponent(issue.id)}`}
+      className="block rounded-xl border border-border/60 p-4 space-y-1.5 hover:bg-muted/40 hover:border-primary/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
       <div className="flex items-start justify-between gap-3">
-        <p className="text-lg font-semibold truncate">{issue.locationLabel}</p>
-        <Badge variant="outline" className="shrink-0">
-          {issueStatusLabel(issue.status)}
-        </Badge>
+        <p className="text-sm font-semibold truncate">{issue.locationLabel}</p>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Badge variant="outline">{issueStatusLabel(issue.status)}</Badge>
+          <ChevronRight className="size-4 text-muted-foreground" />
+        </div>
       </div>
-      <p className="text-sm text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         {categoryLabel(issue.category)}
         {issue.urgency === "URGENT" ? " · pilne" : ""}
       </p>
-      <p className="text-base leading-relaxed line-clamp-3">{issue.description}</p>
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm leading-relaxed line-clamp-3">{issue.description}</p>
+      <p className="text-xs text-muted-foreground">
         {formatWarsawDateTime(issue.createdAt)}
       </p>
-    </div>
+    </Link>
   )
 }
