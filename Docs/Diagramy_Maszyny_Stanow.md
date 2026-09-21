@@ -35,6 +35,15 @@ stateDiagram-v2
     PENDING_APPROVAL --> ACTIVE: Zatwierdzenie meldunku przez ADS / powiadomienie e-mail (FR-AUTH-02)
     PENDING_APPROVAL --> [*]: Odrzucenie wniosku przez ADS [brak na liście kwaterunkowej] / usunięcie konta
 
+    [*] --> MUST_CHANGE_PASSWORD: Utworzenie konta DORM_ADMIN / RECEPTIONIST przez AOS/ADS (hasło tymczasowe)
+
+    state MUST_CHANGE_PASSWORD {
+        [*] --> WymuszenieZmianyHasla
+        WymuszenieZmianyHasla: Login JWT dozwolony; API ograniczone do me / change-password / refresh / logout
+    }
+
+    MUST_CHANGE_PASSWORD --> ACTIVE: Pierwsza zmiana hasła (FR-AUTH-06)
+
     state ACTIVE {
         [*] --> NormalnaEksploatacja
         NormalnaEksploatacja: Logowanie JWT, rezerwacje, karta mieszkańca, zgłoszenia
@@ -51,6 +60,7 @@ stateDiagram-v2
 * `PENDING_EMAIL` -> `PENDING_APPROVAL`: Wymaga kliknięcia w link z kryptograficznym tokenem HMAC-SHA256 w ciągu 24 godzin (`FR-AUTH-01`).
 * `PENDING_APPROVAL` (Stan oczekiwania): Zgodnie z `BR-06` użytkownik nie posiada możliwości rezerwacji zasobów ani zgłaszania usterek do czasu zatwierdzenia meldunku.
 * `PENDING_APPROVAL` -> `ACTIVE`: Wyzwalane wyłącznie przez autoryzowanego Administratora DS (`DORM_ADMIN`) w portalu administracyjnym (`FR-AUTH-02`).
+* `[*]` / tworzenie personelu -> `MUST_CHANGE_PASSWORD`: Konta `DORM_ADMIN` i `RECEPTIONIST` tworzone z hasłem tymczasowym startują w tym stanie; po udanej zmianie hasła przechodzą do `ACTIVE` (`FR-AUTH-06`).
 * `ACTIVE` -> `BLOCKED`: Blokada administracyjna nakładana przez ADS (`FR-PORTAL-04`).
 
 ---

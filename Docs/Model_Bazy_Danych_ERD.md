@@ -220,7 +220,7 @@ Główna tabela użytkowników systemu (studenci, recepcjoniści, kierownicy DS,
 | `phone_number` | `VARCHAR(20)` | `NOT NULL` | Numer telefonu kontaktowego |
 | `avatar_url` | `VARCHAR(500)` | `NULLABLE` | Ścieżka do zdjęcia w MinIO S3 (karta) |
 | `role` | `VARCHAR(30)` | `NOT NULL, CHECK (role IN ('RESIDENT', 'RECEPTIONIST', 'DORM_ADMIN', 'SUPER_ADMIN'))` | Rola w systemie (RBAC) |
-| `status` | `VARCHAR(30)` | `NOT NULL, CHECK (status IN ('PENDING_EMAIL', 'PENDING_APPROVAL', 'ACTIVE', 'BLOCKED', 'CHECKED_OUT'))` | Status cyklu życia konta |
+| `status` | `VARCHAR(30)` | `NOT NULL, CHECK (status IN ('PENDING_EMAIL', 'PENDING_APPROVAL', 'MUST_CHANGE_PASSWORD', 'ACTIVE', 'BLOCKED', 'CHECKED_OUT'))` | Status cyklu życia konta |
 | `dormitory_id` | `UUID` | `FK -> dormitories(id), NULLABLE + CHECK chk_user_dormitory_scope` | Przypisany akademik (wymagany dla `RESIDENT`/`RECEPTIONIST`/`DORM_ADMIN`; NULL wyłącznie dla `SUPER_ADMIN` kampusowego) |
 | `declared_room_number` | `VARCHAR(10)` | `NULLABLE` | Deklarowany numer pokoju z formularza rejestracji (do weryfikacji i przydziału przez ADS) |
 | `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Data rejestracji |
@@ -495,7 +495,7 @@ CREATE TABLE users (
     phone_number VARCHAR(20) NOT NULL,
     avatar_url VARCHAR(500),
     role VARCHAR(30) NOT NULL CHECK (role IN ('RESIDENT', 'RECEPTIONIST', 'DORM_ADMIN', 'SUPER_ADMIN')),
-    status VARCHAR(30) NOT NULL CHECK (status IN ('PENDING_EMAIL', 'PENDING_APPROVAL', 'ACTIVE', 'BLOCKED', 'CHECKED_OUT')),
+    status VARCHAR(30) NOT NULL CHECK (status IN ('PENDING_EMAIL', 'PENDING_APPROVAL', 'MUST_CHANGE_PASSWORD', 'ACTIVE', 'BLOCKED', 'CHECKED_OUT')),
     dormitory_id UUID REFERENCES dormitories(id) ON DELETE SET NULL,
     declared_room_number VARCHAR(10),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
