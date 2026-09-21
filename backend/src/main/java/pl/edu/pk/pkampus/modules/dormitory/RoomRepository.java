@@ -12,7 +12,13 @@ public interface RoomRepository extends JpaRepository<Room, UUID> {
 
     Optional<Room> findByDormitoryIdAndRoomNumber(UUID dormitoryId, String roomNumber);
 
+    Optional<Room> findByIdAndDormitoryId(UUID id, UUID dormitoryId);
+
+    List<Room> findAllByDormitoryIdOrderByFloorAscRoomNumberAsc(UUID dormitoryId);
+
     List<Room> findAllByDormitoryId(UUID dormitoryId);
 
     boolean existsByDormitoryIdAndRoomNumber(UUID dormitoryId, String roomNumber);
+
+    boolean existsByDormitoryIdAndRoomNumberAndIdNot(UUID dormitoryId, String roomNumber, UUID id);
 }

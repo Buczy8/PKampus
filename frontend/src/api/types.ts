@@ -419,3 +419,24 @@ export interface UpdateThematicRoomRequest {
   description?: string | null
   status?: ThematicRoomStatus
 }
+
+export interface DormRoom {
+  id: string
+  dormitoryId: string
+  roomNumber: string
+  floor: number
+  capacity: number
+  createdAt: string
+}
+
+export interface CreateDormRoomRequest {
+  roomNumber: string
+  floor: number
+  capacity: number
+}
+
+export interface UpdateDormRoomRequest {
+  roomNumber?: string
+  floor?: number
+  capacity?: number
+}

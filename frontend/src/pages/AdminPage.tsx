@@ -13,6 +13,11 @@ import {
   updateThematicRoom,
 } from '@/api/admin-rooms'
 import {
+  createDormRoom,
+  listAdminDormRooms,
+  updateDormRoom,
+} from '@/api/admin-dorm-rooms'
+import {
   createLaundryMachine,
   listAdminLaundryMachines,
   updateLaundryMachine,
@@ -41,10 +46,12 @@ import { getApiErrorMessage } from '@/api/errors'
 import type {
   AdminLaundryMachine,
   CreateDormEventRequest,
+  CreateDormRoomRequest,
   CreateLaundryMachineRequest,
   CreateReceptionistRequest,
   CreateThematicRoomRequest,
   DormEvent,
+  DormRoom,
   ManagedResident,
   PendingResident,
   ReceptionistAccount,
@@ -89,7 +96,14 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 
-type Section = 'checkins' | 'residents' | 'rooms' | 'laundry' | 'events' | 'porters'
+type Section =
+  | 'checkins'
+  | 'residents'
+  | 'dormRooms'
+  | 'rooms'
+  | 'laundry'
+  | 'events'
+  | 'porters'
 
 function initials(firstName: string, lastName: string) {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
@@ -167,6 +181,12 @@ const emptyLaundryForm: CreateLaundryMachineRequest = {
   floorLocation: '',
 }
 
+const emptyDormRoomForm: CreateDormRoomRequest = {
+  roomNumber: '',
+  floor: 1,
+  capacity: 2,
+}
+
 export function AdminPage() {
   const user = useOutletContext<UserProfile>()
   const navigate = useNavigate()
@@ -194,6 +214,11 @@ export function AdminPage() {
   const [laundryForm, setLaundryForm] =
     useState<CreateLaundryMachineRequest>(emptyLaundryForm)
 
+  const [dormRoomDialogOpen, setDormRoomDialogOpen] = useState(false)
+  const [editingDormRoom, setEditingDormRoom] = useState<DormRoom | null>(null)
+  const [dormRoomForm, setDormRoomForm] =
+    useState<CreateDormRoomRequest>(emptyDormRoomForm)
+
   const [eventDialogOpen, setEventDialogOpen] = useState(false)
   const [editingEvent, setEditingEvent] = useState<DormEvent | null>(null)
   const [eventForm, setEventForm] = useState<CreateDormEventRequest>(emptyEventForm)
@@ -217,6 +242,12 @@ export function AdminPage() {
     queryKey: ['admin', 'thematic-rooms'],
     queryFn: listAdminThematicRooms,
     enabled: section === 'rooms',
+  })
+
+  const dormRoomsQuery = useQuery({
+    queryKey: ['admin', 'dorm-rooms'],
+    queryFn: listAdminDormRooms,
+    enabled: section === 'dormRooms',
   })
 
   const laundryQuery = useQuery({
@@ -401,6 +432,28 @@ export function AdminPage() {
     onError: (error) => setActionError(getApiErrorMessage(error, 'Save failed')),
   })
 
+  const saveDormRoomMutation = useMutation({
+    mutationFn: async () => {
+      const payload: CreateDormRoomRequest = {
+        roomNumber: dormRoomForm.roomNumber.trim(),
+        floor: dormRoomForm.floor,
+        capacity: dormRoomForm.capacity,
+      }
+      if (editingDormRoom) {
+        return updateDormRoom(editingDormRoom.id, payload)
+      }
+      return createDormRoom(payload)
+    },
+    onSuccess: async () => {
+      setDormRoomDialogOpen(false)
+      setEditingDormRoom(null)
+      setDormRoomForm(emptyDormRoomForm)
+      setActionError(null)
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'dorm-rooms'] })
+    },
+    onError: (error) => setActionError(getApiErrorMessage(error, 'Save failed')),
+  })
+
   const toggleMachineStatusMutation = useMutation({
     mutationFn: (machine: AdminLaundryMachine) =>
       updateLaundryMachine(machine.id, {
@@ -526,6 +579,24 @@ export function AdminPage() {
     setLaundryDialogOpen(true)
   }
 
+  function openCreateDormRoom() {
+    setEditingDormRoom(null)
+    setDormRoomForm(emptyDormRoomForm)
+    setActionError(null)
+    setDormRoomDialogOpen(true)
+  }
+
+  function openEditDormRoom(room: DormRoom) {
+    setEditingDormRoom(room)
+    setDormRoomForm({
+      roomNumber: room.roomNumber,
+      floor: room.floor,
+      capacity: room.capacity,
+    })
+    setActionError(null)
+    setDormRoomDialogOpen(true)
+  }
+
   function openCreateEvent() {
     setEditingEvent(null)
     setEventForm(emptyEventForm())
@@ -555,6 +626,7 @@ export function AdminPage() {
   const pending = pendingQuery.data ?? []
   const managedResidents = managedResidentsQuery.data ?? []
   const rooms = roomsQuery.data ?? []
+  const dormRooms = dormRoomsQuery.data ?? []
   const machines = laundryQuery.data ?? []
   const events = eventsQuery.data ?? []
   const porters = portersQuery.data ?? []
@@ -611,6 +683,14 @@ export function AdminPage() {
             onClick={() => setSection('checkins')}
           >
             Meldunki
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={section === 'dormRooms' ? 'default' : 'outline'}
+            onClick={() => setSection('dormRooms')}
+          >
+            Pokoje
           </Button>
           <Button
             type="button"
@@ -892,6 +972,65 @@ export function AdminPage() {
                               Odrzuć
                             </Button>
                           </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {section === 'dormRooms' && (
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <div>
+                <CardTitle>Pokoje mieszkalne</CardTitle>
+                <CardDescription>
+                  Numery pokoi używane przy meldunku w {user.dormitoryName ?? 'Twoim DS'}
+                </CardDescription>
+              </div>
+              <Button type="button" onClick={openCreateDormRoom}>
+                Dodaj pokój
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {dormRoomsQuery.isLoading ? (
+                <p className="text-sm text-muted-foreground">Ładowanie…</p>
+              ) : dormRoomsQuery.isError ? (
+                <p className="text-sm text-destructive">
+                  {getApiErrorMessage(dormRoomsQuery.error)}
+                </p>
+              ) : dormRooms.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Brak pokoi — dodaj pierwszy, żeby móc akceptować meldunki.
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Numer</TableHead>
+                      <TableHead>Piętro</TableHead>
+                      <TableHead>Pojemność</TableHead>
+                      <TableHead className="text-right">Akcje</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {dormRooms.map((room) => (
+                      <TableRow key={room.id}>
+                        <TableCell className="font-medium">{room.roomNumber}</TableCell>
+                        <TableCell>{room.floor}</TableCell>
+                        <TableCell>{room.capacity}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openEditDormRoom(room)}
+                          >
+                            Edytuj
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1631,6 +1770,89 @@ export function AdminPage() {
               onClick={() => saveLaundryMutation.mutate()}
             >
               Zapisz
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dormRoomDialogOpen} onOpenChange={setDormRoomDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingDormRoom ? 'Edytuj pokój' : 'Nowy pokój'}
+            </DialogTitle>
+            <DialogDescription>
+              Numer pokoju musi być unikalny w Twoim DS. Piętro nie może przekraczać liczby
+              pięter akademika.
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="dr-number">Numer pokoju</FieldLabel>
+              <Input
+                id="dr-number"
+                value={dormRoomForm.roomNumber}
+                onChange={(e) =>
+                  setDormRoomForm((f) => ({ ...f, roomNumber: e.target.value }))
+                }
+                maxLength={10}
+                placeholder="204"
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field>
+                <FieldLabel htmlFor="dr-floor">Piętro</FieldLabel>
+                <Input
+                  id="dr-floor"
+                  type="number"
+                  min={0}
+                  value={dormRoomForm.floor}
+                  onChange={(e) =>
+                    setDormRoomForm((f) => ({
+                      ...f,
+                      floor: Number(e.target.value) || 0,
+                    }))
+                  }
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="dr-cap">Pojemność</FieldLabel>
+                <Input
+                  id="dr-cap"
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={dormRoomForm.capacity}
+                  onChange={(e) =>
+                    setDormRoomForm((f) => ({
+                      ...f,
+                      capacity: Number(e.target.value) || 1,
+                    }))
+                  }
+                />
+              </Field>
+            </div>
+            {actionError ? <FieldError>{actionError}</FieldError> : null}
+          </FieldGroup>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDormRoomDialogOpen(false)}
+              disabled={saveDormRoomMutation.isPending}
+            >
+              Anuluj
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                saveDormRoomMutation.isPending ||
+                !dormRoomForm.roomNumber.trim() ||
+                dormRoomForm.capacity < 1
+              }
+              onClick={() => saveDormRoomMutation.mutate()}
+            >
+              {saveDormRoomMutation.isPending ? 'Zapisywanie…' : 'Zapisz'}
             </Button>
           </DialogFooter>
         </DialogContent>
