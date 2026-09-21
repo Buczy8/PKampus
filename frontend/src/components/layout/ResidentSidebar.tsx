@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom"
+import { Link, NavLink } from "react-router-dom"
 import {
   ChevronLeft,
   ChevronRight,
@@ -275,7 +275,6 @@ export function ResidentSidebar({
               </TooltipContent>
             </Tooltip>
 
-            {/* Centered Logout Button */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -294,25 +293,30 @@ export function ResidentSidebar({
             </Tooltip>
           </>
         ) : (
-          /* Expanded User Info Card */
           <div className="flex items-center gap-2.5 rounded-xl p-2 bg-sidebar-accent/50 border border-sidebar-border/40">
-            <Avatar className="size-8 ring-1 ring-border shrink-0">
-              {user.avatarUrl && (
-                <AvatarImage src={user.avatarUrl} alt={user.firstName} />
-              )}
-              <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
+            <Link
+              to="/settings"
+              className="flex items-center gap-2.5 min-w-0 flex-1 rounded-lg -m-1 p-1 hover:bg-sidebar-accent/80 transition-colors"
+              aria-label="Ustawienia konta"
+            >
+              <Avatar className="size-8 ring-1 ring-border shrink-0">
+                {user.avatarUrl && (
+                  <AvatarImage src={user.avatarUrl} alt={user.firstName} />
+                )}
+                <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
 
-            <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-xs font-semibold truncate leading-tight">
-                {user.firstName} {user.lastName}
-              </span>
-              <span className="text-[11px] text-muted-foreground truncate">
-                {user.dormitoryName ?? "DS PK"} {user.roomNumber ? `• pok. ${user.roomNumber}` : ""}
-              </span>
-            </div>
+              <div className="flex flex-col min-w-0 flex-1">
+                <span className="text-xs font-semibold truncate leading-tight">
+                  {user.firstName} {user.lastName}
+                </span>
+                <span className="text-[11px] text-muted-foreground truncate">
+                  {user.dormitoryName ?? "DS PK"} {user.roomNumber ? `• pok. ${user.roomNumber}` : ""}
+                </span>
+              </div>
+            </Link>
 
             <Button
               variant="ghost"
