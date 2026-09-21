@@ -249,6 +249,13 @@ public class MinioStorageService {
         return getPresignedUrl(avatarBucket, objectName, expiryMinutes);
     }
 
+    public String getIssuePresignedUrl(String objectName, int expiryMinutes) {
+        if (objectName == null || objectName.isBlank()) {
+            return null;
+        }
+        return getPresignedUrl(issuesBucket, objectName, expiryMinutes);
+    }
+
     public String getAvatarBucket() {
         return avatarBucket;
     }
