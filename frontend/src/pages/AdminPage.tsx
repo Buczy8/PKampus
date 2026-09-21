@@ -1921,7 +1921,7 @@ export function AdminPage() {
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="evt-end">Data do (opcjonalnie)</FieldLabel>
+              <FieldLabel htmlFor="evt-end">Data do (wygaśnięcie)</FieldLabel>
               <Input
                 id="evt-end"
                 type="datetime-local"
@@ -1930,6 +1930,11 @@ export function AdminPage() {
                   setEventForm((f) => ({ ...f, endDate: e.target.value }))
                 }
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Po tej dacie komunikat znika z widoku mieszkańca (Tablica / baner).
+                Puste pole = bez automatycznego wygaśnięcia. Baner na stronie głównej
+                tylko dla priorytetu Krytyczny.
+              </p>
             </Field>
             {actionError ? <FieldError>{actionError}</FieldError> : null}
           </FieldGroup>

@@ -40,12 +40,13 @@ public class EventService {
 
     @Transactional(readOnly = true)
     public List<DormEventDto> listVisible(User user) {
+        Instant now = Instant.now();
         if (user.getDormitory() == null) {
-            return dormEventRepository.findAllByDormitoryIsNullOrderByEventDateDesc().stream()
+            return dormEventRepository.findVisibleCampusOnly(now).stream()
                     .map(this::toDto)
                     .toList();
         }
-        return dormEventRepository.findVisibleForDormitory(user.getDormitory().getId()).stream()
+        return dormEventRepository.findVisibleForDormitory(user.getDormitory().getId(), now).stream()
                 .map(this::toDto)
                 .toList();
     }

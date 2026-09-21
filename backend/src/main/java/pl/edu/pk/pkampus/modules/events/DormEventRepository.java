@@ -26,10 +26,25 @@ public interface DormEventRepository extends JpaRepository<DormEvent, UUID> {
     @EntityGraph(attributePaths = {"author", "dormitory"})
     @Query("""
             SELECT e FROM DormEvent e
-            WHERE e.dormitory.id = :dormitoryId OR e.dormitory IS NULL
+            WHERE (e.dormitory.id = :dormitoryId OR e.dormitory IS NULL)
+              AND e.eventDate <= :now
+              AND (e.endDate IS NULL OR e.endDate >= :now)
             ORDER BY e.eventDate DESC
             """)
-    List<DormEvent> findVisibleForDormitory(@Param("dormitoryId") UUID dormitoryId);
+    List<DormEvent> findVisibleForDormitory(
+            @Param("dormitoryId") UUID dormitoryId,
+            @Param("now") Instant now
+    );
+
+    @EntityGraph(attributePaths = {"author", "dormitory"})
+    @Query("""
+            SELECT e FROM DormEvent e
+            WHERE e.dormitory IS NULL
+              AND e.eventDate <= :now
+              AND (e.endDate IS NULL OR e.endDate >= :now)
+            ORDER BY e.eventDate DESC
+            """)
+    List<DormEvent> findVisibleCampusOnly(@Param("now") Instant now);
 
     @Query("""
             SELECT e FROM DormEvent e
