@@ -480,3 +480,46 @@ export interface UpdateDormRoomRequest {
   floor?: number
   capacity?: number
 }
+
+export type IssueLocationType = 'MY_ROOM' | 'COMMON_AREA'
+
+export type IssueCategory =
+  | 'PLUMBING'
+  | 'ELECTRICAL'
+  | 'FURNITURE'
+  | 'LOCKSMITH'
+  | 'OTHER'
+
+export type IssueUrgency = 'NORMAL' | 'URGENT'
+
+export type IssueStatus =
+  | 'NEW'
+  | 'ASSIGNED_TO_MAINTENANCE'
+  | 'IN_PROGRESS'
+  | 'RESOLVED'
+  | 'REJECTED'
+  | 'PARTS_REQUIRED'
+
+export interface Issue {
+  id: string
+  locationLabel: string
+  roomId: string | null
+  commonAreaName: string | null
+  category: IssueCategory
+  urgency: IssueUrgency
+  description: string
+  status: IssueStatus
+  staffNotes: string | null
+  hasPhoto: boolean
+  photoUrl: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateIssueRequest {
+  locationType: IssueLocationType
+  commonAreaName?: string
+  category: IssueCategory
+  urgency: IssueUrgency
+  description: string
+}
