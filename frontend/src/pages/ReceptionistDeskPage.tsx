@@ -182,6 +182,13 @@ export function ReceptionistDeskPage() {
                 >
                   grafik salek
                 </Link>
+                {" · "}
+                <Link
+                  to="/receptionist/issues"
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  rejestr usterek
+                </Link>
               </p>
             )}
 
@@ -298,15 +305,35 @@ export function ReceptionistDeskPage() {
           )}
 
           {desk.openIssues.length > 0 && (
-            <DeskSection
-              title="Usterki"
-              description={`${desk.openIssuesCount} otwartych`}
-              icon={<Wrench className="size-5 text-primary" />}
-            >
-              {desk.openIssues.map((issue) => (
-                <IssueCard key={issue.id} issue={issue} />
-              ))}
-            </DeskSection>
+            <Card className="border-border/70 shadow-none">
+              <CardHeader className="pb-4 px-6 pt-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-xl flex items-center gap-2.5">
+                      <Wrench className="size-5 text-primary" />
+                      Usterki
+                    </CardTitle>
+                    <CardDescription className="mt-2 text-base">
+                      {desk.openIssuesCount} otwartych
+                    </CardDescription>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="lg"
+                    asChild
+                    className="shrink-0"
+                  >
+                    <Link to="/receptionist/issues">Rejestr →</Link>
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3 px-6 pb-6">
+                {desk.openIssues.map((issue) => (
+                  <IssueCard key={issue.id} issue={issue} />
+                ))}
+              </CardContent>
+            </Card>
           )}
         </div>
       )}
@@ -328,31 +355,6 @@ function BookingGroup({
       </h3>
       <div className="space-y-3">{children}</div>
     </div>
-  )
-}
-
-function DeskSection({
-  title,
-  description,
-  icon,
-  children,
-}: {
-  title: string
-  description: string
-  icon: ReactNode
-  children: ReactNode
-}) {
-  return (
-    <Card className="border-border/70 shadow-none">
-      <CardHeader className="pb-4 px-6 pt-6">
-        <CardTitle className="text-xl flex items-center gap-2.5">
-          {icon}
-          {title}
-        </CardTitle>
-        <CardDescription className="text-base mt-1">{description}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3 px-6 pb-6">{children}</CardContent>
-    </Card>
   )
 }
 

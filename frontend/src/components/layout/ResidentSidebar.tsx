@@ -119,6 +119,11 @@ const receptionistNavSections: NavSection[] = [
         to: "/receptionist/rooms",
         icon: DoorClosed,
       },
+      {
+        title: "Usterki",
+        to: "/receptionist/issues",
+        icon: Wrench,
+      },
     ],
   },
   {

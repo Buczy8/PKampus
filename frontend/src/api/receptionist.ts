@@ -9,7 +9,10 @@ import type {
   MachineBreakdownResult,
   ReceptionistDesk,
   RoomMaintenanceResult,
+  StaffIssue,
+  StaffIssueFilters,
   StaffRoomSchedule,
+  UpdateIssueStatusRequest,
 } from '@/api/types'
 
 export async function getReceptionistDesk(): Promise<ReceptionistDesk> {
@@ -120,6 +123,56 @@ export async function restoreThematicRoom(id: string): Promise<DeskThematicRoom>
   )
   if (!data.success || !data.data) {
     throw new Error(data.message ?? 'Failed to restore thematic room')
+  }
+  return data.data
+}
+
+export async function listReceptionistIssues(
+  filters: StaffIssueFilters = {},
+): Promise<StaffIssue[]> {
+  const { data } = await apiClient.get<ApiResponse<StaffIssue[]>>(
+    '/receptionist/issues',
+    {
+      params: {
+        status: filters.status,
+        category: filters.category,
+        urgency: filters.urgency,
+        from: filters.from,
+        to: filters.to,
+        roomNumber: filters.roomNumber || undefined,
+        floor: filters.floor,
+      },
+      paramsSerializer: {
+        indexes: null,
+      },
+    },
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to load issues')
+  }
+  return data.data
+}
+
+export async function getReceptionistIssue(id: string): Promise<StaffIssue> {
+  const { data } = await apiClient.get<ApiResponse<StaffIssue>>(
+    `/receptionist/issues/${id}`,
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to load issue')
+  }
+  return data.data
+}
+
+export async function updateReceptionistIssueStatus(
+  id: string,
+  body: UpdateIssueStatusRequest,
+): Promise<StaffIssue> {
+  const { data } = await apiClient.patch<ApiResponse<StaffIssue>>(
+    `/receptionist/issues/${id}/status`,
+    body,
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to update issue status')
   }
   return data.data
 }

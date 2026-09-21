@@ -687,4 +687,38 @@ export interface DeskThematicRoom {
   status: ThematicRoomStatus
 }
 
+export interface StaffIssue {
+  id: string
+  locationLabel: string
+  roomNumber: string | null
+  floor: number | null
+  commonAreaName: string | null
+  category: IssueCategory
+  urgency: IssueUrgency
+  description: string
+  status: IssueStatus
+  staffNotes: string | null
+  hasPhoto: boolean
+  photoUrl: string | null
+  reporterFirstName: string
+  reporterLastName: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface StaffIssueFilters {
+  status?: IssueStatus[]
+  category?: IssueCategory
+  urgency?: IssueUrgency
+  from?: string
+  to?: string
+  roomNumber?: string
+  floor?: number
+}
+
+export interface UpdateIssueStatusRequest {
+  status: IssueStatus
+  staffNotes?: string | null
+}
+
 

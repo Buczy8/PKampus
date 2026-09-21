@@ -13,6 +13,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { PendingApprovalPage } from '@/pages/PendingApprovalPage'
 import { ReceptionistDeskPage } from '@/pages/ReceptionistDeskPage'
 import { ReceptionistLaundryPage } from '@/pages/ReceptionistLaundryPage'
+import { ReceptionistIssuesPage } from '@/pages/ReceptionistIssuesPage'
 import { ReceptionistRoomsPage } from '@/pages/ReceptionistRoomsPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { RoomsPage } from '@/pages/RoomsPage'
@@ -56,6 +57,7 @@ export function App() {
             <Route path="/receptionist" element={<ReceptionistDeskPage />} />
             <Route path="/receptionist/laundry" element={<ReceptionistLaundryPage />} />
             <Route path="/receptionist/rooms" element={<ReceptionistRoomsPage />} />
+            <Route path="/receptionist/issues" element={<ReceptionistIssuesPage />} />
           </Route>
         </Route>
 
