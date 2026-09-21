@@ -7,6 +7,7 @@ import { BoardPage } from '@/pages/BoardPage'
 import { CardPage } from '@/pages/CardPage'
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage'
 import { DashboardPage } from '@/pages/DashboardPage'
+import { EventsPage } from '@/pages/EventsPage'
 import { IssuesPage } from '@/pages/IssuesPage'
 import { LaundryPage } from '@/pages/LaundryPage'
 import { LoginPage } from '@/pages/LoginPage'
@@ -48,6 +49,7 @@ export function App() {
             <Route path="/laundry" element={<LaundryPage />} />
             <Route path="/rooms" element={<RoomsPage />} />
             <Route path="/issues" element={<IssuesPage />} />
+            <Route path="/events" element={<EventsPage />} />
             <Route path="/board" element={<BoardPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

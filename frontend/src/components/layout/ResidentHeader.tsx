@@ -45,9 +45,13 @@ const routeTitles: Record<string, { title: string; subtitle: string }> = {
     title: "Zgłoszenia Usterek",
     subtitle: "Zgłaszaj awarie do konserwatora",
   },
+  "/events": {
+    title: "Komunikaty",
+    subtitle: "Oficjalne ogłoszenia ADS, portierni i AOS",
+  },
   "/board": {
-    title: "Tablica Ogłoszeń",
-    subtitle: "Komunikaty i pomoc sąsiedzka",
+    title: "Tablica sąsiedzka",
+    subtitle: "Ogłoszenia mieszkańców",
   },
   "/settings": {
     title: "Ustawienia Profilu",

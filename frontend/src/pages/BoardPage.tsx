@@ -1,10 +1,8 @@
 import { useState } from "react"
-import { useOutletContext } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Megaphone, Plus, Users } from "lucide-react"
+import { Plus, Users } from "lucide-react"
 
 import { getApiErrorMessage } from "@/api/errors"
-import { listEvents } from "@/api/events"
 import {
   createBoardComment,
   createBoardPost,
@@ -19,9 +17,6 @@ import type {
   BoardPostCategory,
   BoardPostScope,
   BoardPostStatusFilter,
-  DormEvent,
-  DormEventPriority,
-  UserProfile,
 } from "@/api/types"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -74,27 +69,6 @@ function categoryLabel(category: BoardPostCategory): string {
   return CATEGORIES.find((c) => c.value === category)?.label ?? category
 }
 
-function priorityLabel(priority: DormEventPriority): string {
-  switch (priority) {
-    case "CRITICAL":
-      return "Krytyczny"
-    case "WARNING":
-      return "Ostrzeżenie"
-    default:
-      return "Informacja"
-  }
-}
-
-function eventScopeBadge(event: DormEvent): {
-  label: string
-  variant: "default" | "secondary"
-} {
-  if (event.dormitoryId == null) {
-    return { label: "AOS · kampus", variant: "secondary" }
-  }
-  return { label: "ADS · Twój DS", variant: "default" }
-}
-
 function authorLine(post: BoardPost): string {
   const parts = [post.authorDisplayName]
   if (post.scope === "DORMITORY" && post.authorRoomNumber) {
@@ -118,7 +92,6 @@ function commentAuthorLine(comment: BoardComment, postScope: BoardPostScope): st
 }
 
 export function BoardPage() {
-  const user = useOutletContext<UserProfile>()
   const queryClient = useQueryClient()
 
   const [categoryFilter, setCategoryFilter] = useState<BoardPostCategory | "all">(
@@ -143,11 +116,6 @@ export function BoardPage() {
         scope: scopeFilter === "all" ? "" : scopeFilter,
         status: statusFilter,
       }),
-  })
-
-  const eventsQuery = useQuery({
-    queryKey: ["events", "feed"],
-    queryFn: listEvents,
   })
 
   const invalidatePosts = () =>
@@ -194,7 +162,6 @@ export function BoardPage() {
   })
 
   const posts = postsQuery.data ?? []
-  const events = eventsQuery.data ?? []
 
   function resetForm() {
     setTitle("")
@@ -219,88 +186,26 @@ export function BoardPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <section className="space-y-4">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Megaphone className="size-5 text-muted-foreground" />
-            Oficjalne komunikaty — {user.dormitoryName ?? "Twój akademik"}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Ogłoszenia ADS oraz komunikaty kampusowe AOS.
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+            <Users className="size-5 text-primary" />
+            Tablica sąsiedzka
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Ogłoszenia mieszkańców (pomoc, kupno/sprzedaż, zguby). Bez anonimowości.
           </p>
         </div>
+        <Button type="button" className="gap-2" onClick={openCreate}>
+          <Plus className="size-4" />
+          Nowy post
+        </Button>
+      </div>
 
-        {eventsQuery.isLoading ? (
-          <p className="text-sm text-muted-foreground">Ładowanie…</p>
-        ) : eventsQuery.isError ? (
-          <p className="text-sm text-destructive">
-            {getApiErrorMessage(eventsQuery.error)}
-          </p>
-        ) : events.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Brak oficjalnych komunikatów.</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {events.map((event) => {
-              const scopeBadge = eventScopeBadge(event)
-              return (
-                <Card key={event.id}>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant={scopeBadge.variant} className="text-[10px]">
-                          {scopeBadge.label}
-                        </Badge>
-                        <Badge
-                          variant={
-                            event.priority === "CRITICAL" ? "destructive" : "outline"
-                          }
-                          className="text-[10px]"
-                        >
-                          {priorityLabel(event.priority)}
-                        </Badge>
-                      </div>
-                      <span className="text-[11px] text-muted-foreground">
-                        {formatWhen(event.eventDate)}
-                      </span>
-                    </div>
-                    <CardTitle className="text-base mt-2">{event.title}</CardTitle>
-                    {event.authorName ? (
-                      <CardDescription className="text-xs">
-                        Dodał(a): {event.authorName}
-                      </CardDescription>
-                    ) : null}
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
-                      {event.description}
-                    </p>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
-        )}
-      </section>
+      {actionError && <p className="text-sm text-destructive">{actionError}</p>}
 
-      <section className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-semibold tracking-tight text-foreground flex items-center gap-2">
-              <Users className="size-4 text-muted-foreground" />
-              Tablica sąsiedzka
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              Ogłoszenia mieszkańców (pomoc, kupno/sprzedaż, zguby). Bez anonimowości.
-            </p>
-          </div>
-          <Button type="button" className="gap-2" onClick={openCreate}>
-            <Plus className="size-4" />
-            Nowy post
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Field>
             <FieldLabel>Kategoria</FieldLabel>
             <Select
@@ -354,10 +259,6 @@ export function BoardPage() {
           </Field>
         </div>
 
-        {actionError ? (
-          <p className="text-sm text-destructive">{actionError}</p>
-        ) : null}
-
         {postsQuery.isLoading ? (
           <p className="text-sm text-muted-foreground">Ładowanie ogłoszeń…</p>
         ) : postsQuery.isError ? (
@@ -387,7 +288,6 @@ export function BoardPage() {
             ))}
           </div>
         )}
-      </section>
 
       <Dialog
         open={dialogOpen}

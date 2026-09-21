@@ -83,9 +83,14 @@ const navSections: NavSection[] = [
     label: "Społeczność",
     items: [
       {
-        title: "Tablica ogłoszeń",
-        to: "/board",
+        title: "Komunikaty",
+        to: "/events",
         icon: Megaphone,
+      },
+      {
+        title: "Tablica",
+        to: "/board",
+        icon: MessageSquare,
       },
     ],
   },

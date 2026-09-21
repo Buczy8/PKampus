@@ -46,9 +46,14 @@ const residentBottomNavItems: BottomNavItem[] = [
     icon: Wrench,
   },
   {
-    title: "Ogłoszenia",
-    to: "/board",
+    title: "Komunikaty",
+    to: "/events",
     icon: Megaphone,
+  },
+  {
+    title: "Tablica",
+    to: "/board",
+    icon: MessageSquare,
   },
 ]
 
@@ -100,7 +105,9 @@ export function ResidentBottomNav() {
               ? "grid-cols-4"
               : items.length <= 3
                 ? "grid-cols-3"
-                : "grid-cols-6",
+                : items.length === 7
+                  ? "grid-cols-7"
+                  : "grid-cols-6",
         )}
       >
         {items.map((item) => {

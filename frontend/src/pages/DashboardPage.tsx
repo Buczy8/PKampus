@@ -217,7 +217,7 @@ function IssuesListCard({ issues }: { issues: ActiveIssue[] }) {
 function NoticeBanner({ announcement }: { announcement: ActiveAnnouncement }) {
   return (
     <Link
-      to="/board"
+      to="/events"
       className={cn(
         "flex items-center gap-3 w-full px-4 py-2.5 -mx-0",
         "rounded-xl border border-border bg-muted/50",
@@ -234,7 +234,7 @@ function NoticeBanner({ announcement }: { announcement: ActiveAnnouncement }) {
         <span className="text-muted-foreground"> · {announcement.date}</span>
       </span>
       <span className="shrink-0 inline-flex items-center gap-0.5 text-xs font-medium text-muted-foreground">
-        Tablica
+        Komunikaty
         <ChevronRight className="size-3.5" />
       </span>
     </Link>
