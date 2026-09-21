@@ -69,7 +69,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 );
 
                 if (user != null
-                        && user.getStatus() == UserStatus.ACTIVE
+                        && isLoginEligible(user.getStatus())
                         && jwtService.isTokenValid(token, user)) {
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             user,
@@ -88,5 +88,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private static boolean isLoginEligible(UserStatus status) {
+        return status == UserStatus.ACTIVE || status == UserStatus.MUST_CHANGE_PASSWORD;
     }
 }

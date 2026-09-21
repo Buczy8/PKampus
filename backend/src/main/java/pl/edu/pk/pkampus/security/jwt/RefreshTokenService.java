@@ -78,7 +78,7 @@ public class RefreshTokenService {
         }
 
         User user = existingToken.getUser();
-        if (user.getStatus() != UserStatus.ACTIVE) {
+        if (user.getStatus() != UserStatus.ACTIVE && user.getStatus() != UserStatus.MUST_CHANGE_PASSWORD) {
             throw new AccountStatusException("User account is not active");
         }
 

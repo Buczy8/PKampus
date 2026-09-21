@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import pl.edu.pk.pkampus.modules.auth.dto.AuthResponseDto;
+import pl.edu.pk.pkampus.modules.auth.dto.ChangePasswordRequestDto;
 import pl.edu.pk.pkampus.modules.auth.dto.LoginRequestDto;
 import pl.edu.pk.pkampus.modules.auth.dto.RegisterRequestDto;
 import pl.edu.pk.pkampus.modules.auth.dto.RegisterResponseDto;
@@ -25,6 +26,7 @@ import pl.edu.pk.pkampus.modules.user.UserRepository;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
 import pl.edu.pk.pkampus.security.token.SignedEmailTokenService;
 import pl.edu.pk.pkampus.security.token.EmailTokenPayload;
+import pl.edu.pk.pkampus.security.jwt.AuthenticatedUserCache;
 import pl.edu.pk.pkampus.security.jwt.JwtService;
 import pl.edu.pk.pkampus.security.jwt.RefreshTokenService;
 import pl.edu.pk.pkampus.security.jwt.TokenRevocationService;
@@ -46,6 +48,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final TokenRevocationService tokenRevocationService;
+    private final AuthenticatedUserCache authenticatedUserCache;
     private final EmailService emailService;
 
     public static final String REGISTRATION_SUCCESS_MESSAGE =
@@ -145,7 +148,7 @@ public class AuthService {
                     throw new AccountStatusException("Account has been administratively suspended. Please contact the dormitory manager.");
             case CHECKED_OUT ->
                     throw new AccountStatusException("Account has expired (checked out). Please contact the dormitory administration.");
-            case ACTIVE -> {
+            case ACTIVE, MUST_CHANGE_PASSWORD -> {
                 // proceed
             }
         }
@@ -231,6 +234,38 @@ public class AuthService {
                 .orElse(user.getDeclaredRoomNumber());
 
         return buildUserProfileDto(user, roomNumber);
+    }
+
+    @Transactional
+    public UserProfileDto changePassword(User principal, ChangePasswordRequestDto dto) {
+        User user = userRepository.findById(principal.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (user.getStatus() != UserStatus.ACTIVE && user.getStatus() != UserStatus.MUST_CHANGE_PASSWORD) {
+            throw new AccountStatusException("Password cannot be changed for this account status");
+        }
+
+        if (!passwordEncoder.matches(dto.getCurrentPassword(), user.getPasswordHash())) {
+            throw new IllegalArgumentException("Current password is incorrect");
+        }
+
+        if (passwordEncoder.matches(dto.getNewPassword(), user.getPasswordHash())) {
+            throw new IllegalArgumentException("New password must be different from the current password");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(dto.getNewPassword()));
+        if (user.getStatus() == UserStatus.MUST_CHANGE_PASSWORD) {
+            user.setStatus(UserStatus.ACTIVE);
+        }
+        User saved = userRepository.save(user);
+        authenticatedUserCache.invalidate(saved.getId());
+
+        String roomNumber = roomAssignmentRepository.findByUserIdAndIsActiveTrue(saved.getId())
+                .map(ra -> ra.getRoom().getRoomNumber())
+                .orElse(saved.getDeclaredRoomNumber());
+
+        log.info("User {} changed password (status={})", saved.getId(), saved.getStatus());
+        return buildUserProfileDto(saved, roomNumber);
     }
 
     public UserProfileDto buildUserProfileDto(User user, String roomNumber) {
