@@ -108,6 +108,30 @@ public class EmailService {
         sendHtmlEmail(toEmail, subject, htmlContent);
     }
 
+    @Async
+    public void sendRoomMaintenanceEmail(
+            String toEmail,
+            String firstName,
+            String roomName,
+            String startTimeLabel
+    ) {
+        String subject = "PKampus - Room reservation cancelled (maintenance)";
+        String htmlContent = """
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                    <h2 style="color: #b91c1c;">Thematic room under maintenance</h2>
+                    <p>Hello %s,</p>
+                    <p>Your reservation for <strong>%s</strong> starting at <strong>%s</strong> was cancelled because the room was taken out of service.</p>
+                    <p>Please book another free slot in the PKampus app.</p>
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="%s/rooms" style="display: inline-block; padding: 12px 24px; background-color: #0284c7; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Open room schedule</a>
+                    </div>
+                    <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;">
+                    <p style="color: #94a3b8; font-size: 12px;">This message was generated automatically by the PKampus system. Please do not reply.</p>
+                </div>
+                """.formatted(firstName, roomName, startTimeLabel, frontendUrl);
+        sendHtmlEmail(toEmail, subject, htmlContent);
+    }
+
     public void sendHtmlEmail(String to, String subject, String htmlBody) {
         try {
             MimeMessage message = mailSender.createMimeMessage();

@@ -27,9 +27,18 @@ import pl.edu.pk.pkampus.modules.receptionist.dto.DeskOpenIssueDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.DeskRoomBookingDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.MachineBreakdownResponseDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.ReceptionistDeskDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.RoomMaintenanceResponseDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.StaffRoomBookingSlotDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.StaffRoomDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.StaffRoomScheduleDayDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.StaffRoomScheduleResponseDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.DeskThematicRoomDto;
 import pl.edu.pk.pkampus.modules.rooms.RoomBooking;
 import pl.edu.pk.pkampus.modules.rooms.RoomBookingRepository;
 import pl.edu.pk.pkampus.modules.rooms.RoomBookingStatus;
+import pl.edu.pk.pkampus.modules.rooms.ThematicRoom;
+import pl.edu.pk.pkampus.modules.rooms.ThematicRoomRepository;
+import pl.edu.pk.pkampus.modules.rooms.ThematicRoomStatus;
 import pl.edu.pk.pkampus.modules.user.User;
 
 import java.time.Instant;
@@ -37,6 +46,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
@@ -65,10 +75,13 @@ public class ReceptionistService {
             IssueStatus.PARTS_REQUIRED
     );
 
+    private static final int STAFF_SCHEDULE_MAX_DAYS = 7;
+
     private final LaundryBookingRepository laundryBookingRepository;
     private final LaundryMachineRepository laundryMachineRepository;
     private final LaundryService laundryService;
     private final RoomBookingRepository roomBookingRepository;
+    private final ThematicRoomRepository thematicRoomRepository;
     private final IssueRepository issueRepository;
     private final EmailService emailService;
 
@@ -105,6 +118,132 @@ public class ReceptionistService {
     public LaundryScheduleResponseDto getLaundrySchedule(User actor, LocalDate from, LocalDate to) {
         Dormitory dorm = requireActorDormitory(actor);
         return laundryService.getStaffSchedule(dorm, from, to);
+    }
+
+    @Transactional(readOnly = true)
+    public StaffRoomScheduleResponseDto getRoomSchedule(User actor, LocalDate from, LocalDate to) {
+        Dormitory dorm = requireActorDormitory(actor);
+        validateStaffScheduleRange(from, to);
+
+        List<ThematicRoom> rooms =
+                thematicRoomRepository.findAllByDormitoryIdOrderByNameAsc(dorm.getId());
+
+        Instant rangeStart = from.atStartOfDay(WARSAW).toInstant();
+        Instant rangeEnd = to.plusDays(1).atStartOfDay(WARSAW).toInstant();
+
+        List<RoomBooking> bookings = roomBookingRepository.findActiveInDormitoryRange(
+                dorm.getId(), rangeStart, rangeEnd, DESK_ROOM_STATUSES);
+
+        List<StaffRoomDto> roomDtos = rooms.stream()
+                .map(r -> new StaffRoomDto(
+                        r.getId(),
+                        r.getName(),
+                        r.getStatus(),
+                        r.getOpeningTime(),
+                        r.getClosingTime(),
+                        r.getMaxCapacity(),
+                        r.isSpansMidnight()
+                ))
+                .toList();
+
+        List<StaffRoomScheduleDayDto> days = new ArrayList<>();
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+            Instant dayStart = date.atStartOfDay(WARSAW).toInstant();
+            Instant dayEnd = date.plusDays(1).atStartOfDay(WARSAW).toInstant();
+            List<StaffRoomBookingSlotDto> dayBookings = bookings.stream()
+                    .filter(b -> b.getStartTime().isBefore(dayEnd) && b.getEndTime().isAfter(dayStart))
+                    .map(this::toStaffRoomBookingSlot)
+                    .toList();
+            days.add(new StaffRoomScheduleDayDto(date, dayBookings));
+        }
+
+        return new StaffRoomScheduleResponseDto(roomDtos, days);
+    }
+
+    @Transactional
+    public DeskRoomBookingDto cancelRoomBooking(User actor, UUID bookingId) {
+        RoomBooking booking = requireRoomInDorm(actor, bookingId);
+        if (booking.getStatus() != RoomBookingStatus.CONFIRMED) {
+            throw new BusinessRuleException("Only CONFIRMED room bookings can be cancelled by staff");
+        }
+        booking.setStatus(RoomBookingStatus.CANCELLED_USER);
+        return toRoomDto(roomBookingRepository.save(booking));
+    }
+
+    @Transactional
+    public RoomMaintenanceResponseDto reportRoomMaintenance(User actor, UUID roomId, String reason) {
+        Dormitory dorm = requireActorDormitory(actor);
+        ThematicRoom room = thematicRoomRepository.findByIdAndDormitoryId(roomId, dorm.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Thematic room not found"));
+
+        if (room.getStatus() == ThematicRoomStatus.MAINTENANCE) {
+            throw new BusinessRuleException("Thematic room is already under maintenance");
+        }
+
+        String trimmedReason = reason == null ? "" : reason.trim();
+        if (trimmedReason.isEmpty()) {
+            throw new BusinessRuleException("Maintenance reason is required");
+        }
+
+        Instant now = Instant.now();
+        room.setStatus(ThematicRoomStatus.MAINTENANCE);
+        thematicRoomRepository.save(room);
+
+        List<RoomBooking> futureConfirmed = roomBookingRepository.findFutureByRoomIdAndStatus(
+                room.getId(), RoomBookingStatus.CONFIRMED, now);
+
+        for (RoomBooking booking : futureConfirmed) {
+            booking.setStatus(RoomBookingStatus.CANCELLED_ROOM_MAINTENANCE);
+            roomBookingRepository.save(booking);
+        }
+
+        String issueDescription = "Auto: thematic room \"%s\" under maintenance. %s"
+                .formatted(room.getName(), trimmedReason);
+
+        Issue issue = Issue.builder()
+                .reporter(actor)
+                .dormitory(dorm)
+                .commonAreaName("inne")
+                .category(IssueCategory.OTHER)
+                .urgency(IssueUrgency.URGENT)
+                .description(issueDescription)
+                .status(IssueStatus.NEW)
+                .build();
+        Issue savedIssue = issueRepository.save(issue);
+
+        for (RoomBooking booking : futureConfirmed) {
+            User resident = booking.getUser();
+            emailService.sendRoomMaintenanceEmail(
+                    resident.getEmail(),
+                    resident.getFirstName(),
+                    room.getName(),
+                    SLOT_LABEL.format(booking.getStartTime())
+            );
+        }
+
+        log.info("Staff {} marked room {} MAINTENANCE; cancelled {}; issue {}",
+                actor.getEmail(), room.getId(), futureConfirmed.size(), savedIssue.getId());
+
+        return new RoomMaintenanceResponseDto(
+                room.getId(),
+                futureConfirmed.size(),
+                savedIssue.getId()
+        );
+    }
+
+    @Transactional
+    public DeskThematicRoomDto restoreRoom(User actor, UUID roomId) {
+        Dormitory dorm = requireActorDormitory(actor);
+        ThematicRoom room = thematicRoomRepository.findByIdAndDormitoryId(roomId, dorm.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Thematic room not found"));
+
+        if (room.getStatus() != ThematicRoomStatus.MAINTENANCE) {
+            throw new BusinessRuleException("Thematic room is not under maintenance");
+        }
+
+        room.setStatus(ThematicRoomStatus.AVAILABLE);
+        ThematicRoom saved = thematicRoomRepository.save(room);
+        return new DeskThematicRoomDto(saved.getId(), saved.getName(), saved.getStatus());
     }
 
     @Transactional
@@ -314,6 +453,40 @@ public class ReceptionistService {
                 machine.getStatus(),
                 machine.getNotes()
         );
+    }
+
+    private StaffRoomBookingSlotDto toStaffRoomBookingSlot(RoomBooking booking) {
+        User resident = booking.getUser();
+        String label = resident.getFirstName() + " " + resident.getLastName();
+        if (resident.getDeclaredRoomNumber() != null && !resident.getDeclaredRoomNumber().isBlank()) {
+            label += " • pok. " + resident.getDeclaredRoomNumber();
+        }
+        return new StaffRoomBookingSlotDto(
+                booking.getId(),
+                booking.getRoom().getId(),
+                toOffset(booking.getStartTime()),
+                toOffset(booking.getEndTime()),
+                booking.getStatus(),
+                label,
+                booking.getParticipantsCount()
+        );
+    }
+
+    private void validateStaffScheduleRange(LocalDate from, LocalDate to) {
+        if (from == null || to == null) {
+            throw new BusinessRuleException("from and to dates are required");
+        }
+        if (to.isBefore(from)) {
+            throw new BusinessRuleException("to must be on or after from");
+        }
+        LocalDate today = LocalDate.now(WARSAW);
+        if (from.isBefore(today)) {
+            throw new BusinessRuleException("from cannot be before today");
+        }
+        if (to.isAfter(today.plusDays(STAFF_SCHEDULE_MAX_DAYS))) {
+            throw new BusinessRuleException(
+                    "Schedule may only cover up to " + STAFF_SCHEDULE_MAX_DAYS + " days ahead");
+        }
     }
 
     private DeskOpenIssueDto toOpenIssueDto(Issue issue) {

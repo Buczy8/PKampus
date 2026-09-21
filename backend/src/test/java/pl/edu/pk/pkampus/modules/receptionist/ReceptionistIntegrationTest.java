@@ -418,6 +418,125 @@ class ReceptionistIntegrationTest {
                 .andExpect(jsonPath("$.data.status").value("AVAILABLE"));
     }
 
+    @Test
+    @DisplayName("GET room schedule for receptionist; resident forbidden")
+    void roomScheduleAccess() throws Exception {
+        LocalDate from = LocalDate.now(WARSAW);
+        LocalDate to = from.plusDays(1);
+
+        mockMvc.perform(get("/api/v1/receptionist/rooms/schedule")
+                        .param("from", from.toString())
+                        .param("to", to.toString())
+                        .header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.rooms.length()").value(1));
+
+        mockMvc.perform(get("/api/v1/receptionist/rooms/schedule")
+                        .param("from", from.toString())
+                        .param("to", to.toString())
+                        .header("Authorization", bearer(resident)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Cancel CONFIRMED room; KEY_ISSUED returns 422")
+    void cancelRoomBooking() throws Exception {
+        RoomBooking confirmed = roomBookingRepository.save(RoomBooking.builder()
+                .room(room1)
+                .user(resident)
+                .startTime(todayAt(LocalTime.of(18, 0)))
+                .endTime(todayAt(LocalTime.of(20, 0)))
+                .participantsCount(2)
+                .purpose("Nauka")
+                .status(RoomBookingStatus.CONFIRMED)
+                .termsAccepted(true)
+                .build());
+
+        mockMvc.perform(post("/api/v1/receptionist/rooms/" + confirmed.getId() + "/cancel")
+                        .header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CANCELLED_USER"));
+
+        RoomBooking issued = roomBookingRepository.save(RoomBooking.builder()
+                .room(room1)
+                .user(resident)
+                .startTime(todayAt(LocalTime.of(20, 0)))
+                .endTime(todayAt(LocalTime.of(22, 0)))
+                .participantsCount(2)
+                .purpose("Spotkanie")
+                .status(RoomBookingStatus.KEY_ISSUED)
+                .keyIssuedAt(Instant.now())
+                .termsAccepted(true)
+                .build());
+
+        mockMvc.perform(post("/api/v1/receptionist/rooms/" + issued.getId() + "/cancel")
+                        .header("Authorization", bearer(receptionist)))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    @DisplayName("Room maintenance cancels future CONFIRMED, keeps KEY_ISSUED, creates issue")
+    void roomMaintenanceCascade() throws Exception {
+        Instant futureStart = Instant.now().plus(2, ChronoUnit.HOURS);
+        RoomBooking future = roomBookingRepository.save(RoomBooking.builder()
+                .room(room1)
+                .user(resident)
+                .startTime(futureStart)
+                .endTime(futureStart.plus(2, ChronoUnit.HOURS))
+                .participantsCount(3)
+                .purpose("Nauka")
+                .status(RoomBookingStatus.CONFIRMED)
+                .termsAccepted(true)
+                .build());
+
+        Instant issuedStart = Instant.now().minus(30, ChronoUnit.MINUTES);
+        RoomBooking issued = roomBookingRepository.save(RoomBooking.builder()
+                .room(room1)
+                .user(resident)
+                .startTime(issuedStart)
+                .endTime(issuedStart.plus(2, ChronoUnit.HOURS))
+                .participantsCount(2)
+                .purpose("Spotkanie")
+                .status(RoomBookingStatus.KEY_ISSUED)
+                .keyIssuedAt(Instant.now().minus(25, ChronoUnit.MINUTES))
+                .termsAccepted(true)
+                .build());
+
+        mockMvc.perform(post("/api/v1/receptionist/rooms/" + room1.getId() + "/maintenance")
+                        .header("Authorization", bearer(receptionist))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"Broken projector\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.roomId").value(room1.getId().toString()))
+                .andExpect(jsonPath("$.data.cancelledCount").value(1))
+                .andExpect(jsonPath("$.data.issueId").isNotEmpty());
+
+        assertThat(roomBookingRepository.findById(future.getId())).get()
+                .extracting(RoomBooking::getStatus)
+                .isEqualTo(RoomBookingStatus.CANCELLED_ROOM_MAINTENANCE);
+        assertThat(roomBookingRepository.findById(issued.getId())).get()
+                .extracting(RoomBooking::getStatus)
+                .isEqualTo(RoomBookingStatus.KEY_ISSUED);
+        assertThat(thematicRoomRepository.findById(room1.getId())).get()
+                .extracting(ThematicRoom::getStatus)
+                .isEqualTo(ThematicRoomStatus.MAINTENANCE);
+
+        assertThat(issueRepository.findAll()).anySatisfy(issue -> {
+            assertThat(issue.getStatus()).isEqualTo(IssueStatus.NEW);
+            assertThat(issue.getCommonAreaName()).isEqualTo("inne");
+            assertThat(issue.getReporter().getId()).isEqualTo(receptionist.getId());
+        });
+
+        verify(emailService).sendRoomMaintenanceEmail(
+                anyString(), anyString(), anyString(), anyString());
+
+        mockMvc.perform(post("/api/v1/receptionist/rooms/" + room1.getId() + "/restore")
+                        .header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("AVAILABLE"));
+    }
+
     private Instant todayAt(LocalTime time) {
         return LocalDate.now(WARSAW).atTime(time).atZone(WARSAW).toInstant();
     }

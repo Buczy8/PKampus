@@ -106,4 +106,36 @@ public interface RoomBookingRepository extends JpaRepository<RoomBooking, UUID> 
             WHERE b.id = :id
             """)
     Optional<RoomBooking> findByIdWithDetails(@Param("id") UUID id);
+
+    @Query("""
+            SELECT b FROM RoomBooking b
+            JOIN FETCH b.room r
+            JOIN FETCH b.user
+            WHERE r.dormitory.id = :dormitoryId
+              AND b.status IN :statuses
+              AND b.startTime < :rangeEnd
+              AND b.endTime > :rangeStart
+            ORDER BY b.startTime ASC
+            """)
+    List<RoomBooking> findActiveInDormitoryRange(
+            @Param("dormitoryId") UUID dormitoryId,
+            @Param("rangeStart") Instant rangeStart,
+            @Param("rangeEnd") Instant rangeEnd,
+            @Param("statuses") Collection<RoomBookingStatus> statuses
+    );
+
+    @Query("""
+            SELECT b FROM RoomBooking b
+            JOIN FETCH b.user
+            JOIN FETCH b.room
+            WHERE b.room.id = :roomId
+              AND b.status = :status
+              AND b.startTime > :now
+            ORDER BY b.startTime ASC
+            """)
+    List<RoomBooking> findFutureByRoomIdAndStatus(
+            @Param("roomId") UUID roomId,
+            @Param("status") RoomBookingStatus status,
+            @Param("now") Instant now
+    );
 }

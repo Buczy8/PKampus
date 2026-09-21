@@ -21,9 +21,13 @@ import pl.edu.pk.pkampus.modules.laundry.dto.LaundryScheduleResponseDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.DeskLaundryBookingDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.DeskLaundryMachineDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.DeskRoomBookingDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.DeskThematicRoomDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.MachineBreakdownRequestDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.MachineBreakdownResponseDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.ReceptionistDeskDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.RoomMaintenanceRequestDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.RoomMaintenanceResponseDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.StaffRoomScheduleResponseDto;
 import pl.edu.pk.pkampus.modules.user.User;
 
 import java.time.LocalDate;
@@ -111,6 +115,50 @@ public class ReceptionistController {
         return ResponseEntity.ok(ApiResponse.ok(
                 receptionistService.returnLaundryKey(user, id),
                 "Laundry key returned"));
+    }
+
+    @GetMapping("/rooms/schedule")
+    @Operation(summary = "Thematic room schedule for staff (bookings with resident labels)")
+    public ResponseEntity<ApiResponse<StaffRoomScheduleResponseDto>> roomSchedule(
+            @AuthenticationPrincipal User user,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(receptionistService.getRoomSchedule(user, from, to)));
+    }
+
+    @PostMapping("/rooms/{id}/cancel")
+    @Operation(summary = "Cancel a CONFIRMED thematic room booking")
+    public ResponseEntity<ApiResponse<DeskRoomBookingDto>> cancelRoom(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID id
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                receptionistService.cancelRoomBooking(user, id),
+                "Room booking cancelled"));
+    }
+
+    @PostMapping("/rooms/{id}/maintenance")
+    @Operation(summary = "Mark thematic room MAINTENANCE (ADR-06 cascade + auto-issue)")
+    public ResponseEntity<ApiResponse<RoomMaintenanceResponseDto>> roomMaintenance(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID id,
+            @Valid @RequestBody RoomMaintenanceRequestDto request
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                receptionistService.reportRoomMaintenance(user, id, request.reason()),
+                "Thematic room marked under maintenance"));
+    }
+
+    @PostMapping("/rooms/{id}/restore")
+    @Operation(summary = "Restore thematic room to AVAILABLE")
+    public ResponseEntity<ApiResponse<DeskThematicRoomDto>> restoreRoom(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID id
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                receptionistService.restoreRoom(user, id),
+                "Thematic room restored"));
     }
 
     @PostMapping("/rooms/{id}/issue-key")
