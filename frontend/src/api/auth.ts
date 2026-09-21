@@ -2,6 +2,7 @@ import { apiClient } from '@/api/client'
 import type {
   ApiResponse,
   AuthResponse,
+  ChangePasswordRequest,
   LoginRequest,
   RegisterRequest,
   RegisterResponse,
@@ -59,6 +60,19 @@ export async function getCurrentUser(): Promise<UserProfile> {
   const { data } = await apiClient.get<ApiResponse<UserProfile>>('/auth/me')
   if (!data.success || !data.data) {
     throw new Error(data.message ?? 'Failed to load current user')
+  }
+  return data.data
+}
+
+export async function changePassword(
+  request: ChangePasswordRequest,
+): Promise<UserProfile> {
+  const { data } = await apiClient.post<ApiResponse<UserProfile>>(
+    '/auth/change-password',
+    request,
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to change password')
   }
   return data.data
 }

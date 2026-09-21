@@ -4,6 +4,7 @@ import { ResidentShell } from '@/components/layout/ResidentShell'
 import { AdminPage } from '@/pages/AdminPage'
 import { BoardPage } from '@/pages/BoardPage'
 import { CardPage } from '@/pages/CardPage'
+import { ChangePasswordPage } from '@/pages/ChangePasswordPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { IssuesPage } from '@/pages/IssuesPage'
 import { LaundryPage } from '@/pages/LaundryPage'
@@ -24,6 +25,13 @@ export function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/pending-approval" element={<PendingApprovalPage />} />
+
+        <Route element={<ProtectedRoute allowMustChangePassword />}>
+          <Route
+            path="/change-password"
+            element={<ChangePasswordPage forced />}
+          />
+        </Route>
 
         {/* Resident Authenticated Portal */}
         <Route element={<ProtectedRoute />}>

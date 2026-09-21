@@ -41,6 +41,19 @@ export interface LoginRequest {
   password: string
 }
 
+export interface ChangePasswordRequest {
+  currentPassword: string
+  newPassword: string
+}
+
+export type UserAccountStatus =
+  | 'PENDING_EMAIL'
+  | 'PENDING_APPROVAL'
+  | 'MUST_CHANGE_PASSWORD'
+  | 'ACTIVE'
+  | 'BLOCKED'
+  | 'CHECKED_OUT'
+
 export interface RegisterRequest {
   email: string
   password: string

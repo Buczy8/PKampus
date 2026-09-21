@@ -437,9 +437,21 @@ export function SuperAdminPage() {
                         </TableCell>
                         <TableCell>
                           <Badge
-                            variant={admin.status === 'ACTIVE' ? 'secondary' : 'destructive'}
+                            variant={
+                              admin.status === 'BLOCKED'
+                                ? 'destructive'
+                                : admin.status === 'MUST_CHANGE_PASSWORD'
+                                  ? 'outline'
+                                  : 'secondary'
+                            }
                           >
-                            {admin.status}
+                            {admin.status === 'ACTIVE'
+                              ? 'Aktywny'
+                              : admin.status === 'MUST_CHANGE_PASSWORD'
+                                ? 'Wymaga zmiany hasła'
+                                : admin.status === 'BLOCKED'
+                                  ? 'Zablokowany'
+                                  : admin.status}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
@@ -451,11 +463,11 @@ export function SuperAdminPage() {
                             onClick={() =>
                               toggleAdminMutation.mutate({
                                 id: admin.id,
-                                status: admin.status === 'ACTIVE' ? 'BLOCKED' : 'ACTIVE',
+                                status: admin.status === 'BLOCKED' ? 'ACTIVE' : 'BLOCKED',
                               })
                             }
                           >
-                            {admin.status === 'ACTIVE' ? 'Zablokuj' : 'Odblokuj'}
+                            {admin.status === 'BLOCKED' ? 'Odblokuj' : 'Zablokuj'}
                           </Button>
                         </TableCell>
                       </TableRow>

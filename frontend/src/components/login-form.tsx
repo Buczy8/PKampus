@@ -64,6 +64,10 @@ export function LoginForm({
       setAuthTokens(auth.token, auth.refreshToken)
       // Seed cache so ProtectedRoute does not reuse a previous failed /me error.
       queryClient.setQueryData(['auth', 'me'], auth.user)
+      if (auth.user.status === 'MUST_CHANGE_PASSWORD') {
+        navigate('/change-password', { replace: true })
+        return
+      }
       const destination = isSuperAdminRole(auth.user.role)
         ? '/superadmin'
         : isAdminRole(auth.user.role)

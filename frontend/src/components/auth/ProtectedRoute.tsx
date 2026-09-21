@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 
@@ -9,6 +9,8 @@ import { getAccessToken } from '@/lib/auth-storage'
 type ProtectedRouteProps = {
   adminOnly?: boolean
   superAdminOnly?: boolean
+  /** Allow MUST_CHANGE_PASSWORD users (change-password page only). */
+  allowMustChangePassword?: boolean
 }
 
 function isAuthFailure(error: unknown): boolean {
@@ -20,8 +22,10 @@ function isAuthFailure(error: unknown): boolean {
 export function ProtectedRoute({
   adminOnly = false,
   superAdminOnly = false,
+  allowMustChangePassword = false,
 }: ProtectedRouteProps) {
   const token = getAccessToken()
+  const location = useLocation()
 
   const meQuery = useQuery({
     queryKey: ['auth', 'me'],
@@ -64,23 +68,41 @@ export function ProtectedRoute({
     )
   }
 
-  if (superAdminOnly && !isSuperAdminRole(meQuery.data.role)) {
+  const user = meQuery.data
+
+  if (user.status === 'MUST_CHANGE_PASSWORD') {
+    if (allowMustChangePassword || location.pathname === '/change-password') {
+      return <Outlet context={user} />
+    }
+    return <Navigate to="/change-password" replace />
+  }
+
+  if (allowMustChangePassword && user.status !== 'MUST_CHANGE_PASSWORD') {
+    const home = isSuperAdminRole(user.role)
+      ? '/superadmin'
+      : isAdminRole(user.role)
+        ? '/admin'
+        : '/dashboard'
+    return <Navigate to={home} replace />
+  }
+
+  if (superAdminOnly && !isSuperAdminRole(user.role)) {
     return (
       <Navigate
-        to={isAdminRole(meQuery.data.role) ? '/admin' : '/dashboard'}
+        to={isAdminRole(user.role) ? '/admin' : '/dashboard'}
         replace
       />
     )
   }
 
-  if (adminOnly && !isAdminRole(meQuery.data.role)) {
+  if (adminOnly && !isAdminRole(user.role)) {
     return <Navigate to="/dashboard" replace />
   }
 
   // DORM_ADMIN stays on /admin; SUPER_ADMIN belongs on /superadmin
-  if (adminOnly && isSuperAdminRole(meQuery.data.role)) {
+  if (adminOnly && isSuperAdminRole(user.role)) {
     return <Navigate to="/superadmin" replace />
   }
 
-  return <Outlet context={meQuery.data} />
+  return <Outlet context={user} />
 }

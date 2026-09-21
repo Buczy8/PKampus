@@ -1182,10 +1182,18 @@ export function AdminPage() {
                         <TableCell>
                           <Badge
                             variant={
-                              porter.status === 'ACTIVE' ? 'secondary' : 'destructive'
+                              porter.status === 'BLOCKED'
+                                ? 'destructive'
+                                : porter.status === 'MUST_CHANGE_PASSWORD'
+                                  ? 'outline'
+                                  : 'secondary'
                             }
                           >
-                            {porter.status === 'ACTIVE' ? 'Aktywny' : 'Zablokowany'}
+                            {porter.status === 'ACTIVE'
+                              ? 'Aktywny'
+                              : porter.status === 'MUST_CHANGE_PASSWORD'
+                                ? 'Wymaga zmiany hasła'
+                                : 'Zablokowany'}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
@@ -1197,11 +1205,11 @@ export function AdminPage() {
                             onClick={() =>
                               togglePorterMutation.mutate({
                                 id: porter.id,
-                                status: porter.status === 'ACTIVE' ? 'BLOCKED' : 'ACTIVE',
+                                status: porter.status === 'BLOCKED' ? 'ACTIVE' : 'BLOCKED',
                               })
                             }
                           >
-                            {porter.status === 'ACTIVE' ? 'Zablokuj' : 'Odblokuj'}
+                            {porter.status === 'BLOCKED' ? 'Odblokuj' : 'Zablokuj'}
                           </Button>
                         </TableCell>
                       </TableRow>
