@@ -14,6 +14,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
 import pl.edu.pk.pkampus.mail.EmailService;
+import pl.edu.pk.pkampus.modules.board.Comment;
+import pl.edu.pk.pkampus.modules.board.CommentRepository;
+import pl.edu.pk.pkampus.modules.board.Post;
+import pl.edu.pk.pkampus.modules.board.PostCategory;
+import pl.edu.pk.pkampus.modules.board.PostRepository;
+import pl.edu.pk.pkampus.modules.board.PostScope;
+import pl.edu.pk.pkampus.modules.board.PostStatus;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
 import pl.edu.pk.pkampus.modules.dormitory.DormitoryRepository;
 import pl.edu.pk.pkampus.modules.issues.Issue;
@@ -50,6 +57,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -88,6 +96,12 @@ class ReceptionistIntegrationTest {
 
     @Autowired
     private IssueRepository issueRepository;
+
+    @Autowired
+    private PostRepository postRepository;
+
+    @Autowired
+    private CommentRepository commentRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -621,6 +635,106 @@ class ReceptionistIntegrationTest {
                         .header("Authorization", bearer(receptionist))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"REJECTED\",\"staffNotes\":\"Nie dotyczy\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("Receptionist can publish and list dorm notices; resident forbidden")
+    void receptionistEventsCrud() throws Exception {
+        Instant start = Instant.now().plus(1, ChronoUnit.HOURS);
+        mockMvc.perform(post("/api/v1/receptionist/events")
+                        .header("Authorization", bearer(receptionist))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title":"Wymiana pościeli",
+                                  "description":"W piątek od 10:00",
+                                  "priority":"WARNING",
+                                  "eventDate":"%s"
+                                }
+                                """.formatted(start.toString())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.title").value("Wymiana pościeli"))
+                .andExpect(jsonPath("$.data.priority").value("WARNING"));
+
+        mockMvc.perform(get("/api/v1/receptionist/events")
+                        .header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)));
+
+        mockMvc.perform(get("/api/v1/receptionist/events")
+                        .header("Authorization", bearer(resident)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Moderate DORMITORY post and comment; CAMPUS and foreign dorm 404")
+    void boardModeration() throws Exception {
+        Post dormPost = postRepository.save(Post.builder()
+                .author(resident)
+                .dormitory(dorm1)
+                .title("Pożyczę kabel")
+                .content("Mam przedłużacz")
+                .category(PostCategory.BORROW_HELP)
+                .scope(PostScope.DORMITORY)
+                .status(PostStatus.ACTIVE)
+                .deleted(false)
+                .build());
+
+        Comment comment = commentRepository.save(Comment.builder()
+                .post(dormPost)
+                .author(resident)
+                .content("Nadal aktualne")
+                .deleted(false)
+                .build());
+
+        Post campusPost = postRepository.save(Post.builder()
+                .author(resident)
+                .dormitory(null)
+                .title("Kampusowy")
+                .content("Ogłoszenie kampusowe")
+                .category(PostCategory.GENERAL)
+                .scope(PostScope.CAMPUS)
+                .status(PostStatus.ACTIVE)
+                .deleted(false)
+                .build());
+
+        Post foreignPost = postRepository.save(Post.builder()
+                .author(otherResident)
+                .dormitory(dorm2)
+                .title("Obcy DS")
+                .content("Nie twój DS")
+                .category(PostCategory.GENERAL)
+                .scope(PostScope.DORMITORY)
+                .status(PostStatus.ACTIVE)
+                .deleted(false)
+                .build());
+
+        mockMvc.perform(get("/api/v1/receptionist/posts")
+                        .header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].title").value("Pożyczę kabel"));
+
+        mockMvc.perform(post("/api/v1/receptionist/comments/" + comment.getId() + "/remove")
+                        .header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk());
+
+        assertThat(commentRepository.findById(comment.getId())).get()
+                .extracting(Comment::isDeleted)
+                .isEqualTo(true);
+
+        mockMvc.perform(post("/api/v1/receptionist/posts/" + dormPost.getId() + "/remove")
+                        .header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("REMOVED_MODERATOR"));
+
+        mockMvc.perform(post("/api/v1/receptionist/posts/" + campusPost.getId() + "/remove")
+                        .header("Authorization", bearer(receptionist)))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(post("/api/v1/receptionist/posts/" + foreignPost.getId() + "/remove")
+                        .header("Authorization", bearer(receptionist)))
                 .andExpect(status().isNotFound());
     }
 

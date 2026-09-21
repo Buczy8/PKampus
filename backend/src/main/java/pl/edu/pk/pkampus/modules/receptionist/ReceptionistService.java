@@ -7,7 +7,15 @@ import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.mail.EmailService;
+import pl.edu.pk.pkampus.modules.board.PostCategory;
+import pl.edu.pk.pkampus.modules.board.PostService;
+import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
+import pl.edu.pk.pkampus.modules.board.dto.PostDto;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
+import pl.edu.pk.pkampus.modules.events.EventService;
+import pl.edu.pk.pkampus.modules.events.dto.CreateDormEventRequestDto;
+import pl.edu.pk.pkampus.modules.events.dto.DormEventDto;
+import pl.edu.pk.pkampus.modules.events.dto.UpdateDormEventRequestDto;
 import pl.edu.pk.pkampus.modules.issues.Issue;
 import pl.edu.pk.pkampus.modules.issues.IssueCategory;
 import pl.edu.pk.pkampus.modules.issues.IssueRepository;
@@ -87,6 +95,8 @@ public class ReceptionistService {
     private final ThematicRoomRepository thematicRoomRepository;
     private final IssueRepository issueRepository;
     private final IssueService issueService;
+    private final EventService eventService;
+    private final PostService postService;
     private final EmailService emailService;
 
     @Transactional(readOnly = true)
@@ -148,6 +158,46 @@ public class ReceptionistService {
     ) {
         return issueService.updateStaffIssueStatus(
                 requireActorDormitoryId(actor), issueId, status, staffNotes);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DormEventDto> listEvents(User actor) {
+        return eventService.listForStaff(actor);
+    }
+
+    @Transactional
+    public DormEventDto createEvent(User actor, CreateDormEventRequestDto request) {
+        return eventService.createForStaff(actor, request);
+    }
+
+    @Transactional
+    public DormEventDto updateEvent(User actor, UUID id, UpdateDormEventRequestDto request) {
+        return eventService.updateForStaff(actor, id, request);
+    }
+
+    @Transactional
+    public void deleteEvent(User actor, UUID id) {
+        eventService.deleteForStaff(actor, id);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PostDto> listBoardPosts(User actor, PostCategory category, String status) {
+        return postService.listForStaff(actor, category, status);
+    }
+
+    @Transactional
+    public PostDto removeBoardPost(User actor, UUID postId) {
+        return postService.removePostAsModerator(actor, postId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CommentDto> listBoardComments(User actor, UUID postId) {
+        return postService.listCommentsForStaff(actor, postId);
+    }
+
+    @Transactional
+    public void removeBoardComment(User actor, UUID commentId) {
+        postService.removeCommentAsModerator(actor, commentId);
     }
 
     @Transactional(readOnly = true)

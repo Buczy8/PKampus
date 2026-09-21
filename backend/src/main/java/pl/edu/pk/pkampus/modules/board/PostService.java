@@ -138,6 +138,86 @@ public class PostService {
         return toCommentDto(saved, post, user);
     }
 
+    @Transactional(readOnly = true)
+    public List<PostDto> listForStaff(
+            User staff,
+            PostCategory category,
+            String statusFilter
+    ) {
+        UUID dormitoryId = requireStaffDormitoryId(staff);
+        String filter = normalizeStatusFilter(statusFilter == null ? "ALL" : statusFilter);
+        List<Post> posts = postRepository.findStaffDormitoryFeed(
+                dormitoryId,
+                category == null,
+                category != null ? category : PostCategory.GENERAL,
+                filter
+        );
+        Map<UUID, Integer> counts = commentCounts(posts.stream().map(Post::getId).toList());
+        return posts.stream()
+                .map(post -> toDto(post, staff, counts.getOrDefault(post.getId(), 0)))
+                .toList();
+    }
+
+    @Transactional
+    public PostDto removePostAsModerator(User staff, UUID postId) {
+        UUID dormitoryId = requireStaffDormitoryId(staff);
+        Post post = requireStaffModeratablePost(postId, dormitoryId);
+        post.setStatus(PostStatus.REMOVED_MODERATOR);
+        Post saved = postRepository.save(post);
+        log.info("Staff {} moderated board post {} to REMOVED_MODERATOR", staff.getEmail(), postId);
+        return toDto(saved, staff, 0);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CommentDto> listCommentsForStaff(User staff, UUID postId) {
+        UUID dormitoryId = requireStaffDormitoryId(staff);
+        Post post = requireStaffModeratablePost(postId, dormitoryId);
+        return commentRepository.findActiveByPostIdOrderByCreatedAtAsc(post.getId()).stream()
+                .map(c -> toCommentDto(c, post, staff))
+                .toList();
+    }
+
+    @Transactional
+    public void removeCommentAsModerator(User staff, UUID commentId) {
+        UUID dormitoryId = requireStaffDormitoryId(staff);
+        Comment comment = commentRepository.findByIdWithPost(commentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
+        if (comment.isDeleted()) {
+            throw new ResourceNotFoundException("Comment not found");
+        }
+        Post post = comment.getPost();
+        requireStaffModeratablePost(post.getId(), dormitoryId);
+        comment.setDeleted(true);
+        comment.setDeletedAt(Instant.now());
+        commentRepository.save(comment);
+        log.info("Staff {} soft-deleted comment {} on post {}",
+                staff.getEmail(), commentId, post.getId());
+    }
+
+    private Post requireStaffModeratablePost(UUID postId, UUID dormitoryId) {
+        Post post = postRepository.findByIdAndNotDeleted(postId)
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+        if (post.getStatus() == PostStatus.REMOVED_MODERATOR) {
+            throw new ResourceNotFoundException("Post not found");
+        }
+        if (post.getScope() != PostScope.DORMITORY
+                || post.getDormitory() == null
+                || !post.getDormitory().getId().equals(dormitoryId)) {
+            throw new ResourceNotFoundException("Post not found");
+        }
+        return post;
+    }
+
+    private UUID requireStaffDormitoryId(User staff) {
+        if (staff.getRole() != UserRole.RECEPTIONIST && staff.getRole() != UserRole.DORM_ADMIN) {
+            throw new AccessDeniedException("Only receptionist or dormitory admin can moderate the board");
+        }
+        if (staff.getDormitory() == null) {
+            throw new BusinessRuleException("Staff account has no dormitory assigned");
+        }
+        return staff.getDormitory().getId();
+    }
+
     private Post requireOwnVisiblePost(User user, UUID postId) {
         Post post = requireVisiblePost(user, postId);
         if (!post.getAuthor().getId().equals(user.getId())) {

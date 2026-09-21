@@ -15,14 +15,21 @@ import pl.edu.pk.pkampus.modules.user.User;
 import pl.edu.pk.pkampus.modules.user.UserRole;
 
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class EventService {
+
+    private static final Set<UserRole> STAFF_ROLES = EnumSet.of(
+            UserRole.RECEPTIONIST,
+            UserRole.DORM_ADMIN
+    );
 
     private final DormEventRepository dormEventRepository;
 
@@ -52,21 +59,21 @@ public class EventService {
     }
 
     @Transactional(readOnly = true)
-    public List<DormEventDto> listForAdmin(User admin) {
-        UUID dormitoryId = requireDormAdminDormitoryId(admin);
+    public List<DormEventDto> listForStaff(User staff) {
+        UUID dormitoryId = requireStaffDormitoryId(staff);
         return dormEventRepository.findAllByDormitoryIdOrderByEventDateDesc(dormitoryId).stream()
                 .map(this::toDto)
                 .toList();
     }
 
     @Transactional
-    public DormEventDto createForAdmin(User admin, CreateDormEventRequestDto request) {
-        requireDormAdminDormitoryId(admin);
-        Dormitory dormitory = admin.getDormitory();
+    public DormEventDto createForStaff(User staff, CreateDormEventRequestDto request) {
+        requireStaffDormitoryId(staff);
+        Dormitory dormitory = staff.getDormitory();
         validateEventDates(request.getEventDate(), request.getEndDate());
 
         DormEvent event = DormEvent.builder()
-                .author(admin)
+                .author(staff)
                 .dormitory(dormitory)
                 .title(request.getTitle().trim())
                 .description(request.getDescription().trim())
@@ -78,14 +85,14 @@ public class EventService {
                 .build();
 
         DormEvent saved = dormEventRepository.save(event);
-        log.info("ADS {} published dorm notice {} for dormitory {}",
-                admin.getEmail(), saved.getId(), dormitory.getId());
+        log.info("Staff {} published dorm notice {} for dormitory {}",
+                staff.getEmail(), saved.getId(), dormitory.getId());
         return toDto(saved);
     }
 
     @Transactional
-    public DormEventDto updateForAdmin(User admin, UUID id, UpdateDormEventRequestDto request) {
-        UUID dormitoryId = requireDormAdminDormitoryId(admin);
+    public DormEventDto updateForStaff(User staff, UUID id, UpdateDormEventRequestDto request) {
+        UUID dormitoryId = requireStaffDormitoryId(staff);
         DormEvent event = dormEventRepository.findByIdAndDormitoryId(id, dormitoryId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
 
@@ -112,22 +119,22 @@ public class EventService {
     }
 
     @Transactional
-    public void deleteForAdmin(User admin, UUID id) {
-        UUID dormitoryId = requireDormAdminDormitoryId(admin);
+    public void deleteForStaff(User staff, UUID id) {
+        UUID dormitoryId = requireStaffDormitoryId(staff);
         DormEvent event = dormEventRepository.findByIdAndDormitoryId(id, dormitoryId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
         dormEventRepository.delete(event);
-        log.info("ADS {} deleted dorm notice {}", admin.getEmail(), id);
+        log.info("Staff {} deleted dorm notice {}", staff.getEmail(), id);
     }
 
-    private UUID requireDormAdminDormitoryId(User admin) {
-        if (admin.getRole() != UserRole.DORM_ADMIN) {
-            throw new AccessDeniedException("Only dormitory administrators can manage dorm notices");
+    private UUID requireStaffDormitoryId(User staff) {
+        if (!STAFF_ROLES.contains(staff.getRole())) {
+            throw new AccessDeniedException("Only receptionist or dormitory admin can manage dorm notices");
         }
-        if (admin.getDormitory() == null) {
-            throw new BusinessRuleException("Administrator account has no dormitory assigned");
+        if (staff.getDormitory() == null) {
+            throw new BusinessRuleException("Staff account has no dormitory assigned");
         }
-        return admin.getDormitory().getId();
+        return staff.getDormitory().getId();
     }
 
     private void validateEventDates(Instant eventDate, Instant endDate) {

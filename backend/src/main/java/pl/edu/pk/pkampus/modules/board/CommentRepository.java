@@ -27,4 +27,14 @@ public interface CommentRepository extends JpaRepository<Comment, UUID> {
             GROUP BY c.post.id
             """)
     List<Object[]> countActiveByPostIds(@Param("postIds") Collection<UUID> postIds);
+
+    @Query("""
+            SELECT c FROM Comment c
+            JOIN FETCH c.author a
+            LEFT JOIN FETCH a.dormitory
+            JOIN FETCH c.post p
+            LEFT JOIN FETCH p.dormitory
+            WHERE c.id = :id
+            """)
+    java.util.Optional<Comment> findByIdWithPost(@Param("id") UUID id);
 }

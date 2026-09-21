@@ -39,7 +39,7 @@ public class AdminDormEventController {
     @GetMapping
     @Operation(summary = "List official notices for the admin's dormitory")
     public ResponseEntity<ApiResponse<List<DormEventDto>>> list(@AuthenticationPrincipal User admin) {
-        return ResponseEntity.ok(ApiResponse.ok(eventService.listForAdmin(admin)));
+        return ResponseEntity.ok(ApiResponse.ok(eventService.listForStaff(admin)));
     }
 
     @PostMapping
@@ -48,7 +48,7 @@ public class AdminDormEventController {
             @AuthenticationPrincipal User admin,
             @Valid @RequestBody CreateDormEventRequestDto request
     ) {
-        DormEventDto created = eventService.createForAdmin(admin, request);
+        DormEventDto created = eventService.createForStaff(admin, request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok(created, "Dorm notice published"));
     }
@@ -60,7 +60,7 @@ public class AdminDormEventController {
             @PathVariable UUID id,
             @Valid @RequestBody UpdateDormEventRequestDto request
     ) {
-        return ResponseEntity.ok(ApiResponse.ok(eventService.updateForAdmin(admin, id, request)));
+        return ResponseEntity.ok(ApiResponse.ok(eventService.updateForStaff(admin, id, request)));
     }
 
     @DeleteMapping("/{id}")
@@ -69,7 +69,7 @@ public class AdminDormEventController {
             @AuthenticationPrincipal User admin,
             @PathVariable UUID id
     ) {
-        eventService.deleteForAdmin(admin, id);
+        eventService.deleteForStaff(admin, id);
         return ResponseEntity.ok(ApiResponse.ok(null, "Dorm notice deleted"));
     }
 }

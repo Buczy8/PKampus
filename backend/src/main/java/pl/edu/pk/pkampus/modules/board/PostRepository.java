@@ -45,4 +45,28 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
             WHERE p.id = :id AND p.deleted = FALSE
             """)
     Optional<Post> findByIdAndNotDeleted(@Param("id") UUID id);
+
+    @Query("""
+            SELECT p FROM Post p
+            JOIN FETCH p.author a
+            LEFT JOIN FETCH a.dormitory
+            LEFT JOIN FETCH p.dormitory
+            WHERE p.deleted = FALSE
+              AND p.scope = pl.edu.pk.pkampus.modules.board.PostScope.DORMITORY
+              AND p.dormitory.id = :dormitoryId
+              AND p.status <> pl.edu.pk.pkampus.modules.board.PostStatus.REMOVED_MODERATOR
+              AND (:categoryEmpty = true OR p.category = :category)
+              AND (
+                    :statusFilter = 'ALL'
+                    OR (:statusFilter = 'ACTIVE' AND p.status = pl.edu.pk.pkampus.modules.board.PostStatus.ACTIVE)
+                    OR (:statusFilter = 'RESOLVED' AND p.status = pl.edu.pk.pkampus.modules.board.PostStatus.RESOLVED)
+                  )
+            ORDER BY p.createdAt DESC
+            """)
+    List<Post> findStaffDormitoryFeed(
+            @Param("dormitoryId") UUID dormitoryId,
+            @Param("categoryEmpty") boolean categoryEmpty,
+            @Param("category") PostCategory category,
+            @Param("statusFilter") String statusFilter
+    );
 }

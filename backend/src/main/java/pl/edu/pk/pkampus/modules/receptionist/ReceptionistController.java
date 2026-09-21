@@ -6,9 +6,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,6 +20,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pl.edu.pk.pkampus.common.ApiResponse;
+import pl.edu.pk.pkampus.modules.board.PostCategory;
+import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
+import pl.edu.pk.pkampus.modules.board.dto.PostDto;
+import pl.edu.pk.pkampus.modules.events.dto.CreateDormEventRequestDto;
+import pl.edu.pk.pkampus.modules.events.dto.DormEventDto;
+import pl.edu.pk.pkampus.modules.events.dto.UpdateDormEventRequestDto;
 import pl.edu.pk.pkampus.modules.issues.IssueCategory;
 import pl.edu.pk.pkampus.modules.issues.IssueStatus;
 import pl.edu.pk.pkampus.modules.issues.IssueUrgency;
@@ -227,5 +235,87 @@ public class ReceptionistController {
                 receptionistService.updateIssueStatus(
                         user, id, request.status(), request.staffNotes()),
                 "Issue status updated"));
+    }
+
+    @GetMapping("/events")
+    @Operation(summary = "List official notices for the porter's dormitory (FR-EVENT-01)")
+    public ResponseEntity<ApiResponse<List<DormEventDto>>> listEvents(
+            @AuthenticationPrincipal User user
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(receptionistService.listEvents(user)));
+    }
+
+    @PostMapping("/events")
+    @Operation(summary = "Publish an official notice for the porter's dormitory")
+    public ResponseEntity<ApiResponse<DormEventDto>> createEvent(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody CreateDormEventRequestDto request
+    ) {
+        DormEventDto created = receptionistService.createEvent(user, request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok(created, "Dorm notice published"));
+    }
+
+    @PatchMapping("/events/{id}")
+    @Operation(summary = "Update an official notice in the porter's dormitory")
+    public ResponseEntity<ApiResponse<DormEventDto>> updateEvent(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateDormEventRequestDto request
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                receptionistService.updateEvent(user, id, request)));
+    }
+
+    @DeleteMapping("/events/{id}")
+    @Operation(summary = "Delete an official notice in the porter's dormitory")
+    public ResponseEntity<ApiResponse<Void>> deleteEvent(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID id
+    ) {
+        receptionistService.deleteEvent(user, id);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Dorm notice deleted"));
+    }
+
+    @GetMapping("/posts")
+    @Operation(summary = "List dormitory-scoped board posts for moderation")
+    public ResponseEntity<ApiResponse<List<PostDto>>> listPosts(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) PostCategory category,
+            @RequestParam(required = false, defaultValue = "ALL") String status
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                receptionistService.listBoardPosts(user, category, status)));
+    }
+
+    @PostMapping("/posts/{id}/remove")
+    @Operation(summary = "Remove a dormitory board post (REMOVED_MODERATOR)")
+    public ResponseEntity<ApiResponse<PostDto>> removePost(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID id
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                receptionistService.removeBoardPost(user, id),
+                "Post removed by moderator"));
+    }
+
+    @GetMapping("/posts/{id}/comments")
+    @Operation(summary = "List comments under a dormitory board post")
+    public ResponseEntity<ApiResponse<List<CommentDto>>> listPostComments(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID id
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                receptionistService.listBoardComments(user, id)));
+    }
+
+    @PostMapping("/comments/{id}/remove")
+    @Operation(summary = "Soft-delete a board comment as moderator")
+    public ResponseEntity<ApiResponse<Void>> removeComment(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID id
+    ) {
+        receptionistService.removeBoardComment(user, id);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Comment removed by moderator"));
     }
 }
