@@ -1,0 +1,252 @@
+package pl.edu.pk.pkampus.modules.board;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import pl.edu.pk.pkampus.common.exception.AccountStatusException;
+import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
+import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
+import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
+import pl.edu.pk.pkampus.modules.board.dto.CreateCommentRequestDto;
+import pl.edu.pk.pkampus.modules.board.dto.CreatePostRequestDto;
+import pl.edu.pk.pkampus.modules.board.dto.PostDto;
+import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
+import pl.edu.pk.pkampus.modules.dormitory.RoomAssignmentRepository;
+import pl.edu.pk.pkampus.modules.user.User;
+import pl.edu.pk.pkampus.modules.user.UserRole;
+import pl.edu.pk.pkampus.modules.user.UserStatus;
+
+import java.time.Instant;
+import java.time.ZoneId;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class PostService {
+
+    private static final ZoneId WARSAW = ZoneId.of("Europe/Warsaw");
+
+    private final PostRepository postRepository;
+    private final CommentRepository commentRepository;
+    private final RoomAssignmentRepository roomAssignmentRepository;
+
+    @Transactional(readOnly = true)
+    public List<PostDto> listFeed(
+            User user,
+            PostCategory category,
+            PostScope scope,
+            String statusFilter
+    ) {
+        Dormitory dorm = requireActiveResident(user);
+        String filter = normalizeStatusFilter(statusFilter);
+        List<Post> posts = postRepository.findFeed(dorm.getId(), category, scope, filter);
+        Map<UUID, Integer> counts = commentCounts(posts.stream().map(Post::getId).toList());
+        return posts.stream()
+                .map(post -> toDto(post, user, counts.getOrDefault(post.getId(), 0)))
+                .toList();
+    }
+
+    @Transactional
+    public PostDto create(User user, CreatePostRequestDto request) {
+        Dormitory dorm = requireActiveResident(user);
+
+        String title = request.title().trim();
+        String content = request.content().trim();
+        if (title.isEmpty() || content.isEmpty()) {
+            throw new BusinessRuleException("Title and content are required");
+        }
+
+        Dormitory postDorm = request.scope() == PostScope.DORMITORY ? dorm : null;
+
+        Post post = Post.builder()
+                .author(user)
+                .dormitory(postDorm)
+                .title(title)
+                .content(content)
+                .category(request.category())
+                .scope(request.scope())
+                .status(PostStatus.ACTIVE)
+                .deleted(false)
+                .build();
+
+        Post saved = postRepository.saveAndFlush(post);
+        log.info("Resident {} created board post {} ({}/{})",
+                user.getEmail(), saved.getId(), saved.getCategory(), saved.getScope());
+        return toDto(saved, user, 0);
+    }
+
+    @Transactional
+    public PostDto resolve(User user, UUID postId) {
+        requireActiveResident(user);
+        Post post = requireOwnVisiblePost(user, postId);
+        if (post.getStatus() != PostStatus.ACTIVE) {
+            throw new BusinessRuleException("Only ACTIVE posts can be marked as resolved");
+        }
+        post.setStatus(PostStatus.RESOLVED);
+        Post saved = postRepository.save(post);
+        int count = commentRepository.findActiveByPostIdOrderByCreatedAtAsc(saved.getId()).size();
+        return toDto(saved, user, count);
+    }
+
+    @Transactional
+    public void softDelete(User user, UUID postId) {
+        requireActiveResident(user);
+        Post post = requireOwnVisiblePost(user, postId);
+        post.setDeleted(true);
+        post.setDeletedAt(Instant.now());
+        postRepository.save(post);
+        log.info("Resident {} soft-deleted board post {}", user.getEmail(), postId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CommentDto> listComments(User user, UUID postId) {
+        requireActiveResident(user);
+        Post post = requireVisiblePost(user, postId);
+        return commentRepository.findActiveByPostIdOrderByCreatedAtAsc(post.getId()).stream()
+                .map(c -> toCommentDto(c, post, user))
+                .toList();
+    }
+
+    @Transactional
+    public CommentDto addComment(User user, UUID postId, CreateCommentRequestDto request) {
+        requireActiveResident(user);
+        Post post = requireVisiblePost(user, postId);
+        if (post.getStatus() == PostStatus.REMOVED_MODERATOR) {
+            throw new BusinessRuleException("Cannot comment on a removed post");
+        }
+
+        String content = request.content().trim();
+        if (content.isEmpty()) {
+            throw new BusinessRuleException("Comment content is required");
+        }
+
+        Comment comment = Comment.builder()
+                .post(post)
+                .author(user)
+                .content(content)
+                .deleted(false)
+                .build();
+        Comment saved = commentRepository.saveAndFlush(comment);
+        log.info("Resident {} commented on post {}", user.getEmail(), postId);
+        return toCommentDto(saved, post, user);
+    }
+
+    private Post requireOwnVisiblePost(User user, UUID postId) {
+        Post post = requireVisiblePost(user, postId);
+        if (!post.getAuthor().getId().equals(user.getId())) {
+            throw new AccessDeniedException("Only the author can modify this post");
+        }
+        return post;
+    }
+
+    private Post requireVisiblePost(User user, UUID postId) {
+        Post post = postRepository.findByIdAndNotDeleted(postId)
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+        if (post.getStatus() == PostStatus.REMOVED_MODERATOR) {
+            throw new ResourceNotFoundException("Post not found");
+        }
+        if (post.getScope() == PostScope.DORMITORY) {
+            UUID viewerDorm = user.getDormitory().getId();
+            if (post.getDormitory() == null || !post.getDormitory().getId().equals(viewerDorm)) {
+                throw new ResourceNotFoundException("Post not found");
+            }
+        }
+        return post;
+    }
+
+    private Dormitory requireActiveResident(User user) {
+        if (user.getRole() != UserRole.RESIDENT) {
+            throw new AccountStatusException("Only residents can use the community board");
+        }
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new AccountStatusException("Account must be ACTIVE to use the community board");
+        }
+        if (user.getDormitory() == null) {
+            throw new AccountStatusException("Resident is not assigned to a dormitory");
+        }
+        return user.getDormitory();
+    }
+
+    private String normalizeStatusFilter(String statusFilter) {
+        if (statusFilter == null || statusFilter.isBlank()) {
+            return "ACTIVE";
+        }
+        String normalized = statusFilter.trim().toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "ACTIVE", "RESOLVED", "ALL" -> normalized;
+            default -> throw new BusinessRuleException("status must be ACTIVE, RESOLVED, or ALL");
+        };
+    }
+
+    private Map<UUID, Integer> commentCounts(List<UUID> postIds) {
+        Map<UUID, Integer> map = new HashMap<>();
+        if (postIds.isEmpty()) {
+            return map;
+        }
+        for (Object[] row : commentRepository.countActiveByPostIds(postIds)) {
+            map.put((UUID) row[0], ((Number) row[1]).intValue());
+        }
+        return map;
+    }
+
+    private PostDto toDto(Post post, User viewer, int commentCount) {
+        User author = post.getAuthor();
+        String displayName = author.getFirstName() + " " + author.getLastName();
+        String dormName = author.getDormitory() != null
+                ? author.getDormitory().getName()
+                : (post.getDormitory() != null ? post.getDormitory().getName() : null);
+
+        String roomNumber = null;
+        if (post.getScope() == PostScope.DORMITORY) {
+            roomNumber = roomAssignmentRepository.findByUserIdAndIsActiveTrue(author.getId())
+                    .map(ra -> ra.getRoom().getRoomNumber())
+                    .orElse(author.getDeclaredRoomNumber());
+        }
+
+        return new PostDto(
+                post.getId(),
+                post.getTitle(),
+                post.getContent(),
+                post.getCategory(),
+                post.getScope(),
+                post.getStatus(),
+                displayName,
+                roomNumber,
+                dormName,
+                author.getId().equals(viewer.getId()),
+                commentCount,
+                post.getCreatedAt().atZone(WARSAW).toOffsetDateTime()
+        );
+    }
+
+    private CommentDto toCommentDto(Comment comment, Post post, User viewer) {
+        User author = comment.getAuthor();
+        String displayName = author.getFirstName() + " " + author.getLastName();
+        String dormName = author.getDormitory() != null ? author.getDormitory().getName() : null;
+
+        String roomNumber = null;
+        if (post.getScope() == PostScope.DORMITORY) {
+            roomNumber = roomAssignmentRepository.findByUserIdAndIsActiveTrue(author.getId())
+                    .map(ra -> ra.getRoom().getRoomNumber())
+                    .orElse(author.getDeclaredRoomNumber());
+        }
+
+        return new CommentDto(
+                comment.getId(),
+                post.getId(),
+                comment.getContent(),
+                displayName,
+                roomNumber,
+                dormName,
+                author.getId().equals(viewer.getId()),
+                comment.getCreatedAt().atZone(WARSAW).toOffsetDateTime()
+        );
+    }
+}
