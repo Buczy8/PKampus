@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useOutletContext } from 'react-router-dom'
+import { useOutletContext } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
@@ -41,7 +41,6 @@ import {
   revokeRoomBan,
   unblockResident,
 } from '@/api/admin-residents'
-import { logout } from '@/api/auth'
 import { getApiErrorMessage } from '@/api/errors'
 import type {
   AdminLaundryMachine,
@@ -58,7 +57,6 @@ import type {
   ThematicRoom,
   UserProfile,
 } from '@/api/types'
-import { clearAuthTokens, getRefreshToken } from '@/lib/auth-storage'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -96,7 +94,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 
-type Section =
+export type AdminSection =
   | 'checkins'
   | 'residents'
   | 'dormRooms'
@@ -187,12 +185,10 @@ const emptyDormRoomForm: CreateDormRoomRequest = {
   capacity: 2,
 }
 
-export function AdminPage() {
+export function AdminPortal({ section }: { section: AdminSection }) {
   const user = useOutletContext<UserProfile>()
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  const [section, setSection] = useState<Section>('residents')
   const [activateTarget, setActivateTarget] = useState<PendingResident | null>(null)
   const [rejectTarget, setRejectTarget] = useState<PendingResident | null>(null)
   const [roomNumber, setRoomNumber] = useState('')
@@ -529,17 +525,6 @@ export function AdminPage() {
     onError: (error) => setActionError(getApiErrorMessage(error, 'Update failed')),
   })
 
-  async function handleLogout() {
-    try {
-      await logout(getRefreshToken())
-    } catch {
-      // ignore logout API errors — clear local session anyway
-    }
-    clearAuthTokens()
-    queryClient.clear()
-    navigate('/login', { replace: true })
-  }
-
   function openCreateRoom() {
     setEditingRoom(null)
     setRoomForm(emptyRoomForm)
@@ -648,84 +633,8 @@ export function AdminPage() {
   }
 
   return (
-    <main className="flex min-h-svh w-full items-start justify-center p-6 md:p-10">
-      <div className="flex w-full max-w-4xl flex-col gap-6">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-2xl font-medium tracking-tight">
-              <span className="uppercase">Pk</span>ampus
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Panel ADS — {user.dormitoryName ?? 'Twój akademik'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">{user.role}</Badge>
-            <Button variant="outline" type="button" onClick={() => void handleLogout()}>
-              Wyloguj
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant={section === 'residents' ? 'default' : 'outline'}
-            onClick={() => setSection('residents')}
-          >
-            Mieszkańcy
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={section === 'checkins' ? 'default' : 'outline'}
-            onClick={() => setSection('checkins')}
-          >
-            Meldunki
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={section === 'dormRooms' ? 'default' : 'outline'}
-            onClick={() => setSection('dormRooms')}
-          >
-            Pokoje
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={section === 'rooms' ? 'default' : 'outline'}
-            onClick={() => setSection('rooms')}
-          >
-            Salki
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={section === 'laundry' ? 'default' : 'outline'}
-            onClick={() => setSection('laundry')}
-          >
-            Pralki
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={section === 'events' ? 'default' : 'outline'}
-            onClick={() => setSection('events')}
-          >
-            Komunikaty
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={section === 'porters' ? 'default' : 'outline'}
-            onClick={() => setSection('porters')}
-          >
-            Portierzy
-          </Button>
-        </div>
-
+    <>
+      <div className="flex w-full flex-col gap-6">
         {section === 'residents' && (
           <Card>
             <CardHeader>
@@ -2034,6 +1943,6 @@ export function AdminPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </main>
+    </>
   )
 }

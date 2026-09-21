@@ -1,9 +1,6 @@
 import * as React from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import {
-  LogOut,
-  Settings,
-} from "lucide-react"
+import { LogOut, Settings } from "lucide-react"
 
 import type { UserProfile } from "@/api/types"
 import { PkLogo } from "@/components/brand/PkLogo"
@@ -19,47 +16,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-interface ResidentHeaderProps {
+import { titleForPath } from "./nav-config"
+
+interface AppHeaderProps {
   user: UserProfile
   onLogout: () => void
 }
 
-const routeTitles: Record<string, { title: string; subtitle: string }> = {
-  "/dashboard": {
-    title: "Kokpit Mieszkańca",
-    subtitle: "Przegląd rezerwacji i spraw",
-  },
-  "/card": {
-    title: "Wirtualna Karta Mieszkańca",
-    subtitle: "Oficjalny identyfikator OS PK",
-  },
-  "/laundry": {
-    title: "Pralnia",
-    subtitle: "Harmonogram i rezerwacje pralek",
-  },
-  "/rooms": {
-    title: "Salki Tematyczne",
-    subtitle: "Rezerwacje sal do nauki i relaksu",
-  },
-  "/issues": {
-    title: "Zgłoszenia Usterek",
-    subtitle: "Zgłaszaj awarie do konserwatora",
-  },
-  "/events": {
-    title: "Komunikaty",
-    subtitle: "Oficjalne ogłoszenia ADS, portierni i AOS",
-  },
-  "/board": {
-    title: "Tablica sąsiedzka",
-    subtitle: "Ogłoszenia mieszkańców",
-  },
-  "/settings": {
-    title: "Ustawienia Profilu",
-    subtitle: "Dane kontaktowe i bezpieczeństwo",
-  },
-}
-
-export function ResidentHeader({ user, onLogout }: ResidentHeaderProps) {
+export function AppHeader({ user, onLogout }: AppHeaderProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const [isOnline, setIsOnline] = React.useState<boolean>(
@@ -79,16 +43,11 @@ export function ResidentHeader({ user, onLogout }: ResidentHeaderProps) {
     }
   }, [])
 
-  const currentRouteInfo = routeTitles[location.pathname] ?? {
-    title: "PKampus",
-    subtitle: "Portal Mieszkańca",
-  }
-
+  const currentRouteInfo = titleForPath(location.pathname)
   const initials = `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase() || "M"
 
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full shrink-0 items-center justify-between border-b border-border/60 bg-background/90 px-4 backdrop-blur-md transition-all">
-      {/* Left side: Route Title / Mobile brand */}
       <div className="flex items-center gap-3 min-w-0">
         <PkLogo
           variant="icon"
@@ -105,14 +64,11 @@ export function ResidentHeader({ user, onLogout }: ResidentHeaderProps) {
         </div>
       </div>
 
-      {/* Right side: Context Pill + Network + Theme + Profile */}
       <div className="flex items-center gap-2 md:gap-3">
-        {/* Unified Campus & Network Context Pill */}
         <div
           className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-border/70 bg-muted/40 text-xs text-foreground shrink-0 select-none shadow-2xs whitespace-nowrap"
           title={isOnline ? "Połączono z serwerem PKampus" : "Brak połączenia z siecią (Offline)"}
         >
-          {/* Status Dot */}
           <span className="relative flex size-2 shrink-0">
             {isOnline ? (
               <>
@@ -124,17 +80,14 @@ export function ResidentHeader({ user, onLogout }: ResidentHeaderProps) {
             )}
           </span>
 
-          {/* Dormitory Name (visible on sm+) */}
           <span className="hidden sm:inline font-medium text-foreground truncate max-w-[140px] sm:max-w-[200px]">
             {user.dormitoryName ?? "DS PK"}
           </span>
 
-          {/* Separator on sm+ */}
           {user.roomNumber && (
             <span className="hidden sm:inline text-muted-foreground/40 shrink-0">•</span>
           )}
 
-          {/* Room Number */}
           {user.roomNumber && (
             <span className="font-semibold text-primary shrink-0">
               pok. {user.roomNumber}
@@ -148,7 +101,6 @@ export function ResidentHeader({ user, onLogout }: ResidentHeaderProps) {
           )}
         </div>
 
-        {/* User Profile Dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button

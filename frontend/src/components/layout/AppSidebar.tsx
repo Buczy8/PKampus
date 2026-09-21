@@ -1,20 +1,7 @@
 import { Link, NavLink } from "react-router-dom"
-import {
-  ChevronLeft,
-  ChevronRight,
-  DoorClosed,
-  IdCard,
-  LayoutDashboard,
-  LogOut,
-  Megaphone,
-  MessageSquare,
-  Settings,
-  Waves,
-  Wrench,
-} from "lucide-react"
+import { ChevronLeft, ChevronRight, LogOut } from "lucide-react"
 
 import type { UserProfile } from "@/api/types"
-import { isReceptionistRole } from "@/api/types"
 import { PkLogo } from "@/components/brand/PkLogo"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -25,143 +12,23 @@ import {
 } from "@/components/ui/tooltip"
 import { cn } from "cn"
 
-interface ResidentSidebarProps {
+import { isNavEndPath, navSectionsForRole } from "./nav-config"
+
+interface AppSidebarProps {
   user: UserProfile
   collapsed: boolean
   onToggleCollapse: () => void
   onLogout: () => void
 }
 
-interface NavItem {
-  title: string
-  to: string
-  icon: React.ComponentType<{ className?: string }>
-}
-
-interface NavSection {
-  label: string
-  items: NavItem[]
-}
-
-const navSections: NavSection[] = [
-  {
-    label: "Główne",
-    items: [
-      {
-        title: "Pulpit",
-        to: "/dashboard",
-        icon: LayoutDashboard,
-      },
-      {
-        title: "Karta Mieszkańca",
-        to: "/card",
-        icon: IdCard,
-      },
-    ],
-  },
-  {
-    label: "Usługi i rezerwacje",
-    items: [
-      {
-        title: "Pralnia",
-        to: "/laundry",
-        icon: Waves,
-      },
-      {
-        title: "Salki tematyczne",
-        to: "/rooms",
-        icon: DoorClosed,
-      },
-      {
-        title: "Zgłoszenia usterek",
-        to: "/issues",
-        icon: Wrench,
-      },
-    ],
-  },
-  {
-    label: "Społeczność",
-    items: [
-      {
-        title: "Komunikaty",
-        to: "/events",
-        icon: Megaphone,
-      },
-      {
-        title: "Tablica",
-        to: "/board",
-        icon: MessageSquare,
-      },
-    ],
-  },
-  {
-    label: "Konto",
-    items: [
-      {
-        title: "Ustawienia",
-        to: "/settings",
-        icon: Settings,
-      },
-    ],
-  },
-]
-
-const receptionistNavSections: NavSection[] = [
-  {
-    label: "Portiernia",
-    items: [
-      {
-        title: "Pulpit",
-        to: "/receptionist",
-        icon: LayoutDashboard,
-      },
-      {
-        title: "Pralnia",
-        to: "/receptionist/laundry",
-        icon: Waves,
-      },
-      {
-        title: "Salki",
-        to: "/receptionist/rooms",
-        icon: DoorClosed,
-      },
-      {
-        title: "Usterki",
-        to: "/receptionist/issues",
-        icon: Wrench,
-      },
-      {
-        title: "Komunikaty",
-        to: "/receptionist/events",
-        icon: Megaphone,
-      },
-      {
-        title: "Tablica",
-        to: "/receptionist/board",
-        icon: MessageSquare,
-      },
-    ],
-  },
-  {
-    label: "Konto",
-    items: [
-      {
-        title: "Ustawienia",
-        to: "/settings",
-        icon: Settings,
-      },
-    ],
-  },
-]
-
-export function ResidentSidebar({
+export function AppSidebar({
   user,
   collapsed,
   onToggleCollapse,
   onLogout,
-}: ResidentSidebarProps) {
+}: AppSidebarProps) {
   const initials = `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase() || "M"
-  const sections = isReceptionistRole(user.role) ? receptionistNavSections : navSections
+  const sections = navSectionsForRole(user.role)
 
   return (
     <aside
@@ -170,7 +37,6 @@ export function ResidentSidebar({
         collapsed ? "w-16" : "w-64"
       )}
     >
-      {/* Header with Brand & Collapse/Expand Toggle */}
       <div
         className={cn(
           "flex items-center h-14 border-b border-sidebar-border/60 shrink-0",
@@ -224,7 +90,6 @@ export function ResidentSidebar({
         )}
       </div>
 
-      {/* Navigation Sections */}
       <div
         className={cn(
           "flex-1 overflow-y-auto overflow-x-hidden py-3 space-y-4",
@@ -248,7 +113,7 @@ export function ResidentSidebar({
                   <NavLink
                     key={item.to}
                     to={item.to}
-                    end={item.to === "/receptionist" || item.to === "/dashboard"}
+                    end={isNavEndPath(item.to)}
                     className={({ isActive }) =>
                       cn(
                         "flex items-center rounded-lg text-sm transition-colors group relative",
@@ -295,7 +160,6 @@ export function ResidentSidebar({
         ))}
       </div>
 
-      {/* Footer Profile & Actions */}
       <div
         className={cn(
           "border-t border-sidebar-border/60 shrink-0",

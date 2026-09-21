@@ -1,8 +1,6 @@
 import { useState } from 'react'
-import { useNavigate, useOutletContext } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { logout } from '@/api/auth'
 import { getApiErrorMessage } from '@/api/errors'
 import {
   createCampusEvent,
@@ -23,9 +21,7 @@ import type {
   DormAdminAccount,
   DormEvent,
   SuperAdminDormitory,
-  UserProfile,
 } from '@/api/types'
-import { clearAuthTokens, getRefreshToken } from '@/lib/auth-storage'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -62,7 +58,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 
-type Section = 'dormitories' | 'admins' | 'events'
+export type SuperAdminSection = 'dormitories' | 'admins' | 'events'
 
 const emptyDormForm: CreateDormitoryRequest = {
   code: '',
@@ -109,12 +105,9 @@ function formatWhen(iso: string | null | undefined): string {
   }
 }
 
-export function SuperAdminPage() {
-  const user = useOutletContext<UserProfile>()
-  const navigate = useNavigate()
+export function SuperAdminPortal({ section }: { section: SuperAdminSection }) {
   const queryClient = useQueryClient()
 
-  const [section, setSection] = useState<Section>('dormitories')
   const [actionError, setActionError] = useState<string | null>(null)
 
   const [dormDialogOpen, setDormDialogOpen] = useState(false)
@@ -225,17 +218,6 @@ export function SuperAdminPage() {
     onError: (error) => setActionError(getApiErrorMessage(error, 'Delete failed')),
   })
 
-  async function handleLogout() {
-    try {
-      await logout(getRefreshToken())
-    } catch {
-      // ignore
-    }
-    clearAuthTokens()
-    queryClient.clear()
-    navigate('/login', { replace: true })
-  }
-
   function openCreateDorm() {
     setEditingDorm(null)
     setDormForm(emptyDormForm)
@@ -287,43 +269,8 @@ export function SuperAdminPage() {
   }
 
   return (
-    <main className="flex min-h-svh w-full items-start justify-center p-6 md:p-10">
-      <div className="flex w-full max-w-5xl flex-col gap-6">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-2xl font-medium tracking-tight">
-              <span className="uppercase">Pk</span>ampus
-            </p>
-            <p className="text-sm text-muted-foreground">Panel Super Admina (AOS)</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">{user.role}</Badge>
-            <Button variant="outline" type="button" onClick={() => void handleLogout()}>
-              Wyloguj
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {(
-            [
-              ['dormitories', 'Akademiki'],
-              ['admins', 'Kierownicy ADS'],
-              ['events', 'Komunikaty'],
-            ] as const
-          ).map(([id, label]) => (
-            <Button
-              key={id}
-              type="button"
-              size="sm"
-              variant={section === id ? 'default' : 'outline'}
-              onClick={() => setSection(id)}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
-
+    <>
+      <div className="flex w-full flex-col gap-6">
         {actionError ? (
           <p className="text-sm text-destructive">{actionError}</p>
         ) : null}
@@ -799,6 +746,6 @@ export function SuperAdminPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </main>
+    </>
   )
 }

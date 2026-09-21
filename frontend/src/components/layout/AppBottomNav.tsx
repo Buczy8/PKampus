@@ -1,95 +1,13 @@
 import { NavLink, useOutletContext } from "react-router-dom"
-import {
-  DoorClosed,
-  IdCard,
-  LayoutDashboard,
-  Megaphone,
-  MessageSquare,
-  Waves,
-  Wrench,
-} from "lucide-react"
 
 import type { UserProfile } from "@/api/types"
-import { isReceptionistRole } from "@/api/types"
 import { cn } from "cn"
 
-interface BottomNavItem {
-  title: string
-  to: string
-  icon: React.ComponentType<{ className?: string }>
-}
+import { bottomNavForRole } from "./nav-config"
 
-const residentBottomNavItems: BottomNavItem[] = [
-  {
-    title: "Pulpit",
-    to: "/dashboard",
-    icon: LayoutDashboard,
-  },
-  {
-    title: "Karta",
-    to: "/card",
-    icon: IdCard,
-  },
-  {
-    title: "Pralnia",
-    to: "/laundry",
-    icon: Waves,
-  },
-  {
-    title: "Salki",
-    to: "/rooms",
-    icon: DoorClosed,
-  },
-  {
-    title: "Usterki",
-    to: "/issues",
-    icon: Wrench,
-  },
-  {
-    title: "Komunikaty",
-    to: "/events",
-    icon: Megaphone,
-  },
-  {
-    title: "Tablica",
-    to: "/board",
-    icon: MessageSquare,
-  },
-]
-
-const receptionistBottomNavItems: BottomNavItem[] = [
-  {
-    title: "Pulpit",
-    to: "/receptionist",
-    icon: LayoutDashboard,
-  },
-  {
-    title: "Pralnia",
-    to: "/receptionist/laundry",
-    icon: Waves,
-  },
-  {
-    title: "Usterki",
-    to: "/receptionist/issues",
-    icon: Wrench,
-  },
-  {
-    title: "Komunikaty",
-    to: "/receptionist/events",
-    icon: Megaphone,
-  },
-  {
-    title: "Tablica",
-    to: "/receptionist/board",
-    icon: MessageSquare,
-  },
-]
-
-export function ResidentBottomNav() {
+export function AppBottomNav() {
   const user = useOutletContext<UserProfile>()
-  const items = isReceptionistRole(user?.role)
-    ? receptionistBottomNavItems
-    : residentBottomNavItems
+  const items = bottomNavForRole(user?.role)
 
   return (
     <nav
