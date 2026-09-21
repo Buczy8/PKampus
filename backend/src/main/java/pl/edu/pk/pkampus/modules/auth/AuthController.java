@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import pl.edu.pk.pkampus.common.ApiResponse;
 import pl.edu.pk.pkampus.modules.auth.dto.AuthResponseDto;
+import pl.edu.pk.pkampus.modules.auth.dto.ChangePasswordRequestDto;
 import pl.edu.pk.pkampus.modules.auth.dto.LoginRequestDto;
 import pl.edu.pk.pkampus.modules.auth.dto.RegisterRequestDto;
 import pl.edu.pk.pkampus.modules.auth.dto.RegisterResponseDto;
@@ -106,5 +107,23 @@ public class AuthController {
         }
         UserProfileDto profile = authService.getCurrentUserProfile(user.getId());
         return ResponseEntity.ok(ApiResponse.ok(profile));
+    }
+
+    @PostMapping("/change-password")
+    @Operation(
+            summary = "Change password",
+            description = "Verifies the current password and sets a new one (BCrypt). "
+                    + "If the account is in MUST_CHANGE_PASSWORD, transitions to ACTIVE (FR-AUTH-06)."
+    )
+    public ResponseEntity<ApiResponse<UserProfileDto>> changePassword(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody ChangePasswordRequestDto request
+    ) {
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("User is not authenticated"));
+        }
+        UserProfileDto profile = authService.changePassword(user, request);
+        return ResponseEntity.ok(ApiResponse.ok(profile, "Password updated successfully"));
     }
 }
