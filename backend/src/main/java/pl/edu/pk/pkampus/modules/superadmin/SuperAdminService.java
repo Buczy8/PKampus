@@ -147,7 +147,7 @@ public class SuperAdminService {
                 .lastName(request.getLastName().trim())
                 .phoneNumber(request.getPhoneNumber().trim())
                 .role(UserRole.DORM_ADMIN)
-                .status(UserStatus.ACTIVE)
+                .status(UserStatus.MUST_CHANGE_PASSWORD)
                 .dormitory(dormitory)
                 .build();
 

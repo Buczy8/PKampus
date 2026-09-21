@@ -61,7 +61,7 @@ public class AdminReceptionistService {
                 .lastName(request.getLastName().trim())
                 .phoneNumber(request.getPhoneNumber().trim())
                 .role(UserRole.RECEPTIONIST)
-                .status(UserStatus.ACTIVE)
+                .status(UserStatus.MUST_CHANGE_PASSWORD)
                 .dormitory(dormitory)
                 .build();
 
