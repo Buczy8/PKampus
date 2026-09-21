@@ -110,7 +110,7 @@ class AdminReceptionistIntegrationTest {
                                 """.formatted(email)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.email").value(email))
-                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.status").value("MUST_CHANGE_PASSWORD"))
                 .andExpect(jsonPath("$.data.dormitoryId").value(dorm1.getId().toString()));
 
         mockMvc.perform(get("/api/v1/admin/receptionists")

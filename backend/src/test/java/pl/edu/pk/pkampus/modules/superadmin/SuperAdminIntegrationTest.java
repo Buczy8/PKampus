@@ -167,7 +167,7 @@ class SuperAdminIntegrationTest {
                                 """.formatted(email, dorm.getId())))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.email").value(email))
-                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.status").value("MUST_CHANGE_PASSWORD"))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();

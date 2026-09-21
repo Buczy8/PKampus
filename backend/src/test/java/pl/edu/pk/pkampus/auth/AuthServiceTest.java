@@ -69,6 +69,9 @@ class AuthServiceTest {
     private pl.edu.pk.pkampus.security.jwt.TokenRevocationService tokenRevocationService;
 
     @Mock
+    private pl.edu.pk.pkampus.security.jwt.AuthenticatedUserCache authenticatedUserCache;
+
+    @Mock
     private EmailService emailService;
 
     @InjectMocks
@@ -207,6 +210,86 @@ class AuthServiceTest {
         assertEquals("student@pk.edu.pl", response.getUser().getEmail());
         verify(tokenRevocationService).clearRevocation(testUser.getId());
         verify(refreshTokenService).revokeAllUserTokens(testUser.getId());
+    }
+
+    @Test
+    void shouldLoginSuccessfullyWhenMustChangePassword() {
+        testUser.setStatus(UserStatus.MUST_CHANGE_PASSWORD);
+        LoginRequestDto loginDto = new LoginRequestDto("student@pk.edu.pl", "Password123!");
+
+        when(userRepository.findByEmail("student@pk.edu.pl")).thenReturn(Optional.of(testUser));
+        when(passwordEncoder.matches("Password123!", testUser.getPasswordHash())).thenReturn(true);
+        when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(testUser.getId())).thenReturn(Optional.empty());
+        when(jwtService.generateToken(testUser, "101")).thenReturn("valid-jwt-token");
+        when(jwtService.getExpirationMinutes()).thenReturn(15L);
+        when(refreshTokenService.createRefreshToken(testUser)).thenReturn("valid-refresh-token");
+        when(refreshTokenService.getRefreshExpirationSeconds()).thenReturn(604800L);
+
+        AuthResponseDto response = authService.login(loginDto);
+
+        assertEquals(UserStatus.MUST_CHANGE_PASSWORD, response.getUser().getStatus());
+        assertEquals("valid-jwt-token", response.getToken());
+    }
+
+    @Test
+    void shouldChangePasswordAndActivateMustChangePasswordAccount() {
+        testUser.setStatus(UserStatus.MUST_CHANGE_PASSWORD);
+        when(userRepository.findById(testUser.getId())).thenReturn(Optional.of(testUser));
+        when(passwordEncoder.matches("Password123!", testUser.getPasswordHash())).thenReturn(true);
+        when(passwordEncoder.matches("NewPassword1!", testUser.getPasswordHash())).thenReturn(false);
+        when(passwordEncoder.encode("NewPassword1!")).thenReturn("new-hash");
+        when(userRepository.save(testUser)).thenReturn(testUser);
+        when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(testUser.getId())).thenReturn(Optional.empty());
+
+        var profile = authService.changePassword(
+                testUser,
+                pl.edu.pk.pkampus.modules.auth.dto.ChangePasswordRequestDto.builder()
+                        .currentPassword("Password123!")
+                        .newPassword("NewPassword1!")
+                        .build()
+        );
+
+        assertEquals(UserStatus.ACTIVE, testUser.getStatus());
+        assertEquals(UserStatus.ACTIVE, profile.getStatus());
+        assertEquals("new-hash", testUser.getPasswordHash());
+        verify(authenticatedUserCache).invalidate(testUser.getId());
+    }
+
+    @Test
+    void shouldChangePasswordWithoutChangingActiveStatus() {
+        testUser.setStatus(UserStatus.ACTIVE);
+        when(userRepository.findById(testUser.getId())).thenReturn(Optional.of(testUser));
+        when(passwordEncoder.matches("Password123!", testUser.getPasswordHash())).thenReturn(true);
+        when(passwordEncoder.matches("NewPassword1!", testUser.getPasswordHash())).thenReturn(false);
+        when(passwordEncoder.encode("NewPassword1!")).thenReturn("new-hash");
+        when(userRepository.save(testUser)).thenReturn(testUser);
+        when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(testUser.getId())).thenReturn(Optional.empty());
+
+        var profile = authService.changePassword(
+                testUser,
+                pl.edu.pk.pkampus.modules.auth.dto.ChangePasswordRequestDto.builder()
+                        .currentPassword("Password123!")
+                        .newPassword("NewPassword1!")
+                        .build()
+        );
+
+        assertEquals(UserStatus.ACTIVE, testUser.getStatus());
+        assertEquals(UserStatus.ACTIVE, profile.getStatus());
+    }
+
+    @Test
+    void shouldRejectChangePasswordWhenCurrentPasswordWrong() {
+        testUser.setStatus(UserStatus.ACTIVE);
+        when(userRepository.findById(testUser.getId())).thenReturn(Optional.of(testUser));
+        when(passwordEncoder.matches("Wrong!", testUser.getPasswordHash())).thenReturn(false);
+
+        assertThrows(IllegalArgumentException.class, () -> authService.changePassword(
+                testUser,
+                pl.edu.pk.pkampus.modules.auth.dto.ChangePasswordRequestDto.builder()
+                        .currentPassword("Wrong!")
+                        .newPassword("NewPassword1!")
+                        .build()
+        ));
     }
 
     @Test

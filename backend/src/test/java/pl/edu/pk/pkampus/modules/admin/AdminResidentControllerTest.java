@@ -61,6 +61,9 @@ class AdminResidentControllerTest {
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @MockBean
+    private pl.edu.pk.pkampus.security.config.MustChangePasswordFilter mustChangePasswordFilter;
+
+    @MockBean
     private AuthRateLimitFilter authRateLimitFilter;
 
     @MockBean
