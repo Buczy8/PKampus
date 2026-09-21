@@ -13,6 +13,7 @@ import {
 import { getApiErrorMessage } from "@/api/errors"
 import {
   getReceptionistDesk,
+  getReceptionistCardDay,
   issueLaundryKey,
   issueRoomKey,
   returnLaundryKey,
@@ -88,6 +89,12 @@ export function ReceptionistDeskPage() {
     refetchInterval: DESK_REFRESH_MS,
   })
 
+  const cardDayQuery = useQuery({
+    queryKey: ["receptionist", "card-day"],
+    queryFn: getReceptionistCardDay,
+    refetchInterval: DESK_REFRESH_MS,
+  })
+
   const invalidateDesk = () =>
     queryClient.invalidateQueries({ queryKey: ["receptionist", "desk"] })
 
@@ -152,6 +159,26 @@ export function ReceptionistDeskPage() {
           Odśwież
         </Button>
       </div>
+
+      {cardDayQuery.data && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/70 bg-card px-4 py-3 text-sm">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Kod dnia karty
+          </span>
+          <span
+            className="size-4 rounded-full ring-1 ring-border shrink-0"
+            style={{ backgroundColor: cardDayQuery.data.dayColorHex }}
+            title={cardDayQuery.data.dayColorName}
+          />
+          <span className="font-medium">{cardDayQuery.data.dayColorName}</span>
+          <span className="font-mono font-semibold tracking-wider">
+            {cardDayQuery.data.dayCode}
+          </span>
+          <span className="text-xs text-muted-foreground ml-auto tabular-nums">
+            {formatWarsawDateTime(cardDayQuery.data.serverTime)}
+          </span>
+        </div>
+      )}
 
       {deskQuery.isError && (
         <p className="text-sm text-destructive">

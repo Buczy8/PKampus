@@ -721,4 +721,26 @@ export interface UpdateIssueStatusRequest {
   staffNotes?: string | null
 }
 
+export interface ResidentCard {
+  firstName: string
+  lastName: string
+  dormitoryName: string | null
+  roomNumber: string | null
+  academicYear: string
+  avatarUrl: string | null
+  status: string
+  dayCode: string
+  dayColorHex: string
+  dayColorName: string
+  serverTime: string
+}
+
+export interface CardDayVerification {
+  dayCode: string
+  dayColorHex: string
+  dayColorName: string
+  validDate: string
+  serverTime: string
+}
+
 

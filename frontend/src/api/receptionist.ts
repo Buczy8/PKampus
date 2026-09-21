@@ -5,6 +5,7 @@ import type {
   BoardPost,
   BoardPostCategory,
   BoardPostStatusFilter,
+  CardDayVerification,
   CreateDormEventRequest,
   DeskLaundryBooking,
   DeskLaundryMachine,
@@ -28,6 +29,16 @@ export async function getReceptionistDesk(): Promise<ReceptionistDesk> {
   )
   if (!data.success || !data.data) {
     throw new Error(data.message ?? 'Failed to load receptionist desk')
+  }
+  return data.data
+}
+
+export async function getReceptionistCardDay(): Promise<CardDayVerification> {
+  const { data } = await apiClient.get<ApiResponse<CardDayVerification>>(
+    '/receptionist/card-day',
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to load card day verification')
   }
   return data.data
 }
