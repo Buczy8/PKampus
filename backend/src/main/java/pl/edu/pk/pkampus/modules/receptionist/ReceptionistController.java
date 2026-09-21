@@ -30,6 +30,8 @@ import pl.edu.pk.pkampus.modules.issues.IssueCategory;
 import pl.edu.pk.pkampus.modules.issues.IssueStatus;
 import pl.edu.pk.pkampus.modules.issues.IssueUrgency;
 import pl.edu.pk.pkampus.modules.laundry.dto.LaundryScheduleResponseDto;
+import pl.edu.pk.pkampus.modules.profile.ProfileCardService;
+import pl.edu.pk.pkampus.modules.profile.dto.CardDayDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.DeskLaundryBookingDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.DeskLaundryMachineDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.DeskRoomBookingDto;
@@ -57,6 +59,7 @@ import java.util.UUID;
 public class ReceptionistController {
 
     private final ReceptionistService receptionistService;
+    private final ProfileCardService profileCardService;
 
     @GetMapping("/desk")
     @Operation(summary = "Today's desk snapshot for the porter's dormitory")
@@ -64,6 +67,12 @@ public class ReceptionistController {
             @AuthenticationPrincipal User user
     ) {
         return ResponseEntity.ok(ApiResponse.ok(receptionistService.getDesk(user)));
+    }
+
+    @GetMapping("/card-day")
+    @Operation(summary = "Today's card verification code and color for visual checks at the desk")
+    public ResponseEntity<ApiResponse<CardDayDto>> cardDay() {
+        return ResponseEntity.ok(ApiResponse.ok(profileCardService.getCardDay()));
     }
 
     @GetMapping("/laundry/schedule")

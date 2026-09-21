@@ -69,7 +69,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 );
 
                 if (user != null
-                        && isLoginEligible(user.getStatus())
+                        && isAuthenticationEligible(request, user.getStatus())
                         && jwtService.isTokenValid(token, user)) {
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             user,
@@ -90,7 +90,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
+    private static boolean isAuthenticationEligible(HttpServletRequest request, UserStatus status) {
+        if (isLoginEligible(status)) {
+            return true;
+        }
+        // FR-CARD-03: allow card endpoint to authenticate BLOCKED/CHECKED_OUT so API returns 403 board.
+        return isResidentCardRequest(request) && isCardStatusBoard(status);
+    }
+
     private static boolean isLoginEligible(UserStatus status) {
         return status == UserStatus.ACTIVE || status == UserStatus.MUST_CHANGE_PASSWORD;
+    }
+
+    private static boolean isCardStatusBoard(UserStatus status) {
+        return status == UserStatus.BLOCKED || status == UserStatus.CHECKED_OUT;
+    }
+
+    private static boolean isResidentCardRequest(HttpServletRequest request) {
+        if (!"GET".equalsIgnoreCase(request.getMethod())) {
+            return false;
+        }
+        String path = request.getRequestURI();
+        return path != null && path.endsWith("/api/v1/profile/card");
     }
 }
