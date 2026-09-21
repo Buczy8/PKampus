@@ -11,6 +11,7 @@ import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
 import pl.edu.pk.pkampus.modules.issues.Issue;
 import pl.edu.pk.pkampus.modules.issues.IssueCategory;
 import pl.edu.pk.pkampus.modules.issues.IssueRepository;
+import pl.edu.pk.pkampus.modules.issues.IssueService;
 import pl.edu.pk.pkampus.modules.issues.IssueStatus;
 import pl.edu.pk.pkampus.modules.issues.IssueUrgency;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBooking;
@@ -28,6 +29,7 @@ import pl.edu.pk.pkampus.modules.receptionist.dto.DeskRoomBookingDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.MachineBreakdownResponseDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.ReceptionistDeskDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.RoomMaintenanceResponseDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.StaffIssueDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.StaffRoomBookingSlotDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.StaffRoomDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.StaffRoomScheduleDayDto;
@@ -47,6 +49,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
@@ -83,6 +86,7 @@ public class ReceptionistService {
     private final RoomBookingRepository roomBookingRepository;
     private final ThematicRoomRepository thematicRoomRepository;
     private final IssueRepository issueRepository;
+    private final IssueService issueService;
     private final EmailService emailService;
 
     @Transactional(readOnly = true)
@@ -112,6 +116,38 @@ public class ReceptionistService {
                 .toList();
 
         return new ReceptionistDeskDto(laundry, rooms, openIssues.size(), openIssues);
+    }
+
+    @Transactional(readOnly = true)
+    public List<StaffIssueDto> listIssues(
+            User actor,
+            Collection<IssueStatus> statuses,
+            IssueCategory category,
+            IssueUrgency urgency,
+            LocalDate from,
+            LocalDate to,
+            String roomNumber,
+            Integer floor
+    ) {
+        UUID dormitoryId = requireActorDormitoryId(actor);
+        return issueService.listStaffIssues(
+                dormitoryId, statuses, category, urgency, from, to, roomNumber, floor);
+    }
+
+    @Transactional(readOnly = true)
+    public StaffIssueDto getIssue(User actor, UUID issueId) {
+        return issueService.getStaffIssue(requireActorDormitoryId(actor), issueId);
+    }
+
+    @Transactional
+    public StaffIssueDto updateIssueStatus(
+            User actor,
+            UUID issueId,
+            IssueStatus status,
+            String staffNotes
+    ) {
+        return issueService.updateStaffIssueStatus(
+                requireActorDormitoryId(actor), issueId, status, staffNotes);
     }
 
     @Transactional(readOnly = true)

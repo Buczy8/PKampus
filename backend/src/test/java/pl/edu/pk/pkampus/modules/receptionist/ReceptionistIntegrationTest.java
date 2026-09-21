@@ -16,8 +16,11 @@ import pl.edu.pk.pkampus.common.storage.MinioStorageService;
 import pl.edu.pk.pkampus.mail.EmailService;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
 import pl.edu.pk.pkampus.modules.dormitory.DormitoryRepository;
+import pl.edu.pk.pkampus.modules.issues.Issue;
+import pl.edu.pk.pkampus.modules.issues.IssueCategory;
 import pl.edu.pk.pkampus.modules.issues.IssueRepository;
 import pl.edu.pk.pkampus.modules.issues.IssueStatus;
+import pl.edu.pk.pkampus.modules.issues.IssueUrgency;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBooking;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBookingRepository;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBookingStatus;
@@ -48,6 +51,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -535,6 +539,89 @@ class ReceptionistIntegrationTest {
                         .header("Authorization", bearer(receptionist)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("AVAILABLE"));
+    }
+
+    @Test
+    @DisplayName("GET issues lists dormitory issues; resident forbidden")
+    void listIssuesAccess() throws Exception {
+        issueRepository.save(Issue.builder()
+                .reporter(resident)
+                .dormitory(dorm1)
+                .commonAreaName("pralnia")
+                .category(IssueCategory.PLUMBING)
+                .urgency(IssueUrgency.URGENT)
+                .description("Wyciek w pralni")
+                .status(IssueStatus.NEW)
+                .build());
+
+        issueRepository.save(Issue.builder()
+                .reporter(otherResident)
+                .dormitory(dorm2)
+                .commonAreaName("winda")
+                .category(IssueCategory.OTHER)
+                .urgency(IssueUrgency.NORMAL)
+                .description("Winda obca")
+                .status(IssueStatus.NEW)
+                .build());
+
+        mockMvc.perform(get("/api/v1/receptionist/issues")
+                        .header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].description").value("Wyciek w pralni"));
+
+        mockMvc.perform(get("/api/v1/receptionist/issues")
+                        .header("Authorization", bearer(resident)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("PATCH issue status sends email; illegal transition 422; foreign dorm 404")
+    void updateIssueStatusFlow() throws Exception {
+        Issue issue = issueRepository.save(Issue.builder()
+                .reporter(resident)
+                .dormitory(dorm1)
+                .commonAreaName("korytarz")
+                .category(IssueCategory.ELECTRICAL)
+                .urgency(IssueUrgency.NORMAL)
+                .description("Zgasło światło")
+                .status(IssueStatus.NEW)
+                .build());
+
+        mockMvc.perform(patch("/api/v1/receptionist/issues/" + issue.getId() + "/status")
+                        .header("Authorization", bearer(receptionist))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"status":"ASSIGNED_TO_MAINTENANCE","staffNotes":"Przekazano konserwatorowi"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ASSIGNED_TO_MAINTENANCE"))
+                .andExpect(jsonPath("$.data.staffNotes").value("Przekazano konserwatorowi"));
+
+        verify(emailService).sendIssueStatusChangedEmail(
+                anyString(), anyString(), anyString(), anyString());
+
+        mockMvc.perform(patch("/api/v1/receptionist/issues/" + issue.getId() + "/status")
+                        .header("Authorization", bearer(receptionist))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"RESOLVED\"}"))
+                .andExpect(status().isUnprocessableEntity());
+
+        Issue foreign = issueRepository.save(Issue.builder()
+                .reporter(otherResident)
+                .dormitory(dorm2)
+                .commonAreaName("inne")
+                .category(IssueCategory.OTHER)
+                .urgency(IssueUrgency.NORMAL)
+                .description("Obca usterka")
+                .status(IssueStatus.NEW)
+                .build());
+
+        mockMvc.perform(patch("/api/v1/receptionist/issues/" + foreign.getId() + "/status")
+                        .header("Authorization", bearer(receptionist))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"REJECTED\",\"staffNotes\":\"Nie dotyczy\"}"))
+                .andExpect(status().isNotFound());
     }
 
     private Instant todayAt(LocalTime time) {

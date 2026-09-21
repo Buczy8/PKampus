@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,6 +18,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pl.edu.pk.pkampus.common.ApiResponse;
+import pl.edu.pk.pkampus.modules.issues.IssueCategory;
+import pl.edu.pk.pkampus.modules.issues.IssueStatus;
+import pl.edu.pk.pkampus.modules.issues.IssueUrgency;
 import pl.edu.pk.pkampus.modules.laundry.dto.LaundryScheduleResponseDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.DeskLaundryBookingDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.DeskLaundryMachineDto;
@@ -27,10 +31,13 @@ import pl.edu.pk.pkampus.modules.receptionist.dto.MachineBreakdownResponseDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.ReceptionistDeskDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.RoomMaintenanceRequestDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.RoomMaintenanceResponseDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.StaffIssueDto;
 import pl.edu.pk.pkampus.modules.receptionist.dto.StaffRoomScheduleResponseDto;
+import pl.edu.pk.pkampus.modules.receptionist.dto.UpdateIssueStatusRequestDto;
 import pl.edu.pk.pkampus.modules.user.User;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -181,5 +188,44 @@ public class ReceptionistController {
         return ResponseEntity.ok(ApiResponse.ok(
                 receptionistService.returnRoomKey(user, id),
                 "Room key returned"));
+    }
+
+    @GetMapping("/issues")
+    @Operation(summary = "List maintenance issues for the porter's dormitory (FR-ISSUE-03)")
+    public ResponseEntity<ApiResponse<List<StaffIssueDto>>> listIssues(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) List<IssueStatus> status,
+            @RequestParam(required = false) IssueCategory category,
+            @RequestParam(required = false) IssueUrgency urgency,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String roomNumber,
+            @RequestParam(required = false) Integer floor
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                receptionistService.listIssues(
+                        user, status, category, urgency, from, to, roomNumber, floor)));
+    }
+
+    @GetMapping("/issues/{id}")
+    @Operation(summary = "Issue details with presigned photo URL")
+    public ResponseEntity<ApiResponse<StaffIssueDto>> getIssue(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID id
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(receptionistService.getIssue(user, id)));
+    }
+
+    @PatchMapping("/issues/{id}/status")
+    @Operation(summary = "Update issue status and staff notes (FR-ISSUE-04)")
+    public ResponseEntity<ApiResponse<StaffIssueDto>> updateIssueStatus(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateIssueStatusRequestDto request
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                receptionistService.updateIssueStatus(
+                        user, id, request.status(), request.staffNotes()),
+                "Issue status updated"));
     }
 }
