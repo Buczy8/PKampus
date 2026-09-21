@@ -11,9 +11,11 @@ import { IssuesPage } from '@/pages/IssuesPage'
 import { LaundryPage } from '@/pages/LaundryPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { PendingApprovalPage } from '@/pages/PendingApprovalPage'
+import { ReceptionistBoardPage } from '@/pages/ReceptionistBoardPage'
 import { ReceptionistDeskPage } from '@/pages/ReceptionistDeskPage'
-import { ReceptionistLaundryPage } from '@/pages/ReceptionistLaundryPage'
+import { ReceptionistEventsPage } from '@/pages/ReceptionistEventsPage'
 import { ReceptionistIssuesPage } from '@/pages/ReceptionistIssuesPage'
+import { ReceptionistLaundryPage } from '@/pages/ReceptionistLaundryPage'
 import { ReceptionistRoomsPage } from '@/pages/ReceptionistRoomsPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { RoomsPage } from '@/pages/RoomsPage'
@@ -58,6 +60,8 @@ export function App() {
             <Route path="/receptionist/laundry" element={<ReceptionistLaundryPage />} />
             <Route path="/receptionist/rooms" element={<ReceptionistRoomsPage />} />
             <Route path="/receptionist/issues" element={<ReceptionistIssuesPage />} />
+            <Route path="/receptionist/events" element={<ReceptionistEventsPage />} />
+            <Route path="/receptionist/board" element={<ReceptionistBoardPage />} />
           </Route>
         </Route>
 

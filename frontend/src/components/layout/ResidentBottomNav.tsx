@@ -4,7 +4,7 @@ import {
   IdCard,
   LayoutDashboard,
   Megaphone,
-  Settings,
+  MessageSquare,
   Waves,
   Wrench,
 } from "lucide-react"
@@ -64,19 +64,19 @@ const receptionistBottomNavItems: BottomNavItem[] = [
     icon: Waves,
   },
   {
-    title: "Salki",
-    to: "/receptionist/rooms",
-    icon: DoorClosed,
-  },
-  {
     title: "Usterki",
     to: "/receptionist/issues",
     icon: Wrench,
   },
   {
-    title: "Ustawienia",
-    to: "/settings",
-    icon: Settings,
+    title: "Komunikaty",
+    to: "/receptionist/events",
+    icon: Megaphone,
+  },
+  {
+    title: "Tablica",
+    to: "/receptionist/board",
+    icon: MessageSquare,
   },
 ]
 

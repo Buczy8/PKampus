@@ -1,10 +1,16 @@
 import { apiClient } from '@/api/client'
 import type {
   ApiResponse,
+  BoardComment,
+  BoardPost,
+  BoardPostCategory,
+  BoardPostStatusFilter,
+  CreateDormEventRequest,
   DeskLaundryBooking,
   DeskLaundryMachine,
   DeskRoomBooking,
   DeskThematicRoom,
+  DormEvent,
   LaundrySchedule,
   MachineBreakdownResult,
   ReceptionistDesk,
@@ -12,6 +18,7 @@ import type {
   StaffIssue,
   StaffIssueFilters,
   StaffRoomSchedule,
+  UpdateDormEventRequest,
   UpdateIssueStatusRequest,
 } from '@/api/types'
 
@@ -175,6 +182,97 @@ export async function updateReceptionistIssueStatus(
     throw new Error(data.message ?? 'Failed to update issue status')
   }
   return data.data
+}
+
+export async function listReceptionistEvents(): Promise<DormEvent[]> {
+  const { data } = await apiClient.get<ApiResponse<DormEvent[]>>(
+    '/receptionist/events',
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to load dorm notices')
+  }
+  return data.data
+}
+
+export async function createReceptionistEvent(
+  request: CreateDormEventRequest,
+): Promise<DormEvent> {
+  const { data } = await apiClient.post<ApiResponse<DormEvent>>(
+    '/receptionist/events',
+    request,
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to publish dorm notice')
+  }
+  return data.data
+}
+
+export async function updateReceptionistEvent(
+  id: string,
+  request: UpdateDormEventRequest,
+): Promise<DormEvent> {
+  const { data } = await apiClient.patch<ApiResponse<DormEvent>>(
+    `/receptionist/events/${id}`,
+    request,
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to update dorm notice')
+  }
+  return data.data
+}
+
+export async function deleteReceptionistEvent(id: string): Promise<void> {
+  const { data } = await apiClient.delete<ApiResponse<null>>(
+    `/receptionist/events/${id}`,
+  )
+  if (!data.success) {
+    throw new Error(data.message ?? 'Failed to delete dorm notice')
+  }
+}
+
+export async function listReceptionistBoardPosts(params?: {
+  category?: BoardPostCategory
+  status?: BoardPostStatusFilter
+}): Promise<BoardPost[]> {
+  const { data } = await apiClient.get<ApiResponse<BoardPost[]>>(
+    '/receptionist/posts',
+    { params },
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to load board posts')
+  }
+  return data.data
+}
+
+export async function removeReceptionistBoardPost(id: string): Promise<BoardPost> {
+  const { data } = await apiClient.post<ApiResponse<BoardPost>>(
+    `/receptionist/posts/${id}/remove`,
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to remove board post')
+  }
+  return data.data
+}
+
+export async function listReceptionistBoardComments(
+  postId: string,
+): Promise<BoardComment[]> {
+  const { data } = await apiClient.get<ApiResponse<BoardComment[]>>(
+    `/receptionist/posts/${postId}/comments`,
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to load comments')
+  }
+  return data.data
+}
+
+export async function removeReceptionistBoardComment(id: string): Promise<void> {
+  const { data } = await apiClient.post<ApiResponse<null>>(
+    `/receptionist/comments/${id}/remove`,
+  )
+  if (!data.success) {
+    throw new Error(data.message ?? 'Failed to remove comment')
+  }
 }
 
 export async function issueLaundryKey(id: string): Promise<DeskLaundryBooking> {
