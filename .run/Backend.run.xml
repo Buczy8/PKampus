@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Backend" type="Application" factoryName="Application">
-    <option name="MAIN_CLASS_NAME" value="pl.edu.pk.pkampus.PkampusApplication" />
+    <option name="MAIN_CLASS_NAME" value="pl.edu.pk.pkampus.PKampusApplication" />
     <module name="pkampus-backend.main" />
     <method v="2">
       <option name="Make" enabled="true" />
