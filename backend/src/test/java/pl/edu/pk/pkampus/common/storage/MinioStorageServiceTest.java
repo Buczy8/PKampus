@@ -181,4 +181,92 @@ class MinioStorageServiceTest {
         assertEquals("pkampus-avatars", captor.getValue().bucket());
         assertEquals("test-avatar-uuid.jpg", captor.getValue().object());
     }
+
+    @Test
+    void shouldUploadIssuePhotoSuccessfullyForValidJpeg() throws Exception {
+        byte[] jpegBytes = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0, 0, 0, 0};
+        MockMultipartFile file = new MockMultipartFile(
+                "photo",
+                "broken_radiator.jpg",
+                "image/jpeg",
+                jpegBytes
+        );
+
+        String objectName = storageService.uploadIssuePhoto(file);
+
+        assertNotNull(objectName);
+        assertTrue(objectName.endsWith(".jpg"));
+        verify(minioClient).putObject(any(PutObjectArgs.class));
+    }
+
+    @Test
+    void shouldRemoveIssuePhotoSuccessfully() throws Exception {
+        storageService.removeIssuePhoto("issue-photo-123.jpg");
+
+        ArgumentCaptor<RemoveObjectArgs> captor = ArgumentCaptor.forClass(RemoveObjectArgs.class);
+        verify(minioClient).removeObject(captor.capture());
+        assertEquals("pkampus-issues", captor.getValue().bucket());
+        assertEquals("issue-photo-123.jpg", captor.getValue().object());
+    }
+
+    @Test
+    void shouldDoNothingWhenRemovingNullOrBlankFile() throws Exception {
+        storageService.removeFile("pkampus-avatars", null);
+        storageService.removeFile("pkampus-avatars", "   ");
+
+        verify(minioClient, never()).removeObject(any(RemoveObjectArgs.class));
+    }
+
+    @Test
+    void shouldCreateBucketIfNotExists() throws Exception {
+        when(minioClient.bucketExists(any(io.minio.BucketExistsArgs.class))).thenReturn(false);
+
+        storageService.ensureBucketExists("test-bucket");
+
+        verify(minioClient).makeBucket(any(io.minio.MakeBucketArgs.class));
+    }
+
+    @Test
+    void shouldNotCreateBucketIfAlreadyExists() throws Exception {
+        when(minioClient.bucketExists(any(io.minio.BucketExistsArgs.class))).thenReturn(true);
+
+        storageService.ensureBucketExists("test-bucket");
+
+        verify(minioClient, never()).makeBucket(any(io.minio.MakeBucketArgs.class));
+    }
+
+    @Test
+    void shouldThrowFileStorageExceptionWhenEnsureBucketExistsFails() throws Exception {
+        when(minioClient.bucketExists(any(io.minio.BucketExistsArgs.class)))
+                .thenThrow(new RuntimeException("Connection refused"));
+
+        assertThrows(pl.edu.pk.pkampus.common.exception.FileStorageException.class,
+                () -> storageService.ensureBucketExists("failing-bucket"));
+    }
+
+    @Test
+    void shouldReturnNullPresignedUrlWhenObjectNameIsNullOrBlank() {
+        assertNull(storageService.getAvatarPresignedUrl(null, 15));
+        assertNull(storageService.getAvatarPresignedUrl("   ", 15));
+        assertNull(storageService.getIssuePresignedUrl(null, 15));
+        assertNull(storageService.getIssuePresignedUrl("   ", 15));
+    }
+
+    @Test
+    void shouldGeneratePresignedUrlsForValidObjectNames() throws Exception {
+        when(minioClient.getPresignedObjectUrl(any(io.minio.GetPresignedObjectUrlArgs.class)))
+                .thenReturn("https://minio.pkampus.edu/signed-url");
+
+        String avatarUrl = storageService.getAvatarPresignedUrl("avatar.jpg", 30);
+        String issueUrl = storageService.getIssuePresignedUrl("issue.png", 60);
+
+        assertEquals("https://minio.pkampus.edu/signed-url", avatarUrl);
+        assertEquals("https://minio.pkampus.edu/signed-url", issueUrl);
+    }
+
+    @Test
+    void shouldReturnBucketNames() {
+        assertEquals("pkampus-avatars", storageService.getAvatarBucket());
+        assertEquals("pkampus-issues", storageService.getIssuesBucket());
+    }
 }
