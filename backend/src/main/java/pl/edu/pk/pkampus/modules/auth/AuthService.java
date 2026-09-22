@@ -9,9 +9,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import pl.edu.pk.pkampus.modules.auth.dto.AuthResponseDto;
 import pl.edu.pk.pkampus.modules.auth.dto.ChangePasswordRequestDto;
+import pl.edu.pk.pkampus.modules.auth.dto.ForgotPasswordRequestDto;
 import pl.edu.pk.pkampus.modules.auth.dto.LoginRequestDto;
 import pl.edu.pk.pkampus.modules.auth.dto.RegisterRequestDto;
 import pl.edu.pk.pkampus.modules.auth.dto.RegisterResponseDto;
+import pl.edu.pk.pkampus.modules.auth.dto.ResetPasswordRequestDto;
+import pl.edu.pk.pkampus.modules.auth.dto.VerifyResetTokenResponseDto;
 import pl.edu.pk.pkampus.modules.user.dto.UserProfileDto;
 import pl.edu.pk.pkampus.modules.auth.dto.VerifyEmailResponseDto;
 import pl.edu.pk.pkampus.common.exception.AccountStatusException;
@@ -32,12 +35,22 @@ import pl.edu.pk.pkampus.security.jwt.RefreshTokenService;
 import pl.edu.pk.pkampus.security.jwt.TokenRevocationService;
 import pl.edu.pk.pkampus.mail.EmailService;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.HexFormat;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
+
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
     private final DormitoryRepository dormitoryRepository;
@@ -50,9 +63,13 @@ public class AuthService {
     private final TokenRevocationService tokenRevocationService;
     private final AuthenticatedUserCache authenticatedUserCache;
     private final EmailService emailService;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
 
     public static final String REGISTRATION_SUCCESS_MESSAGE =
             "Registration request received. If the email is eligible, an activation link has been sent to your inbox.";
+
+    public static final String FORGOT_PASSWORD_GENERIC_MESSAGE =
+            "If an account associated with this email address exists, a password reset link has been sent.";
 
     @Transactional
     public RegisterResponseDto registerResident(RegisterRequestDto dto, MultipartFile photo) {
@@ -290,5 +307,116 @@ public class AuthService {
                 .roomNumber(roomNumber)
                 .createdAt(user.getCreatedAt())
                 .build();
+    }
+
+    @Transactional
+    public String initiatePasswordReset(ForgotPasswordRequestDto dto) {
+        String normalizedEmail = dto.getEmail().trim().toLowerCase();
+        Optional<User> optionalUser = userRepository.findByEmail(normalizedEmail);
+
+        if (optionalUser.isEmpty()) {
+            log.info("Password reset requested for non-existent email: {}", normalizedEmail);
+            return FORGOT_PASSWORD_GENERIC_MESSAGE;
+        }
+
+        User user = optionalUser.get();
+        if (user.getStatus() == UserStatus.BLOCKED || user.getStatus() == UserStatus.CHECKED_OUT) {
+            log.warn("Password reset requested for suspended/checked-out user: {}", user.getId());
+            return FORGOT_PASSWORD_GENERIC_MESSAGE;
+        }
+
+        // Invalidate previous active reset tokens for this user
+        passwordResetTokenRepository.invalidateAllActiveForUser(user.getId(), Instant.now());
+
+        // Generate 32-byte secure random token (64 hex characters)
+        byte[] randomBytes = new byte[32];
+        SECURE_RANDOM.nextBytes(randomBytes);
+        String rawToken = HexFormat.of().formatHex(randomBytes);
+        String tokenHash = sha256Hex(rawToken);
+
+        Instant expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES);
+
+        PasswordResetToken resetToken = PasswordResetToken.builder()
+                .user(user)
+                .tokenHash(tokenHash)
+                .expiresAt(expiresAt)
+                .build();
+
+        passwordResetTokenRepository.save(resetToken);
+
+        emailService.sendPasswordResetEmail(user.getEmail(), user.getFirstName(), rawToken);
+        log.info("Password reset token generated and email dispatched for user {}", user.getId());
+
+        return FORGOT_PASSWORD_GENERIC_MESSAGE;
+    }
+
+    @Transactional(readOnly = true)
+    public VerifyResetTokenResponseDto verifyResetToken(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new IllegalArgumentException("Reset token must not be blank");
+        }
+
+        String tokenHash = sha256Hex(rawToken.trim());
+        PasswordResetToken token = passwordResetTokenRepository.findActiveByTokenHash(tokenHash)
+                .orElseThrow(() -> new ResourceNotFoundException("Invalid or expired password reset token"));
+
+        if (token.getExpiresAt().isBefore(Instant.now())) {
+            throw new IllegalArgumentException("Password reset token has expired");
+        }
+
+        String maskedEmail = maskEmail(token.getUser().getEmail());
+        return new VerifyResetTokenResponseDto(true, maskedEmail);
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequestDto dto) {
+        String tokenHash = sha256Hex(dto.getToken().trim());
+        PasswordResetToken token = passwordResetTokenRepository.findActiveByTokenHash(tokenHash)
+                .orElseThrow(() -> new ResourceNotFoundException("Invalid or expired password reset token"));
+
+        Instant now = Instant.now();
+        if (token.getExpiresAt().isBefore(now)) {
+            throw new IllegalArgumentException("Password reset token has expired");
+        }
+
+        User user = token.getUser();
+        if (user.getStatus() == UserStatus.BLOCKED || user.getStatus() == UserStatus.CHECKED_OUT) {
+            throw new AccountStatusException("Account is suspended or checked out");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(dto.getNewPassword()));
+        if (user.getStatus() == UserStatus.MUST_CHANGE_PASSWORD) {
+            user.setStatus(UserStatus.ACTIVE);
+        }
+        userRepository.save(user);
+
+        token.setUsedAt(now);
+        passwordResetTokenRepository.save(token);
+
+        // Invalidate all active tokens and sessions for this user
+        tokenRevocationService.revokeUser(user.getId());
+
+        log.info("User {} successfully reset password via email token", user.getId());
+    }
+
+    private static String sha256Hex(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 algorithm not available", e);
+        }
+    }
+
+    private static String maskEmail(String email) {
+        if (email == null || !email.contains("@")) return "***";
+        int atIndex = email.indexOf('@');
+        String name = email.substring(0, atIndex);
+        String domain = email.substring(atIndex);
+        if (name.length() <= 2) {
+            return name.charAt(0) + "***" + domain;
+        }
+        return name.charAt(0) + "***" + name.charAt(name.length() - 1) + domain;
     }
 }

@@ -184,6 +184,28 @@ public class EmailService {
         sendHtmlEmail(toEmail, subject, htmlContent);
     }
 
+    @Async
+    public void sendPasswordResetEmail(String toEmail, String firstName, String rawToken) {
+        String resetLink = frontendUrl + "/reset-password?token="
+                + URLEncoder.encode(rawToken, StandardCharsets.UTF_8);
+        String subject = "PKampus - Reset your password";
+        String htmlContent = """
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                    <h2 style="color: #0284c7;">Password Reset Request</h2>
+                    <p>Hello %s,</p>
+                    <p>We received a request to reset your PKampus account password. Click the button below to set a new password (this link is valid for 15 minutes):</p>
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="%s" style="display: inline-block; padding: 12px 24px; background-color: #0284c7; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Reset Password</a>
+                    </div>
+                    <p style="color: #64748b; font-size: 14px;">Or copy and paste the following URL into your browser:<br><a href="%s">%s</a></p>
+                    <p style="color: #64748b; font-size: 14px;">If you did not request this change, please ignore this email. Your password will remain unchanged.</p>
+                    <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;">
+                    <p style="color: #94a3b8; font-size: 12px;">This message was generated automatically by the PKampus system. Please do not reply.</p>
+                </div>
+                """.formatted(firstName, resetLink, resetLink, resetLink);
+        sendHtmlEmail(toEmail, subject, htmlContent);
+    }
+
     public void sendHtmlEmail(String to, String subject, String htmlBody) {
         try {
             MimeMessage message = mailSender.createMimeMessage();

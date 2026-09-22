@@ -18,6 +18,9 @@ class RefreshTokenCleanupJobTest {
     @Mock
     private RefreshTokenRepository refreshTokenRepository;
 
+    @Mock
+    private pl.edu.pk.pkampus.modules.auth.PasswordResetTokenRepository passwordResetTokenRepository;
+
     @InjectMocks
     private RefreshTokenCleanupJob cleanupJob;
 

@@ -6,6 +6,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import pl.edu.pk.pkampus.modules.auth.PasswordResetTokenRepository;
+
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
@@ -15,6 +17,7 @@ import java.time.temporal.ChronoUnit;
 public class RefreshTokenCleanupJob {
 
     private final RefreshTokenRepository refreshTokenRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
 
     /**
      * Daily cleanup at 03:15 — removes revoked tokens older than 1 day and tokens expired for over 7 days.
@@ -29,6 +32,11 @@ public class RefreshTokenCleanupJob {
             log.info("Cleaned up {} stale refresh tokens", deleted);
         } else {
             log.debug("Refresh token cleanup: nothing to delete");
+        }
+
+        int deletedResetTokens = passwordResetTokenRepository.deleteStaleTokens(Instant.now().minus(1, ChronoUnit.DAYS));
+        if (deletedResetTokens > 0) {
+            log.info("Cleaned up {} stale password reset tokens", deletedResetTokens);
         }
     }
 }

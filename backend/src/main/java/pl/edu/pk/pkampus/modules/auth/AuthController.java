@@ -126,4 +126,37 @@ public class AuthController {
         UserProfileDto profile = authService.changePassword(user, request);
         return ResponseEntity.ok(ApiResponse.ok(profile, "Password updated successfully"));
     }
+
+    @PostMapping("/forgot-password")
+    @Operation(
+            summary = "Request password reset link via email",
+            description = "Generates a one-time cryptographic reset token (TTL 15 min) and dispatches reset link to the user's email (FR-AUTH-07 / ADR-07). "
+                    + "Returns a generic message regardless of email existence to prevent email enumeration."
+    )
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody pl.edu.pk.pkampus.modules.auth.dto.ForgotPasswordRequestDto request) {
+        String message = authService.initiatePasswordReset(request);
+        return ResponseEntity.ok(ApiResponse.ok(null, message));
+    }
+
+    @GetMapping("/verify-reset-token")
+    @Operation(
+            summary = "Verify password reset token validity",
+            description = "Validates that a password reset token exists, is unexpired (TTL 15 min), and has not been used yet."
+    )
+    public ResponseEntity<ApiResponse<pl.edu.pk.pkampus.modules.auth.dto.VerifyResetTokenResponseDto>> verifyResetToken(
+            @RequestParam("token") String token
+    ) {
+        pl.edu.pk.pkampus.modules.auth.dto.VerifyResetTokenResponseDto response = authService.verifyResetToken(token);
+        return ResponseEntity.ok(ApiResponse.ok(response, "Token is valid"));
+    }
+
+    @PostMapping("/reset-password")
+    @Operation(
+            summary = "Reset password using token",
+            description = "Validates one-time token, updates user password (BCrypt), marks token as used, and invalidates all active sessions (FR-AUTH-07 / ADR-07)."
+    )
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody pl.edu.pk.pkampus.modules.auth.dto.ResetPasswordRequestDto request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Password has been successfully reset. You can now log in."));
+    }
 }

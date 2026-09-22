@@ -98,8 +98,8 @@ public class SecurityConfig {
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(mustChangePasswordFilter, JwtAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> {
-                    auth.requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/verify-email").permitAll()
+                    auth.requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/verify-email", "/api/v1/auth/verify-reset-token").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/dormitories/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/health").permitAll();
 
