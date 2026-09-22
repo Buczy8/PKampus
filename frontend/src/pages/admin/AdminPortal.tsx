@@ -6,33 +6,33 @@ import {
   activateResident,
   listPendingResidents,
   rejectResident,
-} from '@/api/admin'
+} from '@/api/admin/admin'
 import {
   createThematicRoom,
   listAdminThematicRooms,
   updateThematicRoom,
-} from '@/api/admin-rooms'
+} from '@/api/admin/admin-rooms'
 import {
   createDormRoom,
   listAdminDormRooms,
   updateDormRoom,
-} from '@/api/admin-dorm-rooms'
+} from '@/api/admin/admin-dorm-rooms'
 import {
   createLaundryMachine,
   listAdminLaundryMachines,
   updateLaundryMachine,
-} from '@/api/admin-laundry'
+} from '@/api/admin/admin-laundry'
 import {
   createAdminEvent,
   deleteAdminEvent,
   listAdminEvents,
   updateAdminEvent,
-} from '@/api/admin-events'
+} from '@/api/admin/admin-events'
 import {
   createReceptionist,
   listReceptionists,
   updateReceptionist,
-} from '@/api/admin-receptionists'
+} from '@/api/admin/admin-receptionists'
 import {
   blockResident,
   checkoutResident,
@@ -40,7 +40,7 @@ import {
   listManagedResidents,
   revokeRoomBan,
   unblockResident,
-} from '@/api/admin-residents'
+} from '@/api/admin/admin-residents'
 import { getApiErrorMessage } from '@/api/errors'
 import type {
   AdminLaundryMachine,
