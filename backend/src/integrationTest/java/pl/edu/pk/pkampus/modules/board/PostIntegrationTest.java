@@ -322,6 +322,162 @@ class PostIntegrationTest {
                 .andExpect(jsonPath("$.data[0].commentCount").value(1));
     }
 
+    @Test
+    @DisplayName("Unauthenticated request to board returns 401")
+    void unauthenticatedRequestIsUnauthorized() throws Exception {
+        mockMvc.perform(get("/api/v1/posts"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Non-resident (e.g. DORM_ADMIN) cannot access resident board API")
+    void nonResidentForbidden() throws Exception {
+        User admin = userRepository.save(User.builder()
+                .email("board-admin-" + UUID.randomUUID() + "@pk.edu.pl")
+                .passwordHash(passwordEncoder.encode("Password123!"))
+                .firstName("Marian")
+                .lastName("Kierownik")
+                .phoneNumber("+48999888777")
+                .role(UserRole.DORM_ADMIN)
+                .status(UserStatus.ACTIVE)
+                .dormitory(dorm1)
+                .build());
+
+        mockMvc.perform(get("/api/v1/posts")
+                        .header("Authorization", bearer(admin)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Blocked resident cannot access community board")
+    void blockedResidentForbidden() throws Exception {
+        User blocked = userRepository.save(User.builder()
+                .email("blocked-" + UUID.randomUUID() + "@pk.edu.pl")
+                .passwordHash(passwordEncoder.encode("Password123!"))
+                .firstName("Zablokowany")
+                .lastName("Student")
+                .phoneNumber("+48555666777")
+                .role(UserRole.RESIDENT)
+                .status(UserStatus.BLOCKED)
+                .dormitory(dorm1)
+                .build());
+
+        mockMvc.perform(get("/api/v1/posts")
+                        .header("Authorization", bearer(blocked)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Blank post creation rejected with 400 Bad Request")
+    void blankPostRejected() throws Exception {
+        mockMvc.perform(post("/api/v1/posts")
+                        .header("Authorization", bearer(resident1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "   ",
+                                  "content": "",
+                                  "category": "GENERAL",
+                                  "scope": "DORMITORY"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Resolving already resolved post returns 422 Unprocessable Entity")
+    void doubleResolveFails() throws Exception {
+        MvcResult created = mockMvc.perform(post("/api/v1/posts")
+                        .header("Authorization", bearer(resident1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Do rozwiązania",
+                                  "content": "Test",
+                                  "category": "GENERAL",
+                                  "scope": "DORMITORY"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String id = objectMapper.readTree(created.getResponse().getContentAsString())
+                .path("data").path("id").asText();
+
+        mockMvc.perform(patch("/api/v1/posts/" + id + "/resolve")
+                        .header("Authorization", bearer(resident1)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(patch("/api/v1/posts/" + id + "/resolve")
+                        .header("Authorization", bearer(resident1)))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    @DisplayName("Cannot comment on REMOVED_MODERATOR post")
+    void cannotCommentOnModeratedPost() throws Exception {
+        Post post = postRepository.save(Post.builder()
+                .author(resident1)
+                .dormitory(dorm1)
+                .title("Zmoderowany")
+                .content("Naruszenie")
+                .category(PostCategory.GENERAL)
+                .scope(PostScope.DORMITORY)
+                .status(PostStatus.REMOVED_MODERATOR)
+                .deleted(false)
+                .build());
+
+        mockMvc.perform(post("/api/v1/posts/" + post.getId() + "/comments")
+                        .header("Authorization", bearer(resident1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Komentarz\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("Feed filters accurately by category and scope")
+    void feedFiltering() throws Exception {
+        mockMvc.perform(post("/api/v1/posts")
+                        .header("Authorization", bearer(resident1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Kupię rower",
+                                  "content": "Stan bdb",
+                                  "category": "BUY_SELL",
+                                  "scope": "CAMPUS"
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/v1/posts")
+                        .header("Authorization", bearer(resident1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Pożyczę odkurzacz",
+                                  "content": "Na godzinę",
+                                  "category": "BORROW_HELP",
+                                  "scope": "DORMITORY"
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/posts")
+                        .param("category", "BUY_SELL")
+                        .header("Authorization", bearer(resident1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].title").value("Kupię rower"));
+
+        mockMvc.perform(get("/api/v1/posts")
+                        .param("scope", "DORMITORY")
+                        .header("Authorization", bearer(resident1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].title").value("Pożyczę odkurzacz"));
+    }
+
     private User saveResident(Dormitory dorm, String room) {
         return userRepository.save(User.builder()
                 .email("board-res-" + UUID.randomUUID() + "@pk.edu.pl")
