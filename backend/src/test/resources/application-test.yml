@@ -53,7 +53,13 @@ minio:
   bucket-issues: pkampus-issues
   bucket-avatars: pkampus-avatars
 
+management:
+  health:
+    mail:
+      enabled: false
+
 logging:
   level:
     root: WARN
     pl.edu.pk.pkampus: INFO
+
