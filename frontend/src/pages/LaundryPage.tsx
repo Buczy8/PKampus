@@ -447,6 +447,14 @@ function bookingStatusLabel(status: LaundryBooking["status"]): string {
       return "Potwierdzona"
     case "KEY_ISSUED":
       return "Klucz wydany"
+    case "COMPLETED":
+      return "Zakończona"
+    case "CANCELLED_USER":
+      return "Anulowana"
+    case "AUTO_CANCELLED_15MIN":
+      return "Zwolniona (15 min)"
+    case "CANCELLED_MACHINE_OUT_OF_ORDER":
+      return "Awaria pralki"
     default:
       return status
   }

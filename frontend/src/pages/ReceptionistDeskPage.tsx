@@ -12,6 +12,8 @@ import {
 
 import { getApiErrorMessage } from "@/api/errors"
 import {
+  cancelReceptionistLaundryBooking,
+  cancelReceptionistRoomBooking,
   getReceptionistDesk,
   getReceptionistCardDay,
   issueLaundryKey,
@@ -79,6 +81,11 @@ function residentLine(b: {
   return `${b.residentFirstName} ${b.residentLastName}${room}`
 }
 
+function isBookingOverdue(startTimeIso: string): boolean {
+  const startMs = new Date(startTimeIso).getTime()
+  return Date.now() > startMs + 15 * 60 * 1000
+}
+
 export function ReceptionistDeskPage() {
   const user = useOutletContext<UserProfile>()
   const queryClient = useQueryClient()
@@ -106,6 +113,10 @@ export function ReceptionistDeskPage() {
     mutationFn: returnLaundryKey,
     onSuccess: () => void invalidateDesk(),
   })
+  const laundryCancel = useMutation({
+    mutationFn: cancelReceptionistLaundryBooking,
+    onSuccess: () => void invalidateDesk(),
+  })
   const roomIssue = useMutation({
     mutationFn: issueRoomKey,
     onSuccess: () => void invalidateDesk(),
@@ -114,19 +125,27 @@ export function ReceptionistDeskPage() {
     mutationFn: returnRoomKey,
     onSuccess: () => void invalidateDesk(),
   })
+  const roomCancel = useMutation({
+    mutationFn: cancelReceptionistRoomBooking,
+    onSuccess: () => void invalidateDesk(),
+  })
 
   const actionError =
     laundryIssue.error ||
     laundryReturn.error ||
+    laundryCancel.error ||
     roomIssue.error ||
-    roomReturn.error
+    roomReturn.error ||
+    roomCancel.error
 
   const desk = deskQuery.data
   const busy =
     laundryIssue.isPending ||
     laundryReturn.isPending ||
+    laundryCancel.isPending ||
     roomIssue.isPending ||
-    roomReturn.isPending
+    roomReturn.isPending ||
+    roomCancel.isPending
 
   const laundryAwaiting =
     desk?.laundry.filter((b) => b.status === "CONFIRMED") ?? []
@@ -261,6 +280,7 @@ export function ReceptionistDeskPage() {
                         busy={busy}
                         onIssue={() => laundryIssue.mutate(b.id)}
                         onReturn={() => laundryReturn.mutate(b.id)}
+                        onCancel={() => laundryCancel.mutate(b.id)}
                       />
                     ))}
                   </BookingGroup>
@@ -317,6 +337,7 @@ export function ReceptionistDeskPage() {
                         busy={busy}
                         onIssue={() => roomIssue.mutate(b.id)}
                         onReturn={() => roomReturn.mutate(b.id)}
+                        onCancel={() => roomCancel.mutate(b.id)}
                       />
                     ))}
                   </BookingGroup>
@@ -397,12 +418,16 @@ function LaundryCard({
   busy,
   onIssue,
   onReturn,
+  onCancel,
 }: {
   booking: DeskLaundryBooking
   busy: boolean
   onIssue: () => void
   onReturn: () => void
+  onCancel?: () => void
 }) {
+  const overdue = booking.status === "CONFIRMED" && isBookingOverdue(booking.startTime)
+
   return (
     <div className="rounded-xl border border-border/70 bg-card p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -415,10 +440,20 @@ function LaundryCard({
               {booking.machineIdentifier}
             </p>
             <Badge
-              variant={booking.status === "KEY_ISSUED" ? "default" : "secondary"}
+              variant={
+                booking.status === "KEY_ISSUED"
+                  ? "default"
+                  : overdue
+                    ? "destructive"
+                    : "secondary"
+              }
               className="text-xs"
             >
-              {booking.status === "KEY_ISSUED" ? "Klucz wydany" : "Do wydania"}
+              {booking.status === "KEY_ISSUED"
+                ? "Klucz wydany"
+                : overdue
+                  ? "Spóźnienie (>15 min)"
+                  : "Do wydania"}
             </Badge>
           </div>
           <p className="text-sm text-foreground/90">{residentLine(booking)}</p>
@@ -428,6 +463,17 @@ function LaundryCard({
         </Link>
 
         <div className="flex flex-wrap gap-2 shrink-0">
+          {booking.status === "CONFIRMED" && overdue && onCancel && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive border-destructive/40 hover:bg-destructive/10"
+              disabled={busy}
+              onClick={onCancel}
+            >
+              Zwolnij slot (15 min)
+            </Button>
+          )}
           {booking.status === "CONFIRMED" && (
             <Button size="sm" disabled={busy} onClick={onIssue}>
               <KeyRound className="size-3.5 mr-1.5" />
@@ -455,12 +501,16 @@ function RoomCard({
   busy,
   onIssue,
   onReturn,
+  onCancel,
 }: {
   booking: DeskRoomBooking
   busy: boolean
   onIssue: () => void
   onReturn: () => void
+  onCancel?: () => void
 }) {
+  const overdue = booking.status === "CONFIRMED" && isBookingOverdue(booking.startTime)
+
   return (
     <div className="rounded-xl border border-border/70 bg-card p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -471,10 +521,20 @@ function RoomCard({
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold truncate">{booking.roomName}</p>
             <Badge
-              variant={booking.status === "KEY_ISSUED" ? "default" : "secondary"}
+              variant={
+                booking.status === "KEY_ISSUED"
+                  ? "default"
+                  : overdue
+                    ? "destructive"
+                    : "secondary"
+              }
               className="text-xs"
             >
-              {booking.status === "KEY_ISSUED" ? "Klucz wydany" : "Do wydania"}
+              {booking.status === "KEY_ISSUED"
+                ? "Klucz wydany"
+                : overdue
+                  ? "Spóźnienie (>15 min)"
+                  : "Do wydania"}
             </Badge>
           </div>
           <p className="text-sm text-foreground/90">{residentLine(booking)}</p>
@@ -488,6 +548,17 @@ function RoomCard({
         </Link>
 
         <div className="flex flex-wrap gap-2 shrink-0">
+          {booking.status === "CONFIRMED" && overdue && onCancel && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive border-destructive/40 hover:bg-destructive/10"
+              disabled={busy}
+              onClick={onCancel}
+            >
+              Zwolnij slot (15 min)
+            </Button>
+          )}
           {booking.status === "CONFIRMED" && (
             <Button size="sm" disabled={busy} onClick={onIssue}>
               <KeyRound className="size-3.5 mr-1.5" />
