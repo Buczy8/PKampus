@@ -1,7 +1,6 @@
 package pl.edu.pk.pkampus.common.storage;
 
 import io.minio.BucketExistsArgs;
-import io.minio.GetObjectArgs;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
@@ -9,8 +8,10 @@ import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import io.minio.http.Method;
 import jakarta.annotation.PostConstruct;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -36,9 +37,11 @@ public class MinioStorageService {
 
     private final MinioClient minioClient;
 
+    @Getter
     @Value("${minio.bucket-avatars:pkampus-avatars}")
     private String avatarBucket;
 
+    @Getter
     @Value("${minio.bucket-issues:pkampus-issues}")
     private String issuesBucket;
 
@@ -104,27 +107,6 @@ public class MinioStorageService {
         }
     }
 
-    public InputStream getFile(String bucketName, String objectName) {
-        try {
-            return minioClient.getObject(
-                    GetObjectArgs.builder()
-                            .bucket(bucketName)
-                            .object(objectName)
-                            .build()
-            );
-        } catch (Exception e) {
-            throw new FileStorageException("Failed to retrieve file " + objectName + " from bucket " + bucketName, e);
-        }
-    }
-
-    public byte[] getFileBytes(String bucketName, String objectName) {
-        try (InputStream is = getFile(bucketName, objectName)) {
-            return is.readAllBytes();
-        } catch (Exception e) {
-            throw new FileStorageException("Failed to read bytes from file " + objectName, e);
-        }
-    }
-
     public void removeAvatar(String objectName) {
         removeFile(avatarBucket, objectName);
     }
@@ -179,18 +161,7 @@ public class MinioStorageService {
             throw new InvalidFileException("Unsupported file format. Allowed formats are: JPEG, PNG, WebP");
         }
 
-        byte[] headerBytes = new byte[16];
-        int bytesRead;
-        try (InputStream is = file.getInputStream()) {
-            bytesRead = is.readNBytes(headerBytes, 0, 16);
-        } catch (Exception e) {
-            throw new InvalidFileException("Unable to read file content for validation", e);
-        }
-
-        String detectedMime = detectImageMimeFromMagicBytes(headerBytes, bytesRead);
-        if (detectedMime == null || !ALLOWED_CONTENT_TYPES.contains(detectedMime)) {
-            throw new InvalidFileException("File content signature does not match any allowed image format (JPEG, PNG, WebP)");
-        }
+        String detectedMime = detectImageMimeType(file);
 
         // Verify that declared content-type matches actual binary content
         if (!declaredContentType.equalsIgnoreCase(detectedMime)) {
@@ -201,9 +172,22 @@ public class MinioStorageService {
         return detectedMime;
     }
 
-    public void validateImageFile(MultipartFile file) {
-        validateAndDetectImageType(file);
+    private @NonNull String detectImageMimeType(MultipartFile file) {
+        byte[] headerBytes = new byte[16];
+        int bytesRead;
+        try (InputStream is = file.getInputStream()) {
+            bytesRead = is.readNBytes(headerBytes, 0, 16);
+        } catch (Exception e) {
+            throw new InvalidFileException("Unable to read file content for validation", e);
+        }
+
+        String detected = detectImageMimeFromMagicBytes(headerBytes, bytesRead);
+        if (detected == null) {
+            throw new InvalidFileException("File content signature does not match any allowed image format (JPEG, PNG, WebP)");
+        }
+        return detected;
     }
+
 
     private String detectImageMimeFromMagicBytes(byte[] b, int length) {
         // JPEG: FF D8 FF
@@ -256,11 +240,4 @@ public class MinioStorageService {
         return getPresignedUrl(issuesBucket, objectName, expiryMinutes);
     }
 
-    public String getAvatarBucket() {
-        return avatarBucket;
-    }
-
-    public String getIssuesBucket() {
-        return issuesBucket;
-    }
 }
