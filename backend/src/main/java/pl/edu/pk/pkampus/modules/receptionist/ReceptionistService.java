@@ -252,8 +252,23 @@ public class ReceptionistService {
         if (booking.getStatus() != RoomBookingStatus.CONFIRMED) {
             throw new BusinessRuleException("Only CONFIRMED room bookings can be cancelled by staff");
         }
-        booking.setStatus(RoomBookingStatus.CANCELLED_USER);
-        return toRoomDto(roomBookingRepository.save(booking));
+        Instant now = Instant.now();
+        boolean lateOrPast = booking.getStartTime().isBefore(now);
+        booking.setStatus(lateOrPast ? RoomBookingStatus.AUTO_CANCELLED_15MIN : RoomBookingStatus.CANCELLED_USER);
+        RoomBooking saved = roomBookingRepository.save(booking);
+
+        if (lateOrPast) {
+            User resident = booking.getUser();
+            emailService.sendBookingAutoCancelled15MinEmail(
+                    resident.getEmail(),
+                    resident.getFirstName(),
+                    "Room " + booking.getRoom().getName(),
+                    SLOT_LABEL.format(booking.getStartTime()),
+                    "rooms"
+            );
+        }
+
+        return toRoomDto(saved);
     }
 
     @Transactional
@@ -338,8 +353,23 @@ public class ReceptionistService {
         if (booking.getStatus() != LaundryBookingStatus.CONFIRMED) {
             throw new BusinessRuleException("Only CONFIRMED laundry bookings can be cancelled by staff");
         }
-        booking.setStatus(LaundryBookingStatus.CANCELLED_USER);
-        return toLaundryDto(laundryBookingRepository.save(booking));
+        Instant now = Instant.now();
+        boolean lateOrPast = booking.getStartTime().isBefore(now);
+        booking.setStatus(lateOrPast ? LaundryBookingStatus.AUTO_CANCELLED_15MIN : LaundryBookingStatus.CANCELLED_USER);
+        LaundryBooking saved = laundryBookingRepository.save(booking);
+
+        if (lateOrPast) {
+            User resident = booking.getUser();
+            emailService.sendBookingAutoCancelled15MinEmail(
+                    resident.getEmail(),
+                    resident.getFirstName(),
+                    "Laundry machine " + booking.getMachine().getMachineIdentifier(),
+                    SLOT_LABEL.format(booking.getStartTime()),
+                    "laundry"
+            );
+        }
+
+        return toLaundryDto(saved);
     }
 
     @Transactional

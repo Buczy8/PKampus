@@ -138,4 +138,17 @@ public interface RoomBookingRepository extends JpaRepository<RoomBooking, UUID> 
             @Param("status") RoomBookingStatus status,
             @Param("now") Instant now
     );
+
+    @Query("""
+            SELECT b FROM RoomBooking b
+            JOIN FETCH b.room r
+            JOIN FETCH r.dormitory
+            JOIN FETCH b.user
+            WHERE b.status = :status
+              AND b.startTime <= :cutoff
+            """)
+    List<RoomBooking> findExpiredUnclaimed(
+            @Param("status") RoomBookingStatus status,
+            @Param("cutoff") Instant cutoff
+    );
 }

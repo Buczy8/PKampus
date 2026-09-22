@@ -73,3 +73,8 @@ app:
       refresh:
         capacity: ${REFRESH_RATE_LIMIT_CAPACITY:30}
         duration-minutes: ${REFRESH_RATE_LIMIT_DURATION_MINUTES:1}
+  scheduling:
+    auto-cancellation:
+      enabled: ${BOOKING_AUTO_CANCELLATION_ENABLED:true}
+      cron: ${BOOKING_AUTO_CANCELLATION_CRON:0 * * * * *}
+      late-threshold-minutes: ${BOOKING_LATE_THRESHOLD_MINUTES:15}

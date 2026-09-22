@@ -119,4 +119,17 @@ public interface LaundryBookingRepository extends JpaRepository<LaundryBooking, 
             @Param("status") LaundryBookingStatus status,
             @Param("now") Instant now
     );
+
+    @Query("""
+            SELECT b FROM LaundryBooking b
+            JOIN FETCH b.machine m
+            JOIN FETCH m.dormitory
+            JOIN FETCH b.user
+            WHERE b.status = :status
+              AND b.startTime <= :cutoff
+            """)
+    List<LaundryBooking> findExpiredUnclaimed(
+            @Param("status") LaundryBookingStatus status,
+            @Param("cutoff") Instant cutoff
+    );
 }

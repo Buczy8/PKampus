@@ -159,6 +159,31 @@ public class EmailService {
         sendHtmlEmail(toEmail, subject, htmlContent);
     }
 
+    @Async
+    public void sendBookingAutoCancelled15MinEmail(
+            String toEmail,
+            String firstName,
+            String resourceName,
+            String startTimeLabel,
+            String resourceTypeUrlPath
+    ) {
+        String subject = "PKampus - Reservation released (15-minute rule)";
+        String htmlContent = """
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                    <h2 style="color: #b91c1c;">Reservation released</h2>
+                    <p>Hello %s,</p>
+                    <p>Your reservation for <strong>%s</strong> starting at <strong>%s</strong> was automatically released because the key was not collected from the reception desk within 15 minutes of the start time (§2 ust. 5 / BR-02 rule).</p>
+                    <p>The slot has been made available for other residents.</p>
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="%s/%s" style="display: inline-block; padding: 12px 24px; background-color: #0284c7; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Open schedule</a>
+                    </div>
+                    <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;">
+                    <p style="color: #94a3b8; font-size: 12px;">This message was generated automatically by the PKampus system. Please do not reply.</p>
+                </div>
+                """.formatted(firstName, resourceName, startTimeLabel, frontendUrl, resourceTypeUrlPath);
+        sendHtmlEmail(toEmail, subject, htmlContent);
+    }
+
     public void sendHtmlEmail(String to, String subject, String htmlBody) {
         try {
             MimeMessage message = mailSender.createMimeMessage();

@@ -40,6 +40,11 @@ app:
       refresh:
         capacity: 100
         duration-minutes: 1
+    scheduling:
+      auto-cancellation:
+        enabled: false
+        cron: "0 * * * * *"
+        late-threshold-minutes: 15
 
 minio:
   endpoint: http://127.0.0.1:1
