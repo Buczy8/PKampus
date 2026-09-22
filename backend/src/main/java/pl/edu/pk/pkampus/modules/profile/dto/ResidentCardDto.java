@@ -11,6 +11,7 @@ public class ResidentCardDto {
     String firstName;
     String lastName;
     String dormitoryName;
+    String dormitoryCode;
     String roomNumber;
     String academicYear;
     String avatarUrl;

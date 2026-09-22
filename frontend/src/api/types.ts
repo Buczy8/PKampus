@@ -725,6 +725,7 @@ export interface ResidentCard {
   firstName: string
   lastName: string
   dormitoryName: string | null
+  dormitoryCode?: string | null
   roomNumber: string | null
   academicYear: string
   avatarUrl: string | null

@@ -71,11 +71,13 @@ public class ProfileCardService {
         Instant now = Instant.now(clock);
 
         String dormitoryName = user.getDormitory() != null ? user.getDormitory().getName() : null;
+        String dormitoryCode = user.getDormitory() != null ? user.getDormitory().getCode() : null;
 
         return ResidentCardDto.builder()
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .dormitoryName(dormitoryName)
+                .dormitoryCode(dormitoryCode)
                 .roomNumber(roomNumber)
                 .academicYear(AcademicYear.current(LocalDate.now(clock.withZone(CardVerificationService.WARSAW))))
                 .avatarUrl(avatarPresigned)
