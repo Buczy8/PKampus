@@ -113,13 +113,12 @@ export function LoginForm({
               <Field data-invalid={Boolean(errors.password) || undefined}>
                 <div className="flex items-center">
                   <FieldLabel htmlFor="password">Password</FieldLabel>
-                  <a
-                    href="#"
-                    className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
-                    onClick={(e) => e.preventDefault()}
+                  <Link
+                    to="/forgot-password"
+                    className="ml-auto inline-block text-sm underline-offset-4 hover:underline text-muted-foreground hover:text-foreground"
                   >
-                    Forgot your password?
-                  </a>
+                    Nie pamiętasz hasła?
+                  </Link>
                 </div>
                 <Input
                   id="password"

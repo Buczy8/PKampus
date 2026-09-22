@@ -81,4 +81,40 @@ export async function logout(refreshToken?: string | null): Promise<void> {
   await apiClient.post('/auth/logout', refreshToken ? { refreshToken } : {})
 }
 
+export interface VerifyResetTokenResponse {
+  valid: boolean
+  maskedEmail?: string
+}
+
+export async function forgotPassword(email: string): Promise<string> {
+  const { data } = await apiClient.post<ApiResponse<string>>('/auth/forgot-password', { email })
+  if (!data.success) {
+    throw new Error(data.message ?? 'Failed to process request')
+  }
+  return data.data ?? data.message ?? 'Link do resetu hasła został wysłany.'
+}
+
+export async function verifyResetToken(token: string): Promise<VerifyResetTokenResponse> {
+  const { data } = await apiClient.get<ApiResponse<VerifyResetTokenResponse>>(
+    '/auth/verify-reset-token',
+    { params: { token } },
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to verify token')
+  }
+  return data.data
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<string> {
+  const { data } = await apiClient.post<ApiResponse<string>>('/auth/reset-password', {
+    token,
+    newPassword,
+  })
+  if (!data.success) {
+    throw new Error(data.message ?? 'Failed to reset password')
+  }
+  return data.data ?? data.message ?? 'Hasło zostało pomyślnie zmienione.'
+}
+
 export { refreshAccessToken } from '@/api/client'
+

@@ -14,6 +14,7 @@ import { CardPage } from '@/pages/CardPage'
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { EventsPage } from '@/pages/EventsPage'
+import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage'
 import { IssuesPage } from '@/pages/IssuesPage'
 import { LaundryPage } from '@/pages/LaundryPage'
 import { LoginPage } from '@/pages/LoginPage'
@@ -25,6 +26,7 @@ import { ReceptionistIssuesPage } from '@/pages/ReceptionistIssuesPage'
 import { ReceptionistLaundryPage } from '@/pages/ReceptionistLaundryPage'
 import { ReceptionistRoomsPage } from '@/pages/ReceptionistRoomsPage'
 import { RegisterPage } from '@/pages/RegisterPage'
+import { ResetPasswordPage } from '@/pages/ResetPasswordPage'
 import { RoomsPage } from '@/pages/RoomsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { SuperAdminAdminsPage } from '@/pages/superadmin/SuperAdminAdminsPage'
@@ -40,6 +42,8 @@ export function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/pending-approval" element={<PendingApprovalPage />} />
 
         <Route element={<ProtectedRoute allowMustChangePassword />}>
