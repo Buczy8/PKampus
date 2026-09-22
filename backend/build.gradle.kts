@@ -1,7 +1,7 @@
 plugins {
     java
-    id("org.springframework.boot") version "3.3.4"
-    id("io.spring.dependency-management") version "1.1.6"
+    id("org.springframework.boot") version "3.5.16"
+    id("io.spring.dependency-management") version "1.1.7"
 }
 
 group = "pl.edu.pk"
@@ -13,10 +13,10 @@ java {
     }
 }
 
-configurations {
-    compileOnly {
-        extendsFrom(configurations.annotationProcessor.get())
-    }
+extra["commons-lang3.version"] = "3.20.0"
+
+configurations.compileClasspath {
+    extendsFrom(configurations.annotationProcessor.get())
 }
 
 repositories {
@@ -33,7 +33,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-mail")
 
     // OpenAPI 3 / Swagger Documentation
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.5")
 
     // Database & Migrations
     runtimeOnly("org.postgresql:postgresql")
@@ -46,7 +46,8 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
 
     // MinIO AWS S3 Client
-    implementation("io.minio:minio:8.5.12")
+    implementation("io.minio:minio:8.6.0")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.86")
 
     // Cache & Rate Limiting (In-Memory Blacklist & Throttling)
     implementation("com.github.ben-manes.caffeine:caffeine")
