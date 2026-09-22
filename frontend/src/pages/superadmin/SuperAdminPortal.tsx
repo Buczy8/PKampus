@@ -10,6 +10,8 @@ import {
   listCampusEvents,
   listDormAdmins,
   listSuperAdminDormitories,
+  runDataRetention,
+  type DataRetentionReport,
   updateCampusEvent,
   updateDormAdmin,
   updateDormitory,
@@ -121,6 +123,9 @@ export function SuperAdminPortal({ section }: { section: SuperAdminSection }) {
   const [editingEvent, setEditingEvent] = useState<DormEvent | null>(null)
   const [eventForm, setEventForm] = useState<CreateCampusEventRequest>(emptyEventForm)
 
+  const [retentionDialogOpen, setRetentionDialogOpen] = useState(false)
+  const [retentionReport, setRetentionReport] = useState<DataRetentionReport | null>(null)
+
   const dormsQuery = useQuery({
     queryKey: ['superadmin', 'dormitories'],
     queryFn: listSuperAdminDormitories,
@@ -218,6 +223,17 @@ export function SuperAdminPortal({ section }: { section: SuperAdminSection }) {
     onError: (error) => setActionError(getApiErrorMessage(error, 'Delete failed')),
   })
 
+  const retentionMutation = useMutation({
+    mutationFn: runDataRetention,
+    onSuccess: (data) => {
+      setRetentionReport(data)
+      setRetentionDialogOpen(true)
+      setActionError(null)
+    },
+    onError: (error) => setActionError(getApiErrorMessage(error, 'Nie udało się wykonać retencji danych')),
+  })
+
+
   function openCreateDorm() {
     setEditingDorm(null)
     setDormForm(emptyDormForm)
@@ -276,7 +292,8 @@ export function SuperAdminPortal({ section }: { section: SuperAdminSection }) {
         ) : null}
 
         {section === 'dormitories' && (
-          <Card>
+          <>
+            <Card>
             <CardHeader className="flex flex-row items-start justify-between gap-4">
               <div>
                 <CardTitle>Akademiki</CardTitle>
@@ -334,6 +351,50 @@ export function SuperAdminPortal({ section }: { section: SuperAdminSection }) {
               )}
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <div>
+                <CardTitle>Retencja Danych i Ochrona Prywatności (RODO / §12)</CardTitle>
+                <CardDescription>
+                  Automatyczne i ręczne procedury higieny danych osobowych (art. 5 ust. 1 lit. c i e RODO).
+                </CardDescription>
+              </div>
+              <Button
+                type="button"
+                variant="default"
+                onClick={() => retentionMutation.mutate()}
+                disabled={retentionMutation.isPending}
+              >
+                {retentionMutation.isPending ? 'Wykonywanie…' : 'Uruchom retencję teraz'}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs font-medium text-muted-foreground">Zdjęcia usterek (MinIO)</p>
+                  <p className="text-sm font-semibold mt-1">30 dni</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">od RESOLVED lub REJECTED</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs font-medium text-muted-foreground">Tablica ogłoszeń</p>
+                  <p className="text-sm font-semibold mt-1">30 dni / 14 dni</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">30d od RESOLVED, 14d od usunięcia</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs font-medium text-muted-foreground">Rezerwacje pralni i salek</p>
+                  <p className="text-sm font-semibold mt-1">90 dni</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">dla COMPLETED i CANCELLED_*</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs font-medium text-muted-foreground">Konta studentów (CHECKED_OUT)</p>
+                  <p className="text-sm font-semibold mt-1">365 dni</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">pełna anonimizacja danych</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
         )}
 
         {section === 'admins' && (
@@ -742,6 +803,58 @@ export function SuperAdminPortal({ section }: { section: SuperAdminSection }) {
               onClick={() => saveEventMutation.mutate()}
             >
               Zapisz
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={retentionDialogOpen} onOpenChange={setRetentionDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Raport z wykonania retencji RODO</DialogTitle>
+            <DialogDescription>
+              Procedury retencji danych osobowych i higieny bazy zostały pomyślnie zrealizowane.
+            </DialogDescription>
+          </DialogHeader>
+          {retentionReport && (
+            <div className="flex flex-col gap-3 text-sm py-2">
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Data wykonania</span>
+                <span className="font-medium">{formatWhen(retentionReport.executedAt)}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Czas operacji</span>
+                <span className="font-medium">{retentionReport.executionDurationMs} ms</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Usunięte pliki zdjęć usterek (MinIO)</span>
+                <span className="font-medium">{retentionReport.issuePhotosRemovedCount}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Trwale usunięte posty tablicy</span>
+                <span className="font-medium">{retentionReport.postsRemovedCount}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Trwale usunięte komentarze tablicy</span>
+                <span className="font-medium">{retentionReport.commentsRemovedCount}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Wyczyszczone rezerwacje pralni</span>
+                <span className="font-medium">{retentionReport.laundryBookingsPurgedCount}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Wyczyszczone rezerwacje salek</span>
+                <span className="font-medium">{retentionReport.roomBookingsPurgedCount}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Zanonimizowane konta studentów</span>
+                <span className="font-medium">{retentionReport.usersAnonymizedCount}</span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" onClick={() => setRetentionDialogOpen(false)}>
+              Zamknij
             </Button>
           </DialogFooter>
         </DialogContent>

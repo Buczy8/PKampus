@@ -127,3 +127,25 @@ export async function deleteCampusEvent(id: string): Promise<void> {
     throw new Error(data.message ?? 'Failed to delete campus notice')
   }
 }
+
+export interface DataRetentionReport {
+  executedAt: string
+  issuePhotosRemovedCount: number
+  postsRemovedCount: number
+  commentsRemovedCount: number
+  laundryBookingsPurgedCount: number
+  roomBookingsPurgedCount: number
+  usersAnonymizedCount: number
+  executionDurationMs: number
+}
+
+export async function runDataRetention(): Promise<DataRetentionReport> {
+  const { data } = await apiClient.post<ApiResponse<DataRetentionReport>>(
+    '/superadmin/retention/run',
+  )
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to execute data retention')
+  }
+  return data.data
+}
+
