@@ -1,5 +1,6 @@
 plugins {
     java
+    idea
     id("org.springframework.boot") version "3.5.16"
     id("io.spring.dependency-management") version "1.1.7"
 }
@@ -22,6 +23,22 @@ configurations.compileClasspath {
 repositories {
     mavenCentral()
 }
+
+sourceSets {
+    create("integrationTest") {
+        compileClasspath += sourceSets.main.get().output + sourceSets.test.get().output
+        runtimeClasspath += sourceSets.main.get().output + sourceSets.test.get().output
+        resources.srcDirs("src/test/resources")
+    }
+}
+
+val integrationTestImplementation: Configuration by configurations.getting {
+    extendsFrom(configurations.testImplementation.get())
+}
+val integrationTestRuntimeOnly: Configuration by configurations.getting {
+    extendsFrom(configurations.testRuntimeOnly.get())
+}
+configurations["integrationTestCompileClasspath"].extendsFrom(configurations.annotationProcessor.get())
 
 dependencies {
     // Spring Boot Starters
@@ -70,4 +87,24 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+val integrationTest = tasks.register<Test>("integrationTest") {
+    description = "Runs integration tests."
+    group = "verification"
+    testClassesDirs = sourceSets["integrationTest"].output.classesDirs
+    classpath = sourceSets["integrationTest"].runtimeClasspath
+    useJUnitPlatform()
+    shouldRunAfter("test")
+}
+
+tasks.check {
+    dependsOn(integrationTest)
+}
+
+idea {
+    module {
+        testSources.from(sourceSets["integrationTest"].java.srcDirs)
+        testResources.from(sourceSets["integrationTest"].resources.srcDirs)
+    }
 }
