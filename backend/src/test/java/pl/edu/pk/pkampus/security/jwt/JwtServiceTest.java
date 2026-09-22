@@ -47,8 +47,10 @@ class JwtServiceTest {
 
     @Test
     void shouldGenerateAndValidateTokenSuccessfully() {
+        // Arrange & Act
         String token = jwtService.generateToken(testUser, "204");
 
+        // Assert
         assertNotNull(token);
         assertTrue(jwtService.isTokenValid(token, testUser));
         assertEquals(testUser.getId(), jwtService.extractUserId(token));
@@ -56,11 +58,45 @@ class JwtServiceTest {
         assertEquals("RESIDENT", jwtService.extractRole(token));
         assertEquals(testDormitory.getId(), jwtService.extractDormitoryId(token));
         assertEquals("204", jwtService.extractRoomNumber(token));
+        assertNotNull(jwtService.extractExpiration(token));
         assertFalse(jwtService.isTokenExpired(token));
     }
 
     @Test
+    void shouldGenerateTokenWithoutRoomNumber() {
+        // Arrange & Act
+        String token = jwtService.generateToken(testUser);
+
+        // Assert
+        assertNotNull(token);
+        assertTrue(jwtService.isTokenValid(token, testUser));
+        assertNull(jwtService.extractRoomNumber(token));
+    }
+
+    @Test
+    void shouldGenerateTokenWhenUserHasNoDormitory() {
+        // Arrange
+        User userWithoutDorm = User.builder()
+                .id(UUID.randomUUID())
+                .email("admin@pk.edu.pl")
+                .role(UserRole.SUPER_ADMIN)
+                .status(UserStatus.ACTIVE)
+                .dormitory(null)
+                .build();
+
+        // Act
+        String token = jwtService.generateToken(userWithoutDorm);
+
+        // Assert
+        assertNotNull(token);
+        assertTrue(jwtService.isTokenValid(token, userWithoutDorm));
+        assertNull(jwtService.extractDormitoryId(token));
+        assertEquals("SUPER_ADMIN", jwtService.extractRole(token));
+    }
+
+    @Test
     void shouldInvalidateTokenWhenUserMismatch() {
+        // Arrange
         String token = jwtService.generateToken(testUser, "204");
 
         User otherUser = User.builder()
@@ -70,6 +106,34 @@ class JwtServiceTest {
                 .status(UserStatus.ACTIVE)
                 .build();
 
+        // Act & Assert
         assertFalse(jwtService.isTokenValid(token, otherUser));
+    }
+
+    @Test
+    void shouldReturnFalseForIsTokenValidWhenTokenIsMalformedOrTampered() {
+        // Arrange
+        String malformedToken = "eyJhbGciOiJIUzI1NiJ9.invalid-payload.signature";
+
+        // Act & Assert
+        assertFalse(jwtService.isTokenValid(malformedToken, testUser));
+    }
+
+    @Test
+    void shouldReturnTrueForIsTokenExpiredWhenTokenIsMalformed() {
+        // Arrange
+        String malformedToken = "not-a-valid-jwt";
+
+        // Act & Assert
+        assertTrue(jwtService.isTokenExpired(malformedToken));
+    }
+
+    @Test
+    void shouldReturnConfiguredExpirationMinutes() {
+        // Arrange & Act
+        long minutes = jwtService.getExpirationMinutes();
+
+        // Assert
+        assertEquals(15L, minutes);
     }
 }

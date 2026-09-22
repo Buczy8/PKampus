@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import pl.edu.pk.pkampus.common.exception.AccountStatusException;
 import pl.edu.pk.pkampus.common.exception.InvalidTokenException;
 import pl.edu.pk.pkampus.modules.user.User;
 import pl.edu.pk.pkampus.modules.user.UserRole;
@@ -12,6 +13,8 @@ import pl.edu.pk.pkampus.modules.user.UserStatus;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -28,7 +31,6 @@ class RefreshTokenServiceTest {
     private RefreshTokenRepository refreshTokenRepository;
 
     private RefreshTokenService refreshTokenService;
-
     private User testUser;
 
     @BeforeEach
@@ -47,12 +49,15 @@ class RefreshTokenServiceTest {
 
     @Test
     void shouldCreateRefreshToken() {
+        // Arrange
         when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(refreshTokenRepository.countByUser_IdAndRevokedFalseAndExpiresAtAfter(eq(testUser.getId()), any()))
                 .thenReturn(1L);
 
+        // Act
         String rawToken = refreshTokenService.createRefreshToken(testUser);
 
+        // Assert
         assertNotNull(rawToken);
         assertFalse(rawToken.isBlank());
         verify(refreshTokenRepository).save(any(RefreshToken.class));
@@ -60,6 +65,7 @@ class RefreshTokenServiceTest {
 
     @Test
     void shouldRotateRefreshTokenSuccessfully() {
+        // Arrange
         when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(refreshTokenRepository.countByUser_IdAndRevokedFalseAndExpiresAtAfter(eq(testUser.getId()), any()))
                 .thenReturn(1L);
@@ -75,8 +81,10 @@ class RefreshTokenServiceTest {
 
         when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(existingToken));
 
+        // Act
         RefreshTokenService.RefreshTokenResult result = refreshTokenService.rotateRefreshToken(rawToken);
 
+        // Assert
         assertNotNull(result);
         assertNotNull(result.newRawToken());
         assertEquals(testUser, result.user());
@@ -85,7 +93,17 @@ class RefreshTokenServiceTest {
     }
 
     @Test
+    void shouldRejectRotateWhenTokenNotFound() {
+        // Arrange
+        when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.empty());
+
+        // Act & Assert
+        assertThrows(InvalidTokenException.class, () -> refreshTokenService.rotateRefreshToken("unknown-token"));
+    }
+
+    @Test
     void shouldRejectRevokedTokenWithoutRevokingOtherSessions() {
+        // Arrange
         RefreshToken revokedToken = RefreshToken.builder()
                 .id(UUID.randomUUID())
                 .user(testUser)
@@ -96,6 +114,7 @@ class RefreshTokenServiceTest {
 
         when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(revokedToken));
 
+        // Act & Assert
         InvalidTokenException ex = assertThrows(InvalidTokenException.class,
                 () -> refreshTokenService.rotateRefreshToken("reused-token"));
 
@@ -105,6 +124,7 @@ class RefreshTokenServiceTest {
 
     @Test
     void shouldFailWhenTokenIsExpired() {
+        // Arrange
         RefreshToken expiredToken = RefreshToken.builder()
                 .id(UUID.randomUUID())
                 .user(testUser)
@@ -115,6 +135,7 @@ class RefreshTokenServiceTest {
 
         when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(expiredToken));
 
+        // Act & Assert
         InvalidTokenException ex = assertThrows(InvalidTokenException.class,
                 () -> refreshTokenService.rotateRefreshToken("expired-token"));
 
@@ -122,7 +143,26 @@ class RefreshTokenServiceTest {
     }
 
     @Test
+    void shouldRejectRotateWhenUserStatusIsNotActiveOrMustChangePassword() {
+        // Arrange
+        testUser.setStatus(UserStatus.BLOCKED);
+        RefreshToken token = RefreshToken.builder()
+                .id(UUID.randomUUID())
+                .user(testUser)
+                .tokenHash("hash")
+                .expiresAt(Instant.now().plus(7, ChronoUnit.DAYS))
+                .revoked(false)
+                .build();
+
+        when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(token));
+
+        // Act & Assert
+        assertThrows(AccountStatusException.class, () -> refreshTokenService.rotateRefreshToken("valid-raw-token"));
+    }
+
+    @Test
     void shouldRevokeRefreshToken() {
+        // Arrange
         RefreshToken token = RefreshToken.builder()
                 .id(UUID.randomUUID())
                 .user(testUser)
@@ -132,8 +172,10 @@ class RefreshTokenServiceTest {
 
         when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(token));
 
+        // Act
         Optional<UUID> ownerId = refreshTokenService.revokeRefreshToken("raw-token");
 
+        // Assert
         assertTrue(token.isRevoked());
         assertTrue(ownerId.isPresent());
         assertEquals(testUser.getId(), ownerId.get());
@@ -141,7 +183,58 @@ class RefreshTokenServiceTest {
     }
 
     @Test
+    void shouldReturnEmptyWhenRevokingNullOrBlankToken() {
+        // Arrange & Act & Assert
+        assertTrue(refreshTokenService.revokeRefreshToken(null).isEmpty());
+        assertTrue(refreshTokenService.revokeRefreshToken("   ").isEmpty());
+        verify(refreshTokenRepository, never()).findByTokenHash(any());
+    }
+
+    @Test
+    void shouldReturnEmptyWhenRevokingNonExistentToken() {
+        // Arrange
+        when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.empty());
+
+        // Act
+        Optional<UUID> ownerId = refreshTokenService.revokeRefreshToken("nonexistent-token");
+
+        // Assert
+        assertTrue(ownerId.isEmpty());
+    }
+
+    @Test
+    void shouldRevokeAllUserTokens() {
+        // Arrange
+        UUID userId = UUID.randomUUID();
+
+        // Act
+        refreshTokenService.revokeAllUserTokens(userId);
+
+        // Assert
+        verify(refreshTokenRepository).revokeAllByUserId(userId);
+    }
+
+    @Test
+    void shouldIgnoreRevokeAllUserTokensWhenUserIdIsNull() {
+        // Arrange & Act
+        refreshTokenService.revokeAllUserTokens(null);
+
+        // Assert
+        verify(refreshTokenRepository, never()).revokeAllByUserId(any());
+    }
+
+    @Test
+    void shouldReturnCorrectRefreshExpirationSeconds() {
+        // Arrange & Act
+        long seconds = refreshTokenService.getRefreshExpirationSeconds();
+
+        // Assert: 7 days * 24 * 60 * 60 = 604800
+        assertEquals(604800L, seconds);
+    }
+
+    @Test
     void shouldEnforceMaxActiveSessionsByRevokingOldest() {
+        // Arrange
         when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(refreshTokenRepository.countByUser_IdAndRevokedFalseAndExpiresAtAfter(eq(testUser.getId()), any()))
                 .thenReturn(6L);
@@ -157,10 +250,12 @@ class RefreshTokenServiceTest {
 
         when(refreshTokenRepository.findByUser_IdAndRevokedFalseAndExpiresAtAfterOrderByCreatedAtAsc(
                 eq(testUser.getId()), any()))
-                .thenReturn(java.util.List.of(oldest));
+                .thenReturn(List.of(oldest));
 
+        // Act
         refreshTokenService.createRefreshToken(testUser);
 
+        // Assert
         assertTrue(oldest.isRevoked());
         verify(refreshTokenRepository, atLeastOnce()).save(oldest);
     }

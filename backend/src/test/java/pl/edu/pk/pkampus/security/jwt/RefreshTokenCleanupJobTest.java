@@ -5,6 +5,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import pl.edu.pk.pkampus.modules.auth.PasswordResetTokenRepository;
 
 import java.time.Instant;
 
@@ -19,17 +20,36 @@ class RefreshTokenCleanupJobTest {
     private RefreshTokenRepository refreshTokenRepository;
 
     @Mock
-    private pl.edu.pk.pkampus.modules.auth.PasswordResetTokenRepository passwordResetTokenRepository;
+    private PasswordResetTokenRepository passwordResetTokenRepository;
 
     @InjectMocks
     private RefreshTokenCleanupJob cleanupJob;
 
     @Test
-    void shouldDelegateDeleteToRepository() {
-        when(refreshTokenRepository.deleteStaleTokens(any(Instant.class), any(Instant.class))).thenReturn(3);
+    void shouldDelegateDeleteToBothRepositoriesWhenTokensFound() {
+        // Arrange
+        when(refreshTokenRepository.deleteStaleTokens(any(Instant.class), any(Instant.class))).thenReturn(5);
+        when(passwordResetTokenRepository.deleteStaleTokens(any(Instant.class))).thenReturn(2);
 
+        // Act
         cleanupJob.cleanupStaleRefreshTokens();
 
+        // Assert
         verify(refreshTokenRepository).deleteStaleTokens(any(Instant.class), any(Instant.class));
+        verify(passwordResetTokenRepository).deleteStaleTokens(any(Instant.class));
+    }
+
+    @Test
+    void shouldExecuteWithoutErrorWhenNoTokensToDelete() {
+        // Arrange
+        when(refreshTokenRepository.deleteStaleTokens(any(Instant.class), any(Instant.class))).thenReturn(0);
+        when(passwordResetTokenRepository.deleteStaleTokens(any(Instant.class))).thenReturn(0);
+
+        // Act
+        cleanupJob.cleanupStaleRefreshTokens();
+
+        // Assert
+        verify(refreshTokenRepository).deleteStaleTokens(any(Instant.class), any(Instant.class));
+        verify(passwordResetTokenRepository).deleteStaleTokens(any(Instant.class));
     }
 }
