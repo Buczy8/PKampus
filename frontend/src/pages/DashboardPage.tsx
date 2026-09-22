@@ -36,7 +36,7 @@ import {
   mapLaundryBooking,
   mapOpenIssue,
   mapRoomBooking,
-} from "./dashboard-agenda"
+} from "@/lib/dashboard-agenda"
 
 function QuickActions() {
   return (

@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.auth;
+package pl.edu.pk.pkampus.modules.auth.dto;
 
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;

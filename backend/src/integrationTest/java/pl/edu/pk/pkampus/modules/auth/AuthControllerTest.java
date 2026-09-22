@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.auth;
+package pl.edu.pk.pkampus.modules.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;

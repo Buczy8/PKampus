@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.retention;
+package pl.edu.pk.pkampus.modules.retention;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
