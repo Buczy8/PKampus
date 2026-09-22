@@ -51,6 +51,9 @@ class BookingAutoCancellationIntegrationTest {
     private BookingAutoCancellationService autoCancellationService;
 
     @Autowired
+    private BookingAutoCancellationJob autoCancellationJob;
+
+    @Autowired
     private ReceptionistService receptionistService;
 
     @Autowired
@@ -295,5 +298,79 @@ class BookingAutoCancellationIntegrationTest {
                 anyString(),
                 eq("laundry")
         );
+    }
+
+    @Test
+    @DisplayName("Should NOT cancel room booking if key was already issued")
+    void shouldNotCancelRoomBookingWhenKeyAlreadyIssued() {
+        Instant pastStart = Instant.now().minus(25, ChronoUnit.MINUTES);
+        Instant pastEnd = pastStart.plus(120, ChronoUnit.MINUTES);
+
+        RoomBooking booking = roomBookingRepository.save(RoomBooking.builder()
+                .room(room)
+                .user(resident)
+                .startTime(pastStart)
+                .endTime(pastEnd)
+                .participantsCount(2)
+                .purpose("Gra")
+                .keyIssuedAt(pastStart.plus(5, ChronoUnit.MINUTES))
+                .status(RoomBookingStatus.KEY_ISSUED)
+                .build());
+
+        int cancelledCount = autoCancellationService.cancelAllExpiredBookings(15);
+
+        assertThat(cancelledCount).isEqualTo(0);
+        RoomBooking updated = roomBookingRepository.findById(booking.getId()).orElseThrow();
+        assertThat(updated.getStatus()).isEqualTo(RoomBookingStatus.KEY_ISSUED);
+    }
+
+    @Test
+    @DisplayName("When receptionist cancels past-start room booking, status transitions to AUTO_CANCELLED_15MIN")
+    void shouldSetAutoCancelledStatusWhenStaffCancelsLateRoomBooking() {
+        Instant pastStart = Instant.now().minus(16, ChronoUnit.MINUTES);
+        Instant pastEnd = pastStart.plus(120, ChronoUnit.MINUTES);
+
+        RoomBooking booking = roomBookingRepository.save(RoomBooking.builder()
+                .room(room)
+                .user(resident)
+                .startTime(pastStart)
+                .endTime(pastEnd)
+                .participantsCount(3)
+                .purpose("Spotkanie")
+                .status(RoomBookingStatus.CONFIRMED)
+                .build());
+
+        receptionistService.cancelRoomBooking(receptionist, booking.getId());
+
+        RoomBooking updated = roomBookingRepository.findById(booking.getId()).orElseThrow();
+        assertThat(updated.getStatus()).isEqualTo(RoomBookingStatus.AUTO_CANCELLED_15MIN);
+
+        verify(emailService).sendBookingAutoCancelled15MinEmail(
+                eq(resident.getEmail()),
+                eq(resident.getFirstName()),
+                eq("Room " + room.getName()),
+                anyString(),
+                eq("rooms")
+        );
+    }
+
+    @Test
+    @DisplayName("BookingAutoCancellationJob triggers cancellation process successfully")
+    void jobTriggersCancellationProcess() {
+        Instant pastStart = Instant.now().minus(20, ChronoUnit.MINUTES);
+        Instant pastEnd = pastStart.plus(90, ChronoUnit.MINUTES);
+
+        LaundryBooking booking = laundryBookingRepository.save(LaundryBooking.builder()
+                .machine(machine)
+                .user(resident)
+                .startTime(pastStart)
+                .endTime(pastEnd)
+                .status(LaundryBookingStatus.CONFIRMED)
+                .build());
+
+        autoCancellationJob.runAutoCancellation();
+
+        LaundryBooking updated = laundryBookingRepository.findById(booking.getId()).orElseThrow();
+        assertThat(updated.getStatus()).isEqualTo(LaundryBookingStatus.AUTO_CANCELLED_15MIN);
     }
 }
