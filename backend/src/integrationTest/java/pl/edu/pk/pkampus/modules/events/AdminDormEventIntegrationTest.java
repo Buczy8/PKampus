@@ -242,6 +242,60 @@ class AdminDormEventIntegrationTest {
                 .andExpect(jsonPath("$.data.title").value("Awaria windy"));
     }
 
+    @Test
+    @DisplayName("Create notice with endDate before eventDate returns 422 Unprocessable Entity")
+    void createWithInvalidDatesReturns422() throws Exception {
+        Instant start = Instant.now().plus(2, ChronoUnit.HOURS);
+        Instant end = start.minus(1, ChronoUnit.HOURS);
+
+        mockMvc.perform(post("/api/v1/admin/events")
+                        .header("Authorization", bearer(dormAdmin1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Błędne daty",
+                                  "description": "Opis",
+                                  "priority": "INFO",
+                                  "eventDate": "%s",
+                                  "endDate": "%s"
+                                }
+                                """.formatted(start, end)))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    @DisplayName("Create notice with blank title returns 400 Bad Request")
+    void createWithBlankTitleReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/events")
+                        .header("Authorization", bearer(dormAdmin1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "",
+                                  "description": "Opis",
+                                  "priority": "INFO",
+                                  "eventDate": "%s"
+                                }
+                                """.formatted(Instant.now())))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Banner returns empty/null data when no active critical notice exists")
+    void bannerReturnsNullWhenNoCriticalNotice() throws Exception {
+        mockMvc.perform(get("/api/v1/events/banner")
+                        .header("Authorization", bearer(resident1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("Unauthenticated request to admin events API returns 401")
+    void unauthenticatedReturns401() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/events"))
+                .andExpect(status().isUnauthorized());
+    }
+
     private User saveUser(String email, UserRole role, Dormitory dorm, String room) {
         return userRepository.save(User.builder()
                 .email(email)
