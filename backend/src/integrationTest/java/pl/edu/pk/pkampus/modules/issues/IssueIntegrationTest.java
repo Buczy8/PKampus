@@ -291,6 +291,71 @@ class IssueIntegrationTest {
                 .andExpect(header().string("Location", "https://minio.example/issues/issue-photo-obj.jpg"));
     }
 
+    @Test
+    @DisplayName("Unauthenticated request to issues returns 401")
+    void unauthenticatedReturns401() throws Exception {
+        mockMvc.perform(get("/api/v1/issues/me"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Non-resident (e.g. DORM_ADMIN) cannot access resident issue API")
+    void staffForbiddenOnResidentIssueEndpoints() throws Exception {
+        User admin = userRepository.save(User.builder()
+                .email("admin-iss-" + UUID.randomUUID() + "@pk.edu.pl")
+                .passwordHash(passwordEncoder.encode("Password123!"))
+                .firstName("Kierownik")
+                .lastName("Admin")
+                .phoneNumber("+48555444333")
+                .role(UserRole.DORM_ADMIN)
+                .status(UserStatus.ACTIVE)
+                .dormitory(dorm)
+                .build());
+
+        mockMvc.perform(get("/api/v1/issues/me")
+                        .header("Authorization", bearer(admin)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Photo endpoint returns 404 when issue has no photo")
+    void photoWhenIssueHasNoPhotoReturns404() throws Exception {
+        Issue issueWithoutPhoto = issueRepository.save(Issue.builder()
+                .reporter(resident)
+                .dormitory(dorm)
+                .room(room)
+                .category(IssueCategory.OTHER)
+                .urgency(IssueUrgency.NORMAL)
+                .description("Brak zdjęcia")
+                .status(IssueStatus.NEW)
+                .build());
+
+        mockMvc.perform(get("/api/v1/issues/" + issueWithoutPhoto.getId() + "/photo")
+                        .header("Authorization", bearer(resident)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("Create issue with invalid json payload returns 400 Bad Request")
+    void createIssueWithInvalidDataReturns400() throws Exception {
+        MockMultipartFile data = new MockMultipartFile(
+                "data",
+                "",
+                MediaType.APPLICATION_JSON_VALUE,
+                """
+                        {
+                          "locationType": null,
+                          "description": ""
+                        }
+                        """.getBytes()
+        );
+
+        mockMvc.perform(multipart("/api/v1/issues")
+                        .file(data)
+                        .header("Authorization", bearer(resident)))
+                .andExpect(status().isBadRequest());
+    }
+
     private User saveResident(Dormitory dormitory, String declaredRoom) {
         return userRepository.save(User.builder()
                 .email("issue-res-" + UUID.randomUUID() + "@pk.edu.pl")
