@@ -191,6 +191,60 @@ class AdminResidentDirectoryIntegrationTest {
                 .andExpect(jsonPath("$.data", hasSize(0)));
     }
 
+    @Test
+    @DisplayName("Cannot block resident who is already blocked")
+    void cannotBlockAlreadyBlocked() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/residents/" + resident1.getId() + "/block")
+                        .header("Authorization", bearer(dormAdmin1)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/admin/residents/" + resident1.getId() + "/block")
+                        .header("Authorization", bearer(dormAdmin1)))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    @DisplayName("Cannot unblock resident who is not blocked")
+    void cannotUnblockActiveResident() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/residents/" + resident1.getId() + "/unblock")
+                        .header("Authorization", bearer(dormAdmin1)))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    @DisplayName("Cannot issue duplicate active ROOM_BAN")
+    void duplicateRoomBanFails() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/residents/" + resident1.getId() + "/room-ban")
+                        .header("Authorization", bearer(dormAdmin1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "durationMonths": 1,
+                                  "reason": "First ban"
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/v1/admin/residents/" + resident1.getId() + "/room-ban")
+                        .header("Authorization", bearer(dormAdmin1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "durationMonths": 2,
+                                  "reason": "Second ban"
+                                }
+                                """))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    @DisplayName("Revoking non-existent sanction returns 404")
+    void revokeNonExistentSanctionReturnsNotFound() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/residents/" + resident1.getId() + "/room-ban/" + UUID.randomUUID() + "/revoke")
+                        .header("Authorization", bearer(dormAdmin1)))
+                .andExpect(status().isNotFound());
+    }
+
     private User saveUser(String email, UserRole role, Dormitory dorm, String room, UserStatus status) {
         return userRepository.save(User.builder()
                 .email(email)

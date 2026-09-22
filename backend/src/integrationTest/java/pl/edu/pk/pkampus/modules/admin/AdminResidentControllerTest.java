@@ -205,4 +205,121 @@ class AdminResidentControllerTest {
                         .content(objectMapper.writeValueAsString(Map.of("reason", "x"))))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    void listResidentsReturnsOk() throws Exception {
+        when(adminResidentDirectoryService.listResidents(any()))
+                .thenReturn(List.of(pl.edu.pk.pkampus.modules.admin.dto.ManagedResidentDto.builder()
+                        .id(residentId)
+                        .email("student@pk.edu.pl")
+                        .roomNumber("101")
+                        .status(UserStatus.ACTIVE)
+                        .build()));
+
+        mockMvc.perform(get("/api/v1/admin/residents"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].email").value("student@pk.edu.pl"))
+                .andExpect(jsonPath("$.data[0].roomNumber").value("101"));
+    }
+
+    @Test
+    void blockResidentReturnsOk() throws Exception {
+        when(adminResidentDirectoryService.block(any(), eq(residentId)))
+                .thenReturn(pl.edu.pk.pkampus.modules.admin.dto.ManagedResidentDto.builder()
+                        .id(residentId)
+                        .status(UserStatus.BLOCKED)
+                        .build());
+
+        mockMvc.perform(post("/api/v1/admin/residents/" + residentId + "/block"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Resident blocked"))
+                .andExpect(jsonPath("$.data.status").value("BLOCKED"));
+    }
+
+    @Test
+    void unblockResidentReturnsOk() throws Exception {
+        when(adminResidentDirectoryService.unblock(any(), eq(residentId)))
+                .thenReturn(pl.edu.pk.pkampus.modules.admin.dto.ManagedResidentDto.builder()
+                        .id(residentId)
+                        .status(UserStatus.ACTIVE)
+                        .build());
+
+        mockMvc.perform(post("/api/v1/admin/residents/" + residentId + "/unblock"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Resident unblocked"))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+    }
+
+    @Test
+    void checkoutResidentReturnsOk() throws Exception {
+        when(adminResidentDirectoryService.checkout(any(), eq(residentId)))
+                .thenReturn(pl.edu.pk.pkampus.modules.admin.dto.ManagedResidentDto.builder()
+                        .id(residentId)
+                        .status(UserStatus.CHECKED_OUT)
+                        .build());
+
+        mockMvc.perform(post("/api/v1/admin/residents/" + residentId + "/checkout"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Resident checked out"))
+                .andExpect(jsonPath("$.data.status").value("CHECKED_OUT"));
+    }
+
+    @Test
+    void issueRoomBanReturnsCreated() throws Exception {
+        UUID sanctionId = UUID.randomUUID();
+        when(adminResidentDirectoryService.issueRoomBan(any(), eq(residentId), any()))
+                .thenReturn(pl.edu.pk.pkampus.modules.admin.dto.SanctionDto.builder()
+                        .id(sanctionId)
+                        .userId(residentId)
+                        .sanctionType(pl.edu.pk.pkampus.modules.sanctions.SanctionType.ROOM_BAN)
+                        .active(true)
+                        .build());
+
+        mockMvc.perform(post("/api/v1/admin/residents/" + residentId + "/room-ban")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "durationMonths": 2,
+                                  "reason": "Quiet hours violation"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("ROOM_BAN issued"))
+                .andExpect(jsonPath("$.data.active").value(true));
+    }
+
+    @Test
+    void issueRoomBanFailsOnInvalidPayload() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/residents/" + residentId + "/room-ban")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "durationMonths": 5,
+                                  "reason": ""
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void revokeRoomBanReturnsOk() throws Exception {
+        UUID sanctionId = UUID.randomUUID();
+        when(adminResidentDirectoryService.revokeRoomBan(any(), eq(residentId), eq(sanctionId)))
+                .thenReturn(pl.edu.pk.pkampus.modules.admin.dto.SanctionDto.builder()
+                        .id(sanctionId)
+                        .userId(residentId)
+                        .active(false)
+                        .build());
+
+        mockMvc.perform(post("/api/v1/admin/residents/" + residentId + "/room-ban/" + sanctionId + "/revoke"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("ROOM_BAN revoked"))
+                .andExpect(jsonPath("$.data.active").value(false));
+    }
 }

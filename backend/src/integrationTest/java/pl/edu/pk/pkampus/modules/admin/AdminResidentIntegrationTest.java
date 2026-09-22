@@ -80,6 +80,7 @@ class AdminResidentIntegrationTest {
     private User residentOtherDorm;
     private User plainResident;
     private User receptionist;
+    private User superAdmin;
 
     @BeforeEach
     void setUp() {
@@ -115,6 +116,12 @@ class AdminResidentIntegrationTest {
                 .floor(2)
                 .capacity(2)
                 .build());
+        roomRepository.save(Room.builder()
+                .dormitory(dorm2)
+                .roomNumber("101")
+                .floor(1)
+                .capacity(2)
+                .build());
 
         dormAdmin = userRepository.save(User.builder()
                 .email("ads-" + UUID.randomUUID() + "@pk.edu.pl")
@@ -125,6 +132,17 @@ class AdminResidentIntegrationTest {
                 .role(UserRole.DORM_ADMIN)
                 .status(UserStatus.ACTIVE)
                 .dormitory(dorm1)
+                .build());
+
+        superAdmin = userRepository.save(User.builder()
+                .email("super-" + UUID.randomUUID() + "@pk.edu.pl")
+                .passwordHash(passwordEncoder.encode("Password123!"))
+                .firstName("Super")
+                .lastName("Admin")
+                .phoneNumber("+48999999999")
+                .role(UserRole.SUPER_ADMIN)
+                .status(UserStatus.ACTIVE)
+                .dormitory(null)
                 .build());
 
         receptionist = userRepository.save(User.builder()
@@ -349,5 +367,29 @@ class AdminResidentIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void superAdminListsPendingResidentsAcrossAllDormitories() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/residents/pending")
+                        .header("Authorization", bearer(superAdmin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(2));
+    }
+
+    @Test
+    void superAdminCanActivateResidentInAnyDormitory() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/residents/" + residentOtherDorm.getId() + "/activate")
+                        .header("Authorization", bearer(superAdmin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.roomNumber").value("101"));
+
+        User refreshed = userRepository.findById(residentOtherDorm.getId()).orElseThrow();
+        assertThat(refreshed.getStatus()).isEqualTo(UserStatus.ACTIVE);
+        assertThat(roomAssignmentRepository.findByUserIdAndIsActiveTrue(residentOtherDorm.getId())).isPresent();
     }
 }
