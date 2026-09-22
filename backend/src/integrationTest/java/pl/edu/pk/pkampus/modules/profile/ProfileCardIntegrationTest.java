@@ -15,6 +15,10 @@ import pl.edu.pk.pkampus.common.storage.MinioStorageService;
 import pl.edu.pk.pkampus.mail.EmailService;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
 import pl.edu.pk.pkampus.modules.dormitory.DormitoryRepository;
+import pl.edu.pk.pkampus.modules.dormitory.Room;
+import pl.edu.pk.pkampus.modules.dormitory.RoomAssignment;
+import pl.edu.pk.pkampus.modules.dormitory.RoomAssignmentRepository;
+import pl.edu.pk.pkampus.modules.dormitory.RoomRepository;
 import pl.edu.pk.pkampus.modules.user.User;
 import pl.edu.pk.pkampus.modules.user.UserRepository;
 import pl.edu.pk.pkampus.modules.user.UserRole;
@@ -22,6 +26,7 @@ import pl.edu.pk.pkampus.modules.user.UserStatus;
 import pl.edu.pk.pkampus.security.jwt.AuthenticatedUserCache;
 import pl.edu.pk.pkampus.security.jwt.JwtService;
 
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.UUID;
 
@@ -44,6 +49,12 @@ class ProfileCardIntegrationTest {
 
     @Autowired
     private DormitoryRepository dormitoryRepository;
+
+    @Autowired
+    private RoomRepository roomRepository;
+
+    @Autowired
+    private RoomAssignmentRepository roomAssignmentRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -143,5 +154,64 @@ class ProfileCardIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("ACCOUNT_BLOCKED"));
+    }
+
+    @Test
+    @DisplayName("CHECKED_OUT resident gets 403 ACCOUNT_CHECKED_OUT")
+    void checkedOutResidentForbidden() throws Exception {
+        String token = jwtService.generateToken(resident, "312");
+        resident.setStatus(UserStatus.CHECKED_OUT);
+        userRepository.saveAndFlush(resident);
+        authenticatedUserCache.invalidate(resident.getId());
+
+        mockMvc.perform(get("/api/v1/profile/card")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("ACCOUNT_CHECKED_OUT"));
+    }
+
+    @Test
+    @DisplayName("Non-resident (e.g. RECEPTIONIST) gets 403 Forbidden")
+    void receptionistForbidden() throws Exception {
+        String token = jwtService.generateToken(receptionist, null);
+
+        mockMvc.perform(get("/api/v1/profile/card")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Unauthenticated request returns 401 Unauthorized")
+    void unauthenticatedReturns401() throws Exception {
+        mockMvc.perform(get("/api/v1/profile/card"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Resident with active room assignment returns assigned room number instead of declared")
+    void activeRoomAssignmentOverridesDeclaredRoom() throws Exception {
+        Room room = roomRepository.save(Room.builder()
+                .dormitory(dorm)
+                .roomNumber("505")
+                .floor(5)
+                .capacity(2)
+                .build());
+
+        roomAssignmentRepository.save(RoomAssignment.builder()
+                .user(resident)
+                .room(room)
+                .academicYear("2026/2027")
+                .isActive(true)
+                .checkInDate(LocalDate.now())
+                .build());
+
+        String token = jwtService.generateToken(resident, "312");
+
+        mockMvc.perform(get("/api/v1/profile/card")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.roomNumber").value("505"));
     }
 }
