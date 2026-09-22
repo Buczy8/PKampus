@@ -5,6 +5,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -69,4 +71,20 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
             @Param("category") PostCategory category,
             @Param("statusFilter") String statusFilter
     );
+
+    @Query("""
+            SELECT p.id FROM Post p
+            WHERE (p.status = pl.edu.pk.pkampus.modules.board.PostStatus.RESOLVED AND p.updatedAt < :resolvedCutoff)
+               OR (p.deleted = TRUE AND p.deletedAt < :deletedCutoff)
+               OR (p.status = pl.edu.pk.pkampus.modules.board.PostStatus.REMOVED_MODERATOR AND p.updatedAt < :deletedCutoff)
+            """)
+    List<UUID> findPostIdsForRetention(
+            @Param("resolvedCutoff") Instant resolvedCutoff,
+            @Param("deletedCutoff") Instant deletedCutoff
+    );
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("DELETE FROM Post p WHERE p.id IN :ids")
+    int deleteByIdIn(@Param("ids") Collection<UUID> ids);
 }
+

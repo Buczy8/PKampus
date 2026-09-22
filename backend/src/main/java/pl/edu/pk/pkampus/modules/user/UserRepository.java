@@ -41,4 +41,13 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"dormitory"})
     @Override
     Optional<User> findById(UUID id);
+
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT u FROM User u
+            WHERE u.status = pl.edu.pk.pkampus.modules.user.UserStatus.CHECKED_OUT
+              AND u.updatedAt < :cutoff
+              AND u.firstName <> 'Anonim'
+            """)
+    List<User> findCheckedOutUsersForAnonymization(@org.springframework.data.repository.query.Param("cutoff") java.time.Instant cutoff);
 }
+

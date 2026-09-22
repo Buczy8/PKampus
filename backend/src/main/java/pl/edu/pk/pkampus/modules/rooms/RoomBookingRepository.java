@@ -151,4 +151,16 @@ public interface RoomBookingRepository extends JpaRepository<RoomBooking, UUID> 
             @Param("status") RoomBookingStatus status,
             @Param("cutoff") Instant cutoff
     );
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("""
+            DELETE FROM RoomBooking b
+            WHERE b.status IN :statuses
+              AND b.endTime < :cutoff
+            """)
+    int deleteOldCompletedOrCancelledBookings(
+            @Param("statuses") Collection<RoomBookingStatus> statuses,
+            @Param("cutoff") Instant cutoff
+    );
 }
+

@@ -132,4 +132,16 @@ public interface LaundryBookingRepository extends JpaRepository<LaundryBooking, 
             @Param("status") LaundryBookingStatus status,
             @Param("cutoff") Instant cutoff
     );
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("""
+            DELETE FROM LaundryBooking b
+            WHERE b.status IN :statuses
+              AND b.endTime < :cutoff
+            """)
+    int deleteOldCompletedOrCancelledBookings(
+            @Param("statuses") Collection<LaundryBookingStatus> statuses,
+            @Param("cutoff") Instant cutoff
+    );
 }
+

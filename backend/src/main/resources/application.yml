@@ -78,3 +78,13 @@ app:
       enabled: ${BOOKING_AUTO_CANCELLATION_ENABLED:true}
       cron: ${BOOKING_AUTO_CANCELLATION_CRON:0 * * * * *}
       late-threshold-minutes: ${BOOKING_LATE_THRESHOLD_MINUTES:15}
+    retention:
+      enabled: ${DATA_RETENTION_ENABLED:true}
+      cron: ${DATA_RETENTION_CRON:0 30 3 * * *}
+      issue-photos-days: ${DATA_RETENTION_ISSUE_PHOTOS_DAYS:30}
+      posts-resolved-days: ${DATA_RETENTION_POSTS_RESOLVED_DAYS:30}
+      posts-deleted-days: ${DATA_RETENTION_POSTS_DELETED_DAYS:14}
+      comments-deleted-days: ${DATA_RETENTION_COMMENTS_DELETED_DAYS:14}
+      bookings-purge-days: ${DATA_RETENTION_BOOKINGS_PURGE_DAYS:90}
+      checked-out-anonymize-days: ${DATA_RETENTION_CHECKED_OUT_DAYS:365}
+

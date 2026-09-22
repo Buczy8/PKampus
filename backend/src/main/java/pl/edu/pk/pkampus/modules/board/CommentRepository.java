@@ -37,4 +37,13 @@ public interface CommentRepository extends JpaRepository<Comment, UUID> {
             WHERE c.id = :id
             """)
     java.util.Optional<Comment> findByIdWithPost(@Param("id") UUID id);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("DELETE FROM Comment c WHERE c.deleted = TRUE AND c.deletedAt < :cutoff")
+    int deleteOldSoftDeletedComments(@Param("cutoff") java.time.Instant cutoff);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("DELETE FROM Comment c WHERE c.post.id IN :postIds")
+    int deleteByPostIdIn(@Param("postIds") java.util.Collection<UUID> postIds);
 }
+
