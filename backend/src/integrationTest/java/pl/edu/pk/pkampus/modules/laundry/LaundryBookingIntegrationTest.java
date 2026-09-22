@@ -327,6 +327,44 @@ class LaundryBookingIntegrationTest {
                 .andExpect(jsonPath("$.data[0].status").value("CONFIRMED"));
     }
 
+    @Test
+    @DisplayName("Booking OUT_OF_ORDER machine returns 422 Unprocessable Entity")
+    void bookOutOfOrderMachineReturns422() throws Exception {
+        machine1.setStatus(LaundryMachineStatus.OUT_OF_ORDER);
+        laundryMachineRepository.save(machine1);
+
+        OffsetDateTime start = slotStart(1, LocalTime.of(7, 0));
+        OffsetDateTime end = start.plusMinutes(90);
+
+        mockMvc.perform(post("/api/v1/laundry/bookings")
+                        .header("Authorization", bearer(resident))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bookingJson(machine1.getId(), start, end)))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("out of order")));
+    }
+
+    @Test
+    @DisplayName("Booking with mismatched end time duration returns 422")
+    void bookMismatchedDurationReturns422() throws Exception {
+        OffsetDateTime start = slotStart(1, LocalTime.of(7, 0));
+        OffsetDateTime end = start.plusMinutes(60); // 60 min instead of 90 min!
+
+        mockMvc.perform(post("/api/v1/laundry/bookings")
+                        .header("Authorization", bearer(resident))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bookingJson(machine1.getId(), start, end)))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("endTime must equal startTime plus slot duration")));
+    }
+
+    @Test
+    @DisplayName("Unauthenticated request to laundry API returns 401")
+    void unauthenticatedReturns401() throws Exception {
+        mockMvc.perform(get("/api/v1/laundry/bookings/me"))
+                .andExpect(status().isUnauthorized());
+    }
+
     private void bookOk(User user, UUID machineId, OffsetDateTime start, OffsetDateTime end) throws Exception {
         mockMvc.perform(post("/api/v1/laundry/bookings")
                         .header("Authorization", bearer(user))

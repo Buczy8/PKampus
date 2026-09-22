@@ -165,6 +165,33 @@ class AdminLaundryMachineIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    @DisplayName("DORM_ADMIN can update laundry machine in own dormitory")
+    void adminUpdatesMachineSuccess() throws Exception {
+        LaundryMachine machine = laundryMachineRepository.save(LaundryMachine.builder()
+                .dormitory(dorm1)
+                .machineIdentifier("Old-1")
+                .floorLocation("Parter")
+                .status(LaundryMachineStatus.AVAILABLE)
+                .build());
+
+        mockMvc.perform(patch("/api/v1/admin/laundry-machines/" + machine.getId())
+                        .header("Authorization", bearer(dormAdmin1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "machineIdentifier": "New-1",
+                                  "floorLocation": "1. piętro",
+                                  "status": "OUT_OF_ORDER"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.machineIdentifier").value("New-1"))
+                .andExpect(jsonPath("$.data.floorLocation").value("1. piętro"))
+                .andExpect(jsonPath("$.data.status").value("OUT_OF_ORDER"));
+    }
+
     private User saveUser(String email, UserRole role, Dormitory dorm, String room) {
         return userRepository.save(User.builder()
                 .email(email)
