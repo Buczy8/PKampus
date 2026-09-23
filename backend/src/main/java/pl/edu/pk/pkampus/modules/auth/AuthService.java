@@ -6,38 +6,21 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
 import pl.edu.pk.pkampus.modules.auth.dto.AuthResponseDto;
 import pl.edu.pk.pkampus.modules.auth.dto.ChangePasswordRequestDto;
-import pl.edu.pk.pkampus.modules.auth.dto.ForgotPasswordRequestDto;
 import pl.edu.pk.pkampus.modules.auth.dto.LoginRequestDto;
-import pl.edu.pk.pkampus.modules.auth.dto.RegisterRequestDto;
-import pl.edu.pk.pkampus.modules.auth.dto.RegisterResponseDto;
-import pl.edu.pk.pkampus.modules.auth.dto.ResetPasswordRequestDto;
-import pl.edu.pk.pkampus.modules.auth.dto.VerifyResetTokenResponseDto;
 import pl.edu.pk.pkampus.modules.user.dto.UserProfileDto;
-import pl.edu.pk.pkampus.modules.auth.dto.VerifyEmailResponseDto;
 import pl.edu.pk.pkampus.common.exception.AccountStatusException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
-import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
-import pl.edu.pk.pkampus.modules.user.User;
-import pl.edu.pk.pkampus.modules.user.UserRole;
-import pl.edu.pk.pkampus.modules.user.UserStatus;
-import pl.edu.pk.pkampus.modules.dormitory.DormitoryRepository;
 import pl.edu.pk.pkampus.modules.dormitory.RoomAssignmentRepository;
+import pl.edu.pk.pkampus.modules.user.User;
+import pl.edu.pk.pkampus.modules.user.UserStatus;
 import pl.edu.pk.pkampus.modules.user.UserRepository;
-import pl.edu.pk.pkampus.common.storage.MinioStorageService;
-import pl.edu.pk.pkampus.security.token.SignedEmailTokenService;
-import pl.edu.pk.pkampus.security.token.EmailTokenPayload;
 import pl.edu.pk.pkampus.security.jwt.AuthenticatedUserCache;
 import pl.edu.pk.pkampus.security.jwt.JwtService;
 import pl.edu.pk.pkampus.security.jwt.RefreshTokenService;
 import pl.edu.pk.pkampus.security.jwt.TokenRevocationService;
-import pl.edu.pk.pkampus.mail.EmailService;
 
-import java.time.Clock;
-import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -46,105 +29,12 @@ import java.util.UUID;
 public class AuthService {
 
     private final UserRepository userRepository;
-    private final DormitoryRepository dormitoryRepository;
     private final RoomAssignmentRepository roomAssignmentRepository;
     private final PasswordEncoder passwordEncoder;
-    private final MinioStorageService minioStorageService;
-    private final SignedEmailTokenService signedEmailTokenService;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final TokenRevocationService tokenRevocationService;
     private final AuthenticatedUserCache authenticatedUserCache;
-    private final EmailService emailService;
-    private final PasswordResetTokenRepository passwordResetTokenRepository;
-    private final Clock clock;
-
-    public static final String REGISTRATION_SUCCESS_MESSAGE =
-            "Registration request received. If the email is eligible, an activation link has been sent to your inbox.";
-
-    public static final String FORGOT_PASSWORD_GENERIC_MESSAGE =
-            "If an account associated with this email address exists, a password reset link has been sent.";
-
-    @Transactional
-    public RegisterResponseDto registerResident(RegisterRequestDto dto, MultipartFile photo) {
-        // Always validate image first (equal early work for anti-enumeration timing)
-        String detectedMime = minioStorageService.validateAndDetectImageType(photo);
-        String normalizedEmail = dto.getEmail().trim().toLowerCase();
-
-        if (userRepository.existsByEmail(normalizedEmail)) {
-            log.warn("Registration attempt with existing email: {}", normalizedEmail);
-            passwordEncoder.encode(dto.getPassword());
-            return new RegisterResponseDto(REGISTRATION_SUCCESS_MESSAGE, normalizedEmail);
-        }
-
-        Dormitory dormitory = dormitoryRepository.findById(dto.getDormitoryId())
-                .orElseThrow(() -> new ResourceNotFoundException("Dormitory not found with the provided ID"));
-
-        String avatarUrl = minioStorageService.uploadAvatar(photo, detectedMime);
-
-        try {
-            User savedUser = userRepository.save(buildPendingUser(dto, normalizedEmail, dormitory, avatarUrl));
-
-            String token = signedEmailTokenService.generateToken(savedUser.getId(), savedUser.getEmail());
-            emailService.sendVerificationEmail(savedUser.getEmail(), token);
-
-            log.info("Resident registered with ID {}. Verification email dispatched.", savedUser.getId());
-
-            return new RegisterResponseDto(REGISTRATION_SUCCESS_MESSAGE, savedUser.getEmail());
-        } catch (Exception e) {
-            log.error("Failed to complete resident registration for {}. Compensating by removing uploaded avatar {}",
-                    normalizedEmail, avatarUrl, e);
-            deleteAvatarQuietly(avatarUrl);
-            throw e;
-        }
-    }
-
-    private User buildPendingUser(
-            RegisterRequestDto dto, String normalizedEmail, Dormitory dormitory, String avatarUrl) {
-        return User.builder()
-                .email(normalizedEmail)
-                .passwordHash(passwordEncoder.encode(dto.getPassword()))
-                .firstName(dto.getFirstName().trim())
-                .lastName(dto.getLastName().trim())
-                .phoneNumber(dto.getPhoneNumber().trim())
-                .avatarUrl(avatarUrl)
-                .role(UserRole.RESIDENT)
-                .status(UserStatus.PENDING_EMAIL)
-                .dormitory(dormitory)
-                .declaredRoomNumber(dto.getDeclaredRoomNumber().trim())
-                .build();
-    }
-
-    private void deleteAvatarQuietly(String avatarUrl) {
-        try {
-            minioStorageService.removeAvatar(avatarUrl);
-        } catch (Exception minioEx) {
-            log.error("Failed to cleanup orphaned avatar {} from MinIO", avatarUrl, minioEx);
-        }
-    }
-
-    @Transactional
-    public VerifyEmailResponseDto verifyEmail(String token) {
-        EmailTokenPayload payload = signedEmailTokenService.verifyToken(token);
-
-        User user = userRepository.findById(payload.userId())
-                .orElseThrow(() -> new ResourceNotFoundException("User associated with the token does not exist"));
-
-        if (!user.getEmail().equalsIgnoreCase(payload.email())) {
-            throw new AccountStatusException("Email address mismatch in activation token");
-        }
-
-        if (user.getStatus() == UserStatus.PENDING_EMAIL) {
-            user.setStatus(UserStatus.PENDING_APPROVAL);
-            userRepository.save(user);
-            log.info("User {} successfully verified email. Account set to PENDING_APPROVAL.", user.getId());
-        }
-
-        return new VerifyEmailResponseDto(
-                "Email address confirmed successfully. Your account is awaiting residency approval by the dormitory administration.",
-                user.getStatus()
-        );
-    }
 
     @Transactional
     public AuthResponseDto login(LoginRequestDto dto) {
@@ -265,7 +155,8 @@ public class AuthService {
             throw new IllegalArgumentException("New password must be different from the current password");
         }
 
-        User saved = applyNewPassword(user, dto.getNewPassword());
+        user.applyNewPasswordHash(passwordEncoder.encode(dto.getNewPassword()));
+        User saved = userRepository.save(user);
         authenticatedUserCache.invalidate(saved.getId());
 
         String roomNumber = resolveRoomNumber(saved);
@@ -278,100 +169,9 @@ public class AuthService {
         return UserProfileDto.from(user, roomNumber);
     }
 
-    private User applyNewPassword(User user, String rawPassword) {
-        user.setPasswordHash(passwordEncoder.encode(rawPassword));
-        if (user.getStatus() == UserStatus.MUST_CHANGE_PASSWORD) {
-            user.setStatus(UserStatus.ACTIVE);
-        }
-        return userRepository.save(user);
-    }
-
     private String resolveRoomNumber(User user) {
         return roomAssignmentRepository.findByUserIdAndIsActiveTrue(user.getId())
                 .map(ra -> ra.getRoom().getRoomNumber())
                 .orElse(user.getDeclaredRoomNumber());
-    }
-
-    @Transactional
-    public String initiatePasswordReset(ForgotPasswordRequestDto dto) {
-        String normalizedEmail = dto.getEmail().trim().toLowerCase();
-        Optional<User> optionalUser = userRepository.findByEmail(normalizedEmail);
-
-        if (optionalUser.isEmpty()) {
-            log.info("Password reset requested for non-existent email: {}", normalizedEmail);
-            return FORGOT_PASSWORD_GENERIC_MESSAGE;
-        }
-
-        User user = optionalUser.get();
-        if (user.getStatus() == UserStatus.BLOCKED || user.getStatus() == UserStatus.CHECKED_OUT) {
-            log.warn("Password reset requested for suspended/checked-out user: {}", user.getId());
-            return FORGOT_PASSWORD_GENERIC_MESSAGE;
-        }
-
-        // Invalidate previous active reset tokens for this user
-        Instant now = clock.instant();
-        passwordResetTokenRepository.invalidateAllActiveForUser(user.getId(), now);
-
-        String rawToken = ResetTokenSupport.generateRawToken();
-        String tokenHash = ResetTokenSupport.sha256Hex(rawToken);
-
-        Instant expiresAt = now.plus(ResetTokenSupport.RESET_TOKEN_TTL);
-
-        PasswordResetToken resetToken = PasswordResetToken.builder()
-                .user(user)
-                .tokenHash(tokenHash)
-                .expiresAt(expiresAt)
-                .build();
-
-        passwordResetTokenRepository.save(resetToken);
-
-        emailService.sendPasswordResetEmail(user.getEmail(), user.getFirstName(), rawToken);
-        log.info("Password reset token generated and email dispatched for user {}", user.getId());
-
-        return FORGOT_PASSWORD_GENERIC_MESSAGE;
-    }
-
-    @Transactional(readOnly = true)
-    public VerifyResetTokenResponseDto verifyResetToken(String rawToken) {
-        PasswordResetToken token = requireUsableToken(rawToken, clock.instant());
-
-        String maskedEmail = ResetTokenSupport.maskEmail(token.getUser().getEmail());
-        return new VerifyResetTokenResponseDto(true, maskedEmail);
-    }
-
-    @Transactional
-    public void resetPassword(ResetPasswordRequestDto dto) {
-        Instant now = clock.instant();
-        PasswordResetToken token = requireUsableToken(dto.getToken(), now);
-
-        User user = token.getUser();
-        if (user.getStatus() == UserStatus.BLOCKED || user.getStatus() == UserStatus.CHECKED_OUT) {
-            throw new AccountStatusException("Account is suspended or checked out");
-        }
-
-        applyNewPassword(user, dto.getNewPassword());
-
-        token.markUsed(now);
-        passwordResetTokenRepository.save(token);
-
-        // Invalidate all active tokens and sessions for this user
-        tokenRevocationService.revokeUser(user.getId());
-
-        log.info("User {} successfully reset password via email token", user.getId());
-    }
-
-    private PasswordResetToken requireUsableToken(String rawToken, Instant now) {
-        if (rawToken == null || rawToken.isBlank()) {
-            throw new IllegalArgumentException("Reset token must not be blank");
-        }
-
-        String tokenHash = ResetTokenSupport.sha256Hex(rawToken.trim());
-        PasswordResetToken token = passwordResetTokenRepository.findActiveByTokenHash(tokenHash)
-                .orElseThrow(() -> new ResourceNotFoundException("Invalid or expired password reset token"));
-
-        if (token.isExpired(now)) {
-            throw new IllegalArgumentException("Password reset token has expired");
-        }
-        return token;
     }
 }

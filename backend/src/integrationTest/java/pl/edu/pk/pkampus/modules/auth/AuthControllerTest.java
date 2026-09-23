@@ -60,6 +60,12 @@ class AuthControllerTest {
     private AuthService authService;
 
     @MockitoBean
+    private RegistrationService registrationService;
+
+    @MockitoBean
+    private PasswordResetService passwordResetService;
+
+    @MockitoBean
     private pl.edu.pk.pkampus.security.config.JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @MockitoBean
@@ -107,7 +113,7 @@ class AuthControllerTest {
                 new byte[]{1, 2, 3}
         );
 
-        when(authService.registerResident(any(), any()))
+        when(registrationService.registerResident(any(), any()))
                 .thenReturn(new RegisterResponseDto("Registration successful", "student@pk.edu.pl"));
 
         // Act & Assert
@@ -126,7 +132,7 @@ class AuthControllerTest {
     @Test
     void shouldVerifyEmailSuccessfully() throws Exception {
         // Arrange
-        when(authService.verifyEmail("valid-token"))
+        when(registrationService.verifyEmail("valid-token"))
                 .thenReturn(new VerifyEmailResponseDto("Email address confirmed successfully", UserStatus.PENDING_APPROVAL));
 
         // Act & Assert
@@ -405,7 +411,7 @@ class AuthControllerTest {
     void shouldForgotPasswordSuccessfully() throws Exception {
         // Arrange
         ForgotPasswordRequestDto request = new ForgotPasswordRequestDto("student@pk.edu.pl");
-        when(authService.initiatePasswordReset(any())).thenReturn(AuthService.FORGOT_PASSWORD_GENERIC_MESSAGE);
+        doNothing().when(passwordResetService).initiatePasswordReset(any());
 
         // Act & Assert
         mockMvc.perform(post("/api/v1/auth/forgot-password")
@@ -413,7 +419,7 @@ class AuthControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value(AuthService.FORGOT_PASSWORD_GENERIC_MESSAGE));
+                .andExpect(jsonPath("$.message").value(PasswordResetService.FORGOT_PASSWORD_GENERIC_MESSAGE));
     }
 
     @Test
@@ -437,7 +443,7 @@ class AuthControllerTest {
     void shouldVerifyResetTokenSuccessfully() throws Exception {
         // Arrange
         VerifyResetTokenResponseDto response = new VerifyResetTokenResponseDto(true, "s***t@pk.edu.pl");
-        when(authService.verifyResetToken("test-token")).thenReturn(response);
+        when(passwordResetService.verifyResetToken("test-token")).thenReturn(response);
 
         // Act & Assert
         mockMvc.perform(get("/api/v1/auth/verify-reset-token").param("token", "test-token"))
@@ -456,7 +462,7 @@ class AuthControllerTest {
     void shouldResetPasswordSuccessfully() throws Exception {
         // Arrange
         ResetPasswordRequestDto request = new ResetPasswordRequestDto("raw-token-123", "NewPassword123!");
-        doNothing().when(authService).resetPassword(any(ResetPasswordRequestDto.class));
+        doNothing().when(passwordResetService).resetPassword(any(ResetPasswordRequestDto.class));
 
         // Act & Assert
         mockMvc.perform(post("/api/v1/auth/reset-password")
@@ -466,7 +472,7 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("Password has been successfully reset. You can now log in."));
 
-        verify(authService).resetPassword(any(ResetPasswordRequestDto.class));
+        verify(passwordResetService).resetPassword(any(ResetPasswordRequestDto.class));
     }
 
     @Test

@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -12,6 +11,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
@@ -45,6 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional
+@RecordApplicationEvents
 @DisplayName("Password reset flow integration tests (FR-AUTH-07 / ADR-07)")
 class PasswordResetIntegrationTest {
 
@@ -66,6 +68,9 @@ class PasswordResetIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private ApplicationEvents events;
+
     @MockitoBean
     private EmailService emailService;
 
@@ -76,6 +81,7 @@ class PasswordResetIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        events.clear();
         Dormitory dormitory = dormitoryRepository.save(Dormitory.builder()
                 .name("DS-2 Leon")
                 .code("DS2-RESET")
@@ -114,10 +120,13 @@ class PasswordResetIntegrationTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("If an account associated")));
 
-        ArgumentCaptor<String> tokenCaptor = ArgumentCaptor.forClass(String.class);
-        verify(emailService).sendPasswordResetEmail(eq("adam.nowak@student.pk.edu.pl"), eq("Adam"), tokenCaptor.capture());
+        // The test transaction never commits, so the AFTER_COMMIT mail listener
+        // does not fire — capture the published event instead of the email.
+        PasswordResetRequestedEvent event = events.stream(PasswordResetRequestedEvent.class)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected PasswordResetRequestedEvent"));
 
-        String rawToken = tokenCaptor.getValue();
+        String rawToken = event.rawToken();
         assertThat(rawToken).hasSize(64); // 32 bytes hex
     }
 
@@ -148,12 +157,13 @@ class PasswordResetIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(forgotRequest)));
 
-        ArgumentCaptor<String> tokenCaptor = ArgumentCaptor.forClass(String.class);
-        verify(emailService).sendPasswordResetEmail(eq("adam.nowak@student.pk.edu.pl"), eq("Adam"), tokenCaptor.capture());
-        String rawToken = tokenCaptor.getValue();
+        PasswordResetRequestedEvent verifyEvent = events.stream(PasswordResetRequestedEvent.class)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected PasswordResetRequestedEvent"));
+        String verifyToken = verifyEvent.rawToken();
 
         mockMvc.perform(get("/api/v1/auth/verify-reset-token")
-                        .param("token", rawToken))
+                        .param("token", verifyToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.valid").value(true))
@@ -171,9 +181,10 @@ class PasswordResetIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(forgotRequest)));
 
-        ArgumentCaptor<String> tokenCaptor = ArgumentCaptor.forClass(String.class);
-        verify(emailService).sendPasswordResetEmail(eq("adam.nowak@student.pk.edu.pl"), eq("Adam"), tokenCaptor.capture());
-        String rawToken = tokenCaptor.getValue();
+        PasswordResetRequestedEvent resetEvent = events.stream(PasswordResetRequestedEvent.class)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected PasswordResetRequestedEvent"));
+        String rawToken = resetEvent.rawToken();
 
         ResetPasswordRequestDto resetRequest = ResetPasswordRequestDto.builder()
                 .token(rawToken)

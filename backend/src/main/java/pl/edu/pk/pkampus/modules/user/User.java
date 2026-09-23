@@ -96,6 +96,17 @@ public class User implements UserDetails {
         }
     }
 
+    /**
+     * Sets a new (already encoded) password hash. An account forced to change
+     * its password becomes ACTIVE once the password is actually changed.
+     */
+    public void applyNewPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+        if (this.status == UserStatus.MUST_CHANGE_PASSWORD) {
+            this.status = UserStatus.ACTIVE;
+        }
+    }
+
     // --- UserDetails implementation for Spring Security ---
 
     @Override

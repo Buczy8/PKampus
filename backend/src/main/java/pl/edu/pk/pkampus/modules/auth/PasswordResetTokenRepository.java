@@ -21,6 +21,19 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
             """)
     Optional<PasswordResetToken> findActiveByTokenHash(@Param("tokenHash") String tokenHash);
 
+    /**
+     * Atomically consumes a token: marks it used only if still unused.
+     * Returns the number of updated rows (0 when already consumed concurrently).
+     */
+    @Modifying
+    @Query("""
+            UPDATE PasswordResetToken t
+            SET t.usedAt = :now
+            WHERE t.id = :id
+              AND t.usedAt IS NULL
+            """)
+    int markUsedIfUnused(@Param("id") UUID id, @Param("now") Instant now);
+
     @Modifying
     @Query("""
             UPDATE PasswordResetToken t

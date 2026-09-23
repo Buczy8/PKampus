@@ -54,7 +54,4 @@ public class PasswordResetToken {
         return expiresAt.isBefore(now);
     }
 
-    public void markUsed(Instant now) {
-        this.usedAt = now;
-    }
 }

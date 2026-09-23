@@ -40,6 +40,8 @@ import java.util.UUID;
 public class AuthController {
 
     private final AuthService authService;
+    private final RegistrationService registrationService;
+    private final PasswordResetService passwordResetService;
 
     @PostMapping(value = "/register", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
@@ -50,7 +52,7 @@ public class AuthController {
             @Valid @RequestPart("data") RegisterRequestDto registerRequestDto,
             @RequestPart("photo") MultipartFile photo
     ) {
-        RegisterResponseDto response = authService.registerResident(registerRequestDto, photo);
+        RegisterResponseDto response = registrationService.registerResident(registerRequestDto, photo);
         return ResponseEntity.ok(ApiResponse.ok(response, response.getMessage()));
     }
 
@@ -60,7 +62,7 @@ public class AuthController {
             description = "Verifies token validity (24h) and transitions account to PENDING_APPROVAL status (awaiting residency approval by dormitory administration)."
     )
     public ResponseEntity<ApiResponse<VerifyEmailResponseDto>> verifyEmail(@RequestParam("token") String token) {
-        VerifyEmailResponseDto response = authService.verifyEmail(token);
+        VerifyEmailResponseDto response = registrationService.verifyEmail(token);
         return ResponseEntity.ok(ApiResponse.ok(response, response.getMessage()));
     }
 
@@ -138,8 +140,8 @@ public class AuthController {
                     + "Returns a generic message regardless of email existence to prevent email enumeration."
     )
     public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequestDto request) {
-        String message = authService.initiatePasswordReset(request);
-        return ResponseEntity.ok(ApiResponse.ok(null, message));
+        passwordResetService.initiatePasswordReset(request);
+        return ResponseEntity.ok(ApiResponse.ok(null, PasswordResetService.FORGOT_PASSWORD_GENERIC_MESSAGE));
     }
 
     @GetMapping("/verify-reset-token")
@@ -150,7 +152,7 @@ public class AuthController {
     public ResponseEntity<ApiResponse<VerifyResetTokenResponseDto>> verifyResetToken(
             @RequestParam("token") String token
     ) {
-        VerifyResetTokenResponseDto response = authService.verifyResetToken(token);
+        VerifyResetTokenResponseDto response = passwordResetService.verifyResetToken(token);
         return ResponseEntity.ok(ApiResponse.ok(response, "Token is valid"));
     }
 
@@ -160,7 +162,7 @@ public class AuthController {
             description = "Validates one-time token, updates user password (BCrypt), marks token as used, and invalidates all active sessions (FR-AUTH-07 / ADR-07)."
     )
     public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequestDto request) {
-        authService.resetPassword(request);
+        passwordResetService.resetPassword(request);
         return ResponseEntity.ok(ApiResponse.ok(null, "Password has been successfully reset. You can now log in."));
     }
 }
