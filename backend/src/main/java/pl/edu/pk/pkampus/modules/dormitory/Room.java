@@ -53,4 +53,20 @@ public class Room {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    /**
+     * Applies a partial update: null fields are ignored, blank room numbers are ignored.
+     * Uniqueness and floor-range validation stay in the service layer.
+     */
+    public void applyPatch(String roomNumber, Integer floor, Integer capacity) {
+        if (roomNumber != null && !roomNumber.isBlank()) {
+            this.roomNumber = roomNumber.trim();
+        }
+        if (floor != null) {
+            this.floor = floor;
+        }
+        if (capacity != null) {
+            this.capacity = capacity;
+        }
+    }
 }

@@ -31,6 +31,8 @@ import pl.edu.pk.pkampus.modules.user.UserRole;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
 import pl.edu.pk.pkampus.security.jwt.TokenRevocationService;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.List;
@@ -66,6 +68,9 @@ class AdminResidentDirectoryServiceTest {
     @Mock
     private TokenRevocationService tokenRevocationService;
 
+    @Mock
+    private Clock clock;
+
     @InjectMocks
     private AdminResidentDirectoryService adminResidentDirectoryService;
 
@@ -76,6 +81,7 @@ class AdminResidentDirectoryServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(clock.instant()).thenReturn(Instant.now());
         dormitory = Dormitory.builder()
                 .id(UUID.randomUUID())
                 .name("DS Directory Test")
@@ -112,7 +118,7 @@ class AdminResidentDirectoryServiceTest {
         void listResidentsSuccess() {
             // Arrange
             Room room = Room.builder().roomNumber("105-B").build();
-            RoomAssignment assignment = RoomAssignment.builder().room(room).isActive(true).build();
+            RoomAssignment assignment = RoomAssignment.builder().user(resident).room(room).isActive(true).build();
             Sanction sanction = Sanction.builder()
                     .id(UUID.randomUUID())
                     .user(resident)
@@ -127,8 +133,8 @@ class AdminResidentDirectoryServiceTest {
                     .thenReturn(List.of(resident));
             when(sanctionRepository.findActiveRoomBansForUsers(eq(List.of(residentId)), any(LocalDate.class)))
                     .thenReturn(List.of(sanction));
-            when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(residentId))
-                    .thenReturn(Optional.of(assignment));
+            when(roomAssignmentRepository.findActiveByUserIdIn(eq(List.of(residentId))))
+                    .thenReturn(List.of(assignment));
             when(minioStorageService.getAvatarPresignedUrl("avatar-piotr.jpg", 60))
                     .thenReturn("https://minio/avatar-piotr.jpg");
 
@@ -155,8 +161,8 @@ class AdminResidentDirectoryServiceTest {
                     .thenReturn(List.of(resident));
             when(sanctionRepository.findActiveRoomBansForUsers(any(), any()))
                     .thenReturn(List.of());
-            when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(residentId))
-                    .thenReturn(Optional.empty());
+            when(roomAssignmentRepository.findActiveByUserIdIn(any()))
+                    .thenReturn(List.of());
 
             // Act
             List<ManagedResidentDto> result = adminResidentDirectoryService.listResidents(admin);
@@ -180,6 +186,7 @@ class AdminResidentDirectoryServiceTest {
             // Assert
             assertTrue(result.isEmpty());
             verify(sanctionRepository, never()).findActiveRoomBansForUsers(any(), any());
+            verify(roomAssignmentRepository, never()).findActiveByUserIdIn(any());
         }
 
         @Test
@@ -190,6 +197,8 @@ class AdminResidentDirectoryServiceTest {
                     any(), any(), any()))
                     .thenReturn(List.of(resident));
             when(sanctionRepository.findActiveRoomBansForUsers(any(), any()))
+                    .thenReturn(List.of());
+            when(roomAssignmentRepository.findActiveByUserIdIn(any()))
                     .thenReturn(List.of());
             when(minioStorageService.getAvatarPresignedUrl(anyString(), anyInt()))
                     .thenThrow(new FileStorageException("Minio unavailable"));
@@ -242,7 +251,7 @@ class AdminResidentDirectoryServiceTest {
             assertEquals(UserStatus.BLOCKED, resident.getStatus());
             assertEquals(UserStatus.BLOCKED, result.getStatus());
             verify(tokenRevocationService).revokeUser(residentId);
-            verify(emailService).sendHtmlEmail(eq("resident@pk.edu.pl"), eq("PKampus - Account blocked"), anyString());
+            verify(emailService).sendAccountBlockedEmail(eq("resident@pk.edu.pl"), eq("Piotr"));
         }
 
         @Test
@@ -359,7 +368,7 @@ class AdminResidentDirectoryServiceTest {
 
             verify(minioStorageService).removeAvatar("avatar-piotr.jpg");
             verify(tokenRevocationService).revokeUser(residentId);
-            verify(emailService).sendHtmlEmail(eq("resident@pk.edu.pl"), eq("PKampus - Checked out"), anyString());
+            verify(emailService).sendCheckedOutEmail(eq("resident@pk.edu.pl"), eq("Piotr"));
         }
 
         @Test
@@ -378,7 +387,7 @@ class AdminResidentDirectoryServiceTest {
 
             // Assert
             assertEquals(UserStatus.CHECKED_OUT, result.getStatus());
-            verify(emailService).sendHtmlEmail(eq("resident@pk.edu.pl"), eq("PKampus - Checked out"), anyString());
+            verify(emailService).sendCheckedOutEmail(eq("resident@pk.edu.pl"), eq("Piotr"));
         }
 
         @Test
@@ -437,7 +446,8 @@ class AdminResidentDirectoryServiceTest {
             assertEquals(admin, saved.getIssuedBy());
             assertEquals(dormitory, saved.getDormitory());
 
-            verify(emailService).sendHtmlEmail(eq("resident@pk.edu.pl"), eq("PKampus - Room reservation ban"), anyString());
+            verify(emailService).sendRoomBanEmail(eq("resident@pk.edu.pl"), eq("Piotr"),
+                    any(LocalDate.class), any(LocalDate.class), eq("Damage to kitchen amenities"));
         }
 
         @Test

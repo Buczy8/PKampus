@@ -2,7 +2,6 @@ package pl.edu.pk.pkampus.modules.admin;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,18 +35,17 @@ public class AdminReceptionistService {
 
     @Transactional(readOnly = true)
     public List<ReceptionistDto> list(User admin) {
-        UUID dormitoryId = requireDormAdminDormitoryId(admin);
+        UUID dormitoryId = AdminScope.requireDormitoryId(admin, "receptionists");
         return userRepository
                 .findAllByDormitoryIdAndRoleOrderByLastNameAscFirstNameAsc(dormitoryId, UserRole.RECEPTIONIST)
                 .stream()
-                .map(this::toDto)
+                .map(ReceptionistDto::from)
                 .toList();
     }
 
     @Transactional
     public ReceptionistDto create(User admin, CreateReceptionistRequestDto request) {
-        UUID dormitoryId = requireDormAdminDormitoryId(admin);
-        Dormitory dormitory = admin.getDormitory();
+        Dormitory dormitory = AdminScope.requireDormitory(admin, "receptionists");
 
         String email = request.getEmail().trim().toLowerCase();
         if (userRepository.existsByEmail(email)) {
@@ -67,13 +65,13 @@ public class AdminReceptionistService {
 
         User saved = userRepository.save(receptionist);
         log.info("ADS {} created RECEPTIONIST {} for dormitory {}",
-                admin.getEmail(), saved.getEmail(), dormitoryId);
-        return toDto(saved);
+                admin.getEmail(), saved.getEmail(), dormitory.getId());
+        return ReceptionistDto.from(saved);
     }
 
     @Transactional
     public ReceptionistDto update(User admin, UUID id, UpdateReceptionistRequestDto request) {
-        UUID dormitoryId = requireDormAdminDormitoryId(admin);
+        UUID dormitoryId = AdminScope.requireDormitoryId(admin, "receptionists");
         User receptionist = userRepository
                 .findByIdAndDormitoryIdAndRole(id, dormitoryId, UserRole.RECEPTIONIST)
                 .orElseThrow(() -> new ResourceNotFoundException("Receptionist not found"));
@@ -85,42 +83,21 @@ public class AdminReceptionistService {
         );
 
         if (request.getStatus() != null) {
-            if (!PATCH_STATUSES.contains(request.getStatus())) {
-                throw new BusinessRuleException("Status must be ACTIVE or BLOCKED");
-            }
-            receptionist.setStatus(request.getStatus());
-            if (request.getStatus() == UserStatus.BLOCKED) {
-                tokenRevocationService.revokeUser(receptionist.getId());
-            } else {
-                tokenRevocationService.clearRevocation(receptionist.getId());
-            }
+            applyStatus(receptionist, request.getStatus());
         }
 
-        return toDto(userRepository.save(receptionist));
+        return ReceptionistDto.from(userRepository.save(receptionist));
     }
 
-    private UUID requireDormAdminDormitoryId(User admin) {
-        if (admin.getRole() != UserRole.DORM_ADMIN) {
-            throw new AccessDeniedException("Only dormitory administrators can manage receptionists");
+    private void applyStatus(User receptionist, UserStatus status) {
+        if (!PATCH_STATUSES.contains(status)) {
+            throw new BusinessRuleException("Status must be ACTIVE or BLOCKED");
         }
-        if (admin.getDormitory() == null) {
-            throw new BusinessRuleException("Administrator account has no dormitory assigned");
+        receptionist.setStatus(status);
+        if (status == UserStatus.BLOCKED) {
+            tokenRevocationService.revokeUser(receptionist.getId());
+        } else {
+            tokenRevocationService.clearRevocation(receptionist.getId());
         }
-        return admin.getDormitory().getId();
-    }
-
-    private ReceptionistDto toDto(User user) {
-        Dormitory dorm = user.getDormitory();
-        return ReceptionistDto.builder()
-                .id(user.getId())
-                .email(user.getEmail())
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
-                .phoneNumber(user.getPhoneNumber())
-                .status(user.getStatus())
-                .dormitoryId(dorm != null ? dorm.getId() : null)
-                .dormitoryName(dorm != null ? dorm.getName() : null)
-                .createdAt(user.getCreatedAt())
-                .build();
     }
 }

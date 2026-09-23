@@ -11,6 +11,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 import pl.edu.pk.pkampus.common.exception.AccountStatusException;
+import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.FileStorageException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
@@ -29,6 +30,8 @@ import pl.edu.pk.pkampus.modules.user.UserRepository;
 import pl.edu.pk.pkampus.modules.user.UserRole;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -54,6 +57,8 @@ class AdminResidentServiceTest {
     private MinioStorageService minioStorageService;
     @Mock
     private EmailService emailService;
+    @Mock
+    private Clock clock;
 
     @InjectMocks
     private AdminResidentService adminResidentService;
@@ -66,6 +71,7 @@ class AdminResidentServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(clock.instant()).thenReturn(Instant.now());
         dormitory = Dormitory.builder()
                 .id(UUID.randomUUID())
                 .name("DS Akademik")
@@ -217,7 +223,7 @@ class AdminResidentServiceTest {
         @Test
         void dormAdminWithoutDormitoryThrows() {
             dormAdmin.setDormitory(null);
-            assertThrows(AccountStatusException.class,
+            assertThrows(BusinessRuleException.class,
                     () -> adminResidentService.listPendingResidents(dormAdmin));
         }
     }
@@ -327,7 +333,7 @@ class AdminResidentServiceTest {
             pendingResident.setDeclaredRoomNumber("  ");
             when(userRepository.findById(pendingResident.getId())).thenReturn(Optional.of(pendingResident));
 
-            assertThrows(IllegalArgumentException.class, () ->
+            assertThrows(BusinessRuleException.class, () ->
                     adminResidentService.activateResident(dormAdmin, pendingResident.getId(), null));
         }
 

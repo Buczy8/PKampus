@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 
 @Slf4j
 @Service
@@ -203,6 +204,41 @@ public class EmailService {
                     <p style="color: #94a3b8; font-size: 12px;">This message was generated automatically by the PKampus system. Please do not reply.</p>
                 </div>
                 """.formatted(firstName, resetLink, resetLink, resetLink);
+        sendHtmlEmail(toEmail, subject, htmlContent);
+    }
+
+    @Async
+    public void sendAccountBlockedEmail(String toEmail, String firstName) {
+        String subject = "PKampus - Account blocked";
+        String htmlContent = """
+                <p>Hello %s,</p>
+                <p>Your PKampus account has been blocked by the dormitory administration.
+                Contact your dormitory office for details.</p>
+                """.formatted(firstName);
+        sendHtmlEmail(toEmail, subject, htmlContent);
+    }
+
+    @Async
+    public void sendCheckedOutEmail(String toEmail, String firstName) {
+        String subject = "PKampus - Checked out";
+        String htmlContent = """
+                <p>Hello %s,</p>
+                <p>Your residency in PKampus has been closed (checked out).
+                The account can no longer be used to sign in.</p>
+                """.formatted(firstName);
+        sendHtmlEmail(toEmail, subject, htmlContent);
+    }
+
+    @Async
+    public void sendRoomBanEmail(String toEmail, String firstName, LocalDate start, LocalDate end, String reason) {
+        String subject = "PKampus - Room reservation ban";
+        String htmlContent = """
+                <p>Hello %s,</p>
+                <p>A room reservation ban (ROOM_BAN) has been registered for your account.</p>
+                <p><strong>Period:</strong> %s – %s<br>
+                <strong>Reason:</strong> %s</p>
+                <p>During this period you cannot book thematic rooms across the campus.</p>
+                """.formatted(firstName, start, end, reason);
         sendHtmlEmail(toEmail, subject, htmlContent);
     }
 

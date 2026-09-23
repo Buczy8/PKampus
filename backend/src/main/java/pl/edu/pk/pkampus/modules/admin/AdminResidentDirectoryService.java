@@ -2,7 +2,6 @@ package pl.edu.pk.pkampus.modules.admin;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
@@ -23,6 +22,7 @@ import pl.edu.pk.pkampus.modules.user.UserRole;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
 import pl.edu.pk.pkampus.security.jwt.TokenRevocationService;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.List;
@@ -36,7 +36,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AdminResidentDirectoryService {
 
-    private static final int AVATAR_PRESIGN_MINUTES = 60;
     private static final EnumSet<UserStatus> DIRECTORY_STATUSES =
             EnumSet.of(UserStatus.ACTIVE, UserStatus.BLOCKED);
 
@@ -46,52 +45,51 @@ public class AdminResidentDirectoryService {
     private final MinioStorageService minioStorageService;
     private final EmailService emailService;
     private final TokenRevocationService tokenRevocationService;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public List<ManagedResidentDto> listResidents(User admin) {
-        UUID dormitoryId = requireDormAdminDormitoryId(admin);
+        UUID dormitoryId = AdminScope.requireDormitoryId(admin, "residents");
         List<User> residents = userRepository
                 .findAllByDormitoryIdAndRoleAndStatusInOrderByLastNameAscFirstNameAsc(
                         dormitoryId, UserRole.RESIDENT, DIRECTORY_STATUSES);
 
         List<UUID> ids = residents.stream().map(User::getId).toList();
+        LocalDate today = AdminScope.today(clock);
         Map<UUID, Sanction> activeBans = ids.isEmpty()
                 ? Map.of()
-                : sanctionRepository.findActiveRoomBansForUsers(ids, LocalDate.now()).stream()
+                : sanctionRepository.findActiveRoomBansForUsers(ids, today).stream()
                         .collect(Collectors.toMap(
                                 s -> s.getUser().getId(),
                                 Function.identity(),
                                 (a, b) -> a.getEndDate().isAfter(b.getEndDate()) ? a : b
                         ));
+        Map<UUID, RoomAssignment> assignmentByUser = ids.isEmpty()
+                ? Map.of()
+                : roomAssignmentRepository.findActiveByUserIdIn(ids).stream()
+                        .collect(Collectors.toMap(
+                                a -> a.getUser().getId(),
+                                Function.identity(),
+                                (a, b) -> a
+                        ));
 
         return residents.stream()
-                .map(u -> toManagedDto(u, activeBans.get(u.getId())))
+                .map(u -> toManagedDto(u, activeBans.get(u.getId()), assignmentByUser.get(u.getId())))
                 .toList();
     }
 
     @Transactional
     public ManagedResidentDto block(User admin, UUID residentId) {
         User resident = loadManageableResident(admin, residentId);
-        if (resident.getStatus() == UserStatus.BLOCKED) {
-            throw new BusinessRuleException("Resident is already blocked");
-        }
         if (resident.getStatus() != UserStatus.ACTIVE) {
-            throw new BusinessRuleException("Only ACTIVE residents can be blocked");
+            throw new BusinessRuleException("Resident is already blocked");
         }
         resident.setStatus(UserStatus.BLOCKED);
         userRepository.save(resident);
         tokenRevocationService.revokeUser(resident.getId());
-        emailService.sendHtmlEmail(
-                resident.getEmail(),
-                "PKampus - Account blocked",
-                """
-                <p>Hello %s,</p>
-                <p>Your PKampus account has been blocked by the dormitory administration.
-                Contact your dormitory office for details.</p>
-                """.formatted(resident.getFirstName())
-        );
+        emailService.sendAccountBlockedEmail(resident.getEmail(), resident.getFirstName());
         log.info("ADS {} blocked resident {}", admin.getEmail(), resident.getEmail());
-        return toManagedDto(resident, currentRoomBan(resident.getId()));
+        return toManagedDto(resident, currentRoomBan(resident.getId()), activeAssignment(resident.getId()));
     }
 
     @Transactional
@@ -104,7 +102,7 @@ public class AdminResidentDirectoryService {
         userRepository.save(resident);
         tokenRevocationService.clearRevocation(resident.getId());
         log.info("ADS {} unblocked resident {}", admin.getEmail(), resident.getEmail());
-        return toManagedDto(resident, currentRoomBan(resident.getId()));
+        return toManagedDto(resident, currentRoomBan(resident.getId()), activeAssignment(resident.getId()));
     }
 
     @Transactional
@@ -116,7 +114,7 @@ public class AdminResidentDirectoryService {
 
         roomAssignmentRepository.findByUserIdAndIsActiveTrue(resident.getId()).ifPresent(assignment -> {
             assignment.setIsActive(false);
-            assignment.setCheckOutDate(LocalDate.now());
+            assignment.setCheckOutDate(AdminScope.today(clock));
             roomAssignmentRepository.save(assignment);
         });
 
@@ -126,25 +124,11 @@ public class AdminResidentDirectoryService {
         userRepository.save(resident);
         tokenRevocationService.revokeUser(resident.getId());
 
-        if (avatarObject != null && !avatarObject.isBlank()) {
-            try {
-                minioStorageService.removeAvatar(avatarObject);
-            } catch (Exception e) {
-                log.error("Failed to remove avatar after checkout of {}", residentId, e);
-            }
-        }
+        AdminAvatarUrls.removeQuietly(minioStorageService, avatarObject, residentId);
 
-        emailService.sendHtmlEmail(
-                resident.getEmail(),
-                "PKampus - Checked out",
-                """
-                <p>Hello %s,</p>
-                <p>Your residency in PKampus has been closed (checked out).
-                The account can no longer be used to sign in.</p>
-                """.formatted(resident.getFirstName())
-        );
+        emailService.sendCheckedOutEmail(resident.getEmail(), resident.getFirstName());
         log.info("ADS {} checked out resident {}", admin.getEmail(), resident.getEmail());
-        return toManagedDto(resident, null);
+        return toManagedDto(resident, null, null);
     }
 
     @Transactional
@@ -154,14 +138,14 @@ public class AdminResidentDirectoryService {
             throw new BusinessRuleException("Room ban can only be issued for ACTIVE or BLOCKED residents");
         }
 
+        LocalDate today = AdminScope.today(clock);
         List<Sanction> existing = sanctionRepository.findActiveByUserAndType(
-                resident.getId(), SanctionType.ROOM_BAN, LocalDate.now());
+                resident.getId(), SanctionType.ROOM_BAN, today);
         if (!existing.isEmpty()) {
             throw new BusinessRuleException("Resident already has an active ROOM_BAN");
         }
 
-        LocalDate start = LocalDate.now();
-        LocalDate end = start.plusMonths(request.getDurationMonths());
+        LocalDate end = today.plusMonths(request.getDurationMonths());
 
         Sanction sanction = Sanction.builder()
                 .user(resident)
@@ -169,23 +153,14 @@ public class AdminResidentDirectoryService {
                 .dormitory(admin.getDormitory())
                 .sanctionType(SanctionType.ROOM_BAN)
                 .reason(request.getReason().trim())
-                .startDate(start)
+                .startDate(today)
                 .endDate(end)
                 .active(true)
                 .build();
 
         Sanction saved = sanctionRepository.save(sanction);
-        emailService.sendHtmlEmail(
-                resident.getEmail(),
-                "PKampus - Room reservation ban",
-                """
-                <p>Hello %s,</p>
-                <p>A room reservation ban (ROOM_BAN) has been registered for your account.</p>
-                <p><strong>Period:</strong> %s – %s<br>
-                <strong>Reason:</strong> %s</p>
-                <p>During this period you cannot book thematic rooms across the campus.</p>
-                """.formatted(resident.getFirstName(), start, end, saved.getReason())
-        );
+        emailService.sendRoomBanEmail(
+                resident.getEmail(), resident.getFirstName(), today, end, saved.getReason());
         log.info("ADS {} issued ROOM_BAN to {} until {}", admin.getEmail(), resident.getEmail(), end);
         return toSanctionDto(saved);
     }
@@ -208,7 +183,7 @@ public class AdminResidentDirectoryService {
     }
 
     private User loadManageableResident(User admin, UUID residentId) {
-        UUID dormitoryId = requireDormAdminDormitoryId(admin);
+        UUID dormitoryId = AdminScope.requireDormitoryId(admin, "residents");
         User resident = userRepository.findByIdAndDormitoryIdAndRole(residentId, dormitoryId, UserRole.RESIDENT)
                 .orElseThrow(() -> new ResourceNotFoundException("Resident not found"));
         if (!DIRECTORY_STATUSES.contains(resident.getStatus())) {
@@ -217,37 +192,21 @@ public class AdminResidentDirectoryService {
         return resident;
     }
 
-    private UUID requireDormAdminDormitoryId(User admin) {
-        if (admin.getRole() != UserRole.DORM_ADMIN) {
-            throw new AccessDeniedException("Only dormitory administrators can manage residents");
-        }
-        if (admin.getDormitory() == null) {
-            throw new BusinessRuleException("Administrator account has no dormitory assigned");
-        }
-        return admin.getDormitory().getId();
-    }
-
     private Sanction currentRoomBan(UUID userId) {
-        return sanctionRepository.findActiveByUserAndType(userId, SanctionType.ROOM_BAN, LocalDate.now())
+        return sanctionRepository.findActiveByUserAndType(userId, SanctionType.ROOM_BAN, AdminScope.today(clock))
                 .stream()
                 .findFirst()
                 .orElse(null);
     }
 
-    private ManagedResidentDto toManagedDto(User user, Sanction ban) {
+    private RoomAssignment activeAssignment(UUID userId) {
+        return roomAssignmentRepository.findByUserIdAndIsActiveTrue(userId).orElse(null);
+    }
+
+    private ManagedResidentDto toManagedDto(User user, Sanction ban, RoomAssignment assignment) {
         String roomNumber = user.getDeclaredRoomNumber();
-        RoomAssignment assignment = roomAssignmentRepository.findByUserIdAndIsActiveTrue(user.getId()).orElse(null);
         if (assignment != null && assignment.getRoom() != null) {
             roomNumber = assignment.getRoom().getRoomNumber();
-        }
-
-        String avatarPresigned = null;
-        if (user.getAvatarUrl() != null && !user.getAvatarUrl().isBlank()) {
-            try {
-                avatarPresigned = minioStorageService.getAvatarPresignedUrl(user.getAvatarUrl(), AVATAR_PRESIGN_MINUTES);
-            } catch (Exception e) {
-                log.warn("Could not generate avatar URL for {}: {}", user.getId(), e.getMessage());
-            }
         }
 
         ManagedResidentDto.ActiveRoomBanDto banDto = null;
@@ -268,7 +227,7 @@ public class AdminResidentDirectoryService {
                 .phoneNumber(user.getPhoneNumber())
                 .roomNumber(roomNumber)
                 .status(user.getStatus())
-                .avatarUrl(avatarPresigned)
+                .avatarUrl(AdminAvatarUrls.presignedOrNull(minioStorageService, user))
                 .createdAt(user.getCreatedAt())
                 .activeRoomBan(banDto)
                 .build();
