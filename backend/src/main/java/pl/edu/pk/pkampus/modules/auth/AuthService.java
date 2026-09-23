@@ -175,9 +175,7 @@ public class AuthService {
         // Drop previous refresh sessions so only this login's token remains current.
         refreshTokenService.revokeAllUserTokens(user.getId());
 
-        String roomNumber = roomAssignmentRepository.findByUserIdAndIsActiveTrue(user.getId())
-                .map(ra -> ra.getRoom().getRoomNumber())
-                .orElse(user.getDeclaredRoomNumber());
+        String roomNumber = resolveRoomNumber(user);
 
         String jwt = jwtService.generateToken(user, roomNumber);
         String refreshToken = refreshTokenService.createRefreshToken(user);
@@ -200,9 +198,7 @@ public class AuthService {
         RefreshTokenService.RefreshTokenResult result = refreshTokenService.rotateRefreshToken(rawRefreshToken);
         User user = result.user();
 
-        String roomNumber = roomAssignmentRepository.findByUserIdAndIsActiveTrue(user.getId())
-                .map(ra -> ra.getRoom().getRoomNumber())
-                .orElse(user.getDeclaredRoomNumber());
+        String roomNumber = resolveRoomNumber(user);
 
         String newJwt = jwtService.generateToken(user, roomNumber);
         UserProfileDto profile = buildUserProfileDto(user, roomNumber);
@@ -246,9 +242,7 @@ public class AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        String roomNumber = roomAssignmentRepository.findByUserIdAndIsActiveTrue(user.getId())
-                .map(ra -> ra.getRoom().getRoomNumber())
-                .orElse(user.getDeclaredRoomNumber());
+        String roomNumber = resolveRoomNumber(user);
 
         return buildUserProfileDto(user, roomNumber);
     }
@@ -277,36 +271,20 @@ public class AuthService {
         User saved = userRepository.save(user);
         authenticatedUserCache.invalidate(saved.getId());
 
-        String roomNumber = roomAssignmentRepository.findByUserIdAndIsActiveTrue(saved.getId())
-                .map(ra -> ra.getRoom().getRoomNumber())
-                .orElse(saved.getDeclaredRoomNumber());
+        String roomNumber = resolveRoomNumber(saved);
 
         log.info("User {} changed password (status={})", saved.getId(), saved.getStatus());
         return buildUserProfileDto(saved, roomNumber);
     }
 
     public UserProfileDto buildUserProfileDto(User user, String roomNumber) {
-        UUID dormId = null;
-        String dormName = null;
-        if (user.getDormitory() != null) {
-            dormId = user.getDormitory().getId();
-            dormName = user.getDormitory().getName();
-        }
+        return UserProfileDto.from(user, roomNumber);
+    }
 
-        return UserProfileDto.builder()
-                .id(user.getId())
-                .email(user.getEmail())
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
-                .phoneNumber(user.getPhoneNumber())
-                .avatarUrl(user.getAvatarUrl())
-                .role(user.getRole())
-                .status(user.getStatus())
-                .dormitoryId(dormId)
-                .dormitoryName(dormName)
-                .roomNumber(roomNumber)
-                .createdAt(user.getCreatedAt())
-                .build();
+    private String resolveRoomNumber(User user) {
+        return roomAssignmentRepository.findByUserIdAndIsActiveTrue(user.getId())
+                .map(ra -> ra.getRoom().getRoomNumber())
+                .orElse(user.getDeclaredRoomNumber());
     }
 
     @Transactional

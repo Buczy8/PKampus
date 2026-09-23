@@ -38,26 +38,6 @@ public class UserService implements UserDetailsService {
     }
 
     public UserProfileDto toProfileDto(User user, String roomNumber) {
-        UUID dormId = null;
-        String dormName = null;
-        if (user.getDormitory() != null) {
-            dormId = user.getDormitory().getId();
-            dormName = user.getDormitory().getName();
-        }
-
-        return UserProfileDto.builder()
-                .id(user.getId())
-                .email(user.getEmail())
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
-                .phoneNumber(user.getPhoneNumber())
-                .avatarUrl(user.getAvatarUrl())
-                .role(user.getRole())
-                .status(user.getStatus())
-                .dormitoryId(dormId)
-                .dormitoryName(dormName)
-                .roomNumber(roomNumber)
-                .createdAt(user.getCreatedAt())
-                .build();
+        return UserProfileDto.from(user, roomNumber);
     }
 }
