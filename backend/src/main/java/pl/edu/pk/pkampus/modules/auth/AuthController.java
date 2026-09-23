@@ -19,11 +19,15 @@ import org.springframework.web.multipart.MultipartFile;
 import pl.edu.pk.pkampus.common.ApiResponse;
 import pl.edu.pk.pkampus.modules.auth.dto.AuthResponseDto;
 import pl.edu.pk.pkampus.modules.auth.dto.ChangePasswordRequestDto;
+import pl.edu.pk.pkampus.modules.auth.dto.ForgotPasswordRequestDto;
 import pl.edu.pk.pkampus.modules.auth.dto.LoginRequestDto;
+import pl.edu.pk.pkampus.modules.auth.dto.RefreshTokenRequestDto;
 import pl.edu.pk.pkampus.modules.auth.dto.RegisterRequestDto;
 import pl.edu.pk.pkampus.modules.auth.dto.RegisterResponseDto;
+import pl.edu.pk.pkampus.modules.auth.dto.ResetPasswordRequestDto;
 import pl.edu.pk.pkampus.modules.user.dto.UserProfileDto;
 import pl.edu.pk.pkampus.modules.auth.dto.VerifyEmailResponseDto;
+import pl.edu.pk.pkampus.modules.auth.dto.VerifyResetTokenResponseDto;
 import pl.edu.pk.pkampus.modules.user.User;
 
 import java.util.UUID;
@@ -75,7 +79,7 @@ public class AuthController {
             summary = "Refresh access token",
             description = "Rotates refresh token (TTL 7 days) and issues a new access token (TTL 15 min). Invalidates old refresh token."
     )
-    public ResponseEntity<ApiResponse<AuthResponseDto>> refresh(@Valid @RequestBody pl.edu.pk.pkampus.modules.auth.dto.RefreshTokenRequestDto request) {
+    public ResponseEntity<ApiResponse<AuthResponseDto>> refresh(@Valid @RequestBody RefreshTokenRequestDto request) {
         AuthResponseDto response = authService.refreshToken(request.getRefreshToken());
         return ResponseEntity.ok(ApiResponse.ok(response, "Token refreshed successfully"));
     }
@@ -87,7 +91,7 @@ public class AuthController {
     )
     public ResponseEntity<ApiResponse<Void>> logout(
             @AuthenticationPrincipal User user,
-            @RequestBody(required = false) pl.edu.pk.pkampus.modules.auth.dto.RefreshTokenRequestDto request
+            @RequestBody(required = false) RefreshTokenRequestDto request
     ) {
         String refreshToken = request != null ? request.getRefreshToken() : null;
         UUID userId = user != null ? user.getId() : null;
@@ -133,7 +137,7 @@ public class AuthController {
             description = "Generates a one-time cryptographic reset token (TTL 15 min) and dispatches reset link to the user's email (FR-AUTH-07 / ADR-07). "
                     + "Returns a generic message regardless of email existence to prevent email enumeration."
     )
-    public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody pl.edu.pk.pkampus.modules.auth.dto.ForgotPasswordRequestDto request) {
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequestDto request) {
         String message = authService.initiatePasswordReset(request);
         return ResponseEntity.ok(ApiResponse.ok(null, message));
     }
@@ -143,10 +147,10 @@ public class AuthController {
             summary = "Verify password reset token validity",
             description = "Validates that a password reset token exists, is unexpired (TTL 15 min), and has not been used yet."
     )
-    public ResponseEntity<ApiResponse<pl.edu.pk.pkampus.modules.auth.dto.VerifyResetTokenResponseDto>> verifyResetToken(
+    public ResponseEntity<ApiResponse<VerifyResetTokenResponseDto>> verifyResetToken(
             @RequestParam("token") String token
     ) {
-        pl.edu.pk.pkampus.modules.auth.dto.VerifyResetTokenResponseDto response = authService.verifyResetToken(token);
+        VerifyResetTokenResponseDto response = authService.verifyResetToken(token);
         return ResponseEntity.ok(ApiResponse.ok(response, "Token is valid"));
     }
 
@@ -155,7 +159,7 @@ public class AuthController {
             summary = "Reset password using token",
             description = "Validates one-time token, updates user password (BCrypt), marks token as used, and invalidates all active sessions (FR-AUTH-07 / ADR-07)."
     )
-    public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody pl.edu.pk.pkampus.modules.auth.dto.ResetPasswordRequestDto request) {
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequestDto request) {
         authService.resetPassword(request);
         return ResponseEntity.ok(ApiResponse.ok(null, "Password has been successfully reset. You can now log in."));
     }

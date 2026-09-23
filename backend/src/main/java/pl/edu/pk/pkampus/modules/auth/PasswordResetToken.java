@@ -37,7 +37,7 @@ public class PasswordResetToken {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "token_hash", length = 255, nullable = false, unique = true)
+    @Column(name = "token_hash", nullable = false, unique = true)
     private String tokenHash;
 
     @Column(name = "expires_at", nullable = false)
@@ -49,4 +49,12 @@ public class PasswordResetToken {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    public boolean isExpired(Instant now) {
+        return expiresAt.isBefore(now);
+    }
+
+    public void markUsed(Instant now) {
+        this.usedAt = now;
+    }
 }

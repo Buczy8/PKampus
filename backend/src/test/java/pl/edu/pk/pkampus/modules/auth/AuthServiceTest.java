@@ -43,12 +43,9 @@ import pl.edu.pk.pkampus.security.jwt.TokenRevocationService;
 import pl.edu.pk.pkampus.security.token.EmailTokenPayload;
 import pl.edu.pk.pkampus.security.token.SignedEmailTokenService;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.HexFormat;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -96,6 +93,9 @@ class AuthServiceTest {
     @Mock
     private PasswordResetTokenRepository passwordResetTokenRepository;
 
+    @Mock
+    private Clock clock;
+
     @InjectMocks
     private AuthService authService;
 
@@ -106,6 +106,7 @@ class AuthServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(clock.instant()).thenAnswer(invocation -> Instant.now());
         UUID dormId = UUID.randomUUID();
         testDormitory = Dormitory.builder()
                 .id(dormId)
@@ -962,12 +963,6 @@ class AuthServiceTest {
     // ==========================================
 
     private static String hashSha256(String input) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
+        return ResetTokenSupport.sha256Hex(input);
     }
 }

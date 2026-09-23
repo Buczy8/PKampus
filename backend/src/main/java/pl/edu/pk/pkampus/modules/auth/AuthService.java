@@ -35,13 +35,8 @@ import pl.edu.pk.pkampus.security.jwt.RefreshTokenService;
 import pl.edu.pk.pkampus.security.jwt.TokenRevocationService;
 import pl.edu.pk.pkampus.mail.EmailService;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
+import java.time.Clock;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.HexFormat;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -49,8 +44,6 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
-
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
     private final DormitoryRepository dormitoryRepository;
@@ -64,6 +57,7 @@ public class AuthService {
     private final AuthenticatedUserCache authenticatedUserCache;
     private final EmailService emailService;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final Clock clock;
 
     public static final String REGISTRATION_SUCCESS_MESSAGE =
             "Registration request received. If the email is eligible, an activation link has been sent to your inbox.";
@@ -89,20 +83,7 @@ public class AuthService {
         String avatarUrl = minioStorageService.uploadAvatar(photo, detectedMime);
 
         try {
-            User user = User.builder()
-                    .email(normalizedEmail)
-                    .passwordHash(passwordEncoder.encode(dto.getPassword()))
-                    .firstName(dto.getFirstName().trim())
-                    .lastName(dto.getLastName().trim())
-                    .phoneNumber(dto.getPhoneNumber().trim())
-                    .avatarUrl(avatarUrl)
-                    .role(UserRole.RESIDENT)
-                    .status(UserStatus.PENDING_EMAIL)
-                    .dormitory(dormitory)
-                    .declaredRoomNumber(dto.getDeclaredRoomNumber().trim())
-                    .build();
-
-            User savedUser = userRepository.save(user);
+            User savedUser = userRepository.save(buildPendingUser(dto, normalizedEmail, dormitory, avatarUrl));
 
             String token = signedEmailTokenService.generateToken(savedUser.getId(), savedUser.getEmail());
             emailService.sendVerificationEmail(savedUser.getEmail(), token);
@@ -113,12 +94,32 @@ public class AuthService {
         } catch (Exception e) {
             log.error("Failed to complete resident registration for {}. Compensating by removing uploaded avatar {}",
                     normalizedEmail, avatarUrl, e);
-            try {
-                minioStorageService.removeAvatar(avatarUrl);
-            } catch (Exception minioEx) {
-                log.error("Failed to cleanup orphaned avatar {} from MinIO", avatarUrl, minioEx);
-            }
+            deleteAvatarQuietly(avatarUrl);
             throw e;
+        }
+    }
+
+    private User buildPendingUser(
+            RegisterRequestDto dto, String normalizedEmail, Dormitory dormitory, String avatarUrl) {
+        return User.builder()
+                .email(normalizedEmail)
+                .passwordHash(passwordEncoder.encode(dto.getPassword()))
+                .firstName(dto.getFirstName().trim())
+                .lastName(dto.getLastName().trim())
+                .phoneNumber(dto.getPhoneNumber().trim())
+                .avatarUrl(avatarUrl)
+                .role(UserRole.RESIDENT)
+                .status(UserStatus.PENDING_EMAIL)
+                .dormitory(dormitory)
+                .declaredRoomNumber(dto.getDeclaredRoomNumber().trim())
+                .build();
+    }
+
+    private void deleteAvatarQuietly(String avatarUrl) {
+        try {
+            minioStorageService.removeAvatar(avatarUrl);
+        } catch (Exception minioEx) {
+            log.error("Failed to cleanup orphaned avatar {} from MinIO", avatarUrl, minioEx);
         }
     }
 
@@ -264,11 +265,7 @@ public class AuthService {
             throw new IllegalArgumentException("New password must be different from the current password");
         }
 
-        user.setPasswordHash(passwordEncoder.encode(dto.getNewPassword()));
-        if (user.getStatus() == UserStatus.MUST_CHANGE_PASSWORD) {
-            user.setStatus(UserStatus.ACTIVE);
-        }
-        User saved = userRepository.save(user);
+        User saved = applyNewPassword(user, dto.getNewPassword());
         authenticatedUserCache.invalidate(saved.getId());
 
         String roomNumber = resolveRoomNumber(saved);
@@ -277,8 +274,16 @@ public class AuthService {
         return buildUserProfileDto(saved, roomNumber);
     }
 
-    public UserProfileDto buildUserProfileDto(User user, String roomNumber) {
+    private UserProfileDto buildUserProfileDto(User user, String roomNumber) {
         return UserProfileDto.from(user, roomNumber);
+    }
+
+    private User applyNewPassword(User user, String rawPassword) {
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        if (user.getStatus() == UserStatus.MUST_CHANGE_PASSWORD) {
+            user.setStatus(UserStatus.ACTIVE);
+        }
+        return userRepository.save(user);
     }
 
     private String resolveRoomNumber(User user) {
@@ -304,15 +309,13 @@ public class AuthService {
         }
 
         // Invalidate previous active reset tokens for this user
-        passwordResetTokenRepository.invalidateAllActiveForUser(user.getId(), Instant.now());
+        Instant now = clock.instant();
+        passwordResetTokenRepository.invalidateAllActiveForUser(user.getId(), now);
 
-        // Generate 32-byte secure random token (64 hex characters)
-        byte[] randomBytes = new byte[32];
-        SECURE_RANDOM.nextBytes(randomBytes);
-        String rawToken = HexFormat.of().formatHex(randomBytes);
-        String tokenHash = sha256Hex(rawToken);
+        String rawToken = ResetTokenSupport.generateRawToken();
+        String tokenHash = ResetTokenSupport.sha256Hex(rawToken);
 
-        Instant expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES);
+        Instant expiresAt = now.plus(ResetTokenSupport.RESET_TOKEN_TTL);
 
         PasswordResetToken resetToken = PasswordResetToken.builder()
                 .user(user)
@@ -330,45 +333,25 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public VerifyResetTokenResponseDto verifyResetToken(String rawToken) {
-        if (rawToken == null || rawToken.isBlank()) {
-            throw new IllegalArgumentException("Reset token must not be blank");
-        }
+        PasswordResetToken token = requireUsableToken(rawToken, clock.instant());
 
-        String tokenHash = sha256Hex(rawToken.trim());
-        PasswordResetToken token = passwordResetTokenRepository.findActiveByTokenHash(tokenHash)
-                .orElseThrow(() -> new ResourceNotFoundException("Invalid or expired password reset token"));
-
-        if (token.getExpiresAt().isBefore(Instant.now())) {
-            throw new IllegalArgumentException("Password reset token has expired");
-        }
-
-        String maskedEmail = maskEmail(token.getUser().getEmail());
+        String maskedEmail = ResetTokenSupport.maskEmail(token.getUser().getEmail());
         return new VerifyResetTokenResponseDto(true, maskedEmail);
     }
 
     @Transactional
     public void resetPassword(ResetPasswordRequestDto dto) {
-        String tokenHash = sha256Hex(dto.getToken().trim());
-        PasswordResetToken token = passwordResetTokenRepository.findActiveByTokenHash(tokenHash)
-                .orElseThrow(() -> new ResourceNotFoundException("Invalid or expired password reset token"));
-
-        Instant now = Instant.now();
-        if (token.getExpiresAt().isBefore(now)) {
-            throw new IllegalArgumentException("Password reset token has expired");
-        }
+        Instant now = clock.instant();
+        PasswordResetToken token = requireUsableToken(dto.getToken(), now);
 
         User user = token.getUser();
         if (user.getStatus() == UserStatus.BLOCKED || user.getStatus() == UserStatus.CHECKED_OUT) {
             throw new AccountStatusException("Account is suspended or checked out");
         }
 
-        user.setPasswordHash(passwordEncoder.encode(dto.getNewPassword()));
-        if (user.getStatus() == UserStatus.MUST_CHANGE_PASSWORD) {
-            user.setStatus(UserStatus.ACTIVE);
-        }
-        userRepository.save(user);
+        applyNewPassword(user, dto.getNewPassword());
 
-        token.setUsedAt(now);
+        token.markUsed(now);
         passwordResetTokenRepository.save(token);
 
         // Invalidate all active tokens and sessions for this user
@@ -377,24 +360,18 @@ public class AuthService {
         log.info("User {} successfully reset password via email token", user.getId());
     }
 
-    private static String sha256Hex(String input) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 algorithm not available", e);
+    private PasswordResetToken requireUsableToken(String rawToken, Instant now) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new IllegalArgumentException("Reset token must not be blank");
         }
-    }
 
-    private static String maskEmail(String email) {
-        if (email == null || !email.contains("@")) return "***";
-        int atIndex = email.indexOf('@');
-        String name = email.substring(0, atIndex);
-        String domain = email.substring(atIndex);
-        if (name.length() <= 2) {
-            return name.charAt(0) + "***" + domain;
+        String tokenHash = ResetTokenSupport.sha256Hex(rawToken.trim());
+        PasswordResetToken token = passwordResetTokenRepository.findActiveByTokenHash(tokenHash)
+                .orElseThrow(() -> new ResourceNotFoundException("Invalid or expired password reset token"));
+
+        if (token.isExpired(now)) {
+            throw new IllegalArgumentException("Password reset token has expired");
         }
-        return name.charAt(0) + "***" + name.charAt(name.length() - 1) + domain;
+        return token;
     }
 }
