@@ -14,7 +14,7 @@ class LaundrySlotGridTest {
     @Test
     @DisplayName("3h slots with 07:00–23:00 stop before midnight wrap (no infinite loop)")
     void threeHourSlotsDoNotWrapForever() {
-        List<LocalTime> starts = LaundryService.slotStarts(
+        List<LocalTime> starts = LaundryBookingValidator.slotStarts(
                 LocalTime.of(7, 0),
                 LocalTime.of(23, 0),
                 180
@@ -32,7 +32,7 @@ class LaundrySlotGridTest {
     @Test
     @DisplayName("90-minute slots keep previous grid behaviour")
     void ninetyMinuteSlots() {
-        List<LocalTime> starts = LaundryService.slotStarts(
+        List<LocalTime> starts = LaundryBookingValidator.slotStarts(
                 LocalTime.of(7, 0),
                 LocalTime.of(23, 0),
                 90

@@ -23,6 +23,7 @@ import pl.edu.pk.pkampus.modules.user.User;
 import pl.edu.pk.pkampus.modules.user.UserRole;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -39,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -54,6 +56,9 @@ class LaundryServiceTest {
     @Mock
     private LaundryBookingRepository laundryBookingRepository;
 
+    @Mock
+    private Clock clock;
+
     @InjectMocks
     private LaundryService laundryService;
 
@@ -65,6 +70,7 @@ class LaundryServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(clock.instant()).thenReturn(Instant.now());
         dorm = Dormitory.builder()
                 .id(UUID.randomUUID())
                 .name("DS Pralnia")

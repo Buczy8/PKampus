@@ -63,4 +63,14 @@ public class LaundryBooking {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    public void cancelByUser(Instant now) {
+        if (this.status != LaundryBookingStatus.CONFIRMED) {
+            throw new IllegalArgumentException("Only CONFIRMED bookings can be cancelled by the resident");
+        }
+        if (!this.startTime.isAfter(now)) {
+            throw new IllegalArgumentException("Cannot cancel a booking after the slot has started");
+        }
+        this.status = LaundryBookingStatus.CANCELLED_USER;
+    }
 }
