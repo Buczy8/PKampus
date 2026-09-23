@@ -93,4 +93,12 @@ public class Issue {
         photos.add(photo);
         photo.setIssue(this);
     }
+
+    public boolean hasPhoto() {
+        return photos != null && !photos.isEmpty();
+    }
+
+    public String getFirstPhotoKey() {
+        return hasPhoto() ? photos.getFirst().getPhotoUrl() : null;
+    }
 }

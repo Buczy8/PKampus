@@ -62,7 +62,7 @@ public class IssueService {
     public List<IssueDto> listMyIssues(User user) {
         requireActiveResident(user);
         return issueRepository.findByReporterIdWithDetailsOrderByCreatedAtDesc(user.getId()).stream()
-                .map(issue -> toDto(issue, true))
+                .map(this::toDto)
                 .toList();
     }
 
@@ -219,7 +219,7 @@ public class IssueService {
 
             Issue saved = issueRepository.saveAndFlush(issue);
             log.info("Resident {} reported issue {} ({})", user.getEmail(), saved.getId(), saved.getCategory());
-            return toDto(saved, true);
+            return toDto(saved);
         } catch (RuntimeException ex) {
             if (uploadedObject != null) {
                 try {
@@ -282,16 +282,8 @@ public class IssueService {
             locationLabel = capitalizeCommonArea(commonArea);
         }
 
-        boolean hasPhoto = issue.getPhotos() != null && !issue.getPhotos().isEmpty();
-        String photoUrl = null;
-        if (hasPhoto && includePresignedPhoto) {
-            try {
-                photoUrl = minioStorageService.getIssuePresignedUrl(
-                        issue.getPhotos().getFirst().getPhotoUrl(), PHOTO_PRESIGN_MINUTES);
-            } catch (Exception e) {
-                log.warn("Could not generate issue photo URL for {}: {}", issue.getId(), e.getMessage());
-            }
-        }
+        boolean hasPhoto = issue.hasPhoto();
+        String photoUrl = includePresignedPhoto ? resolvePresignedPhotoUrl(issue) : null;
 
         User reporter = issue.getReporter();
         return new StaffIssueDto(
@@ -314,7 +306,7 @@ public class IssueService {
         );
     }
 
-    private IssueDto toDto(Issue issue, boolean includePresignedPhoto) {
+    private IssueDto toDto(Issue issue) {
         String locationLabel;
         UUID roomId = null;
         String commonArea = issue.getCommonAreaName();
@@ -325,16 +317,8 @@ public class IssueService {
             locationLabel = capitalizeCommonArea(commonArea);
         }
 
-        boolean hasPhoto = issue.getPhotos() != null && !issue.getPhotos().isEmpty();
-        String photoUrl = null;
-        if (hasPhoto && includePresignedPhoto) {
-            try {
-                photoUrl = minioStorageService.getIssuePresignedUrl(
-                        issue.getPhotos().getFirst().getPhotoUrl(), PHOTO_PRESIGN_MINUTES);
-            } catch (Exception e) {
-                log.warn("Could not generate issue photo URL for {}: {}", issue.getId(), e.getMessage());
-            }
-        }
+        boolean hasPhoto = issue.hasPhoto();
+        String photoUrl = resolvePresignedPhotoUrl(issue);
 
         return new IssueDto(
                 issue.getId(),
@@ -351,6 +335,19 @@ public class IssueService {
                 issue.getCreatedAt().atZone(WARSAW).toOffsetDateTime(),
                 issue.getUpdatedAt().atZone(WARSAW).toOffsetDateTime()
         );
+    }
+
+    private String resolvePresignedPhotoUrl(Issue issue) {
+        if (!issue.hasPhoto()) {
+            return null;
+        }
+        try {
+            return minioStorageService.getIssuePresignedUrl(
+                    issue.getFirstPhotoKey(), PHOTO_PRESIGN_MINUTES);
+        } catch (Exception e) {
+            log.warn("Could not generate issue photo URL for {}: {}", issue.getId(), e.getMessage());
+            return null;
+        }
     }
 
     private static String capitalizeCommonArea(String name) {
