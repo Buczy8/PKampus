@@ -170,15 +170,11 @@ public class SuperAdminService {
                     .orElseThrow(() -> new ResourceNotFoundException("Dormitory not found"));
             admin.setDormitory(dormitory);
         }
-        if (request.getFirstName() != null && !request.getFirstName().isBlank()) {
-            admin.setFirstName(request.getFirstName().trim());
-        }
-        if (request.getLastName() != null && !request.getLastName().isBlank()) {
-            admin.setLastName(request.getLastName().trim());
-        }
-        if (request.getPhoneNumber() != null && !request.getPhoneNumber().isBlank()) {
-            admin.setPhoneNumber(request.getPhoneNumber().trim());
-        }
+        admin.updatePersonalData(
+                request.getFirstName(),
+                request.getLastName(),
+                request.getPhoneNumber()
+        );
         if (request.getStatus() != null) {
             if (!ADS_PATCH_STATUSES.contains(request.getStatus())) {
                 throw new BusinessRuleException("Status must be ACTIVE or BLOCKED");

@@ -78,15 +78,12 @@ public class AdminReceptionistService {
                 .findByIdAndDormitoryIdAndRole(id, dormitoryId, UserRole.RECEPTIONIST)
                 .orElseThrow(() -> new ResourceNotFoundException("Receptionist not found"));
 
-        if (request.getFirstName() != null && !request.getFirstName().isBlank()) {
-            receptionist.setFirstName(request.getFirstName().trim());
-        }
-        if (request.getLastName() != null && !request.getLastName().isBlank()) {
-            receptionist.setLastName(request.getLastName().trim());
-        }
-        if (request.getPhoneNumber() != null && !request.getPhoneNumber().isBlank()) {
-            receptionist.setPhoneNumber(request.getPhoneNumber().trim());
-        }
+        receptionist.updatePersonalData(
+                request.getFirstName(),
+                request.getLastName(),
+                request.getPhoneNumber()
+        );
+
         if (request.getStatus() != null) {
             if (!PATCH_STATUSES.contains(request.getStatus())) {
                 throw new BusinessRuleException("Status must be ACTIVE or BLOCKED");

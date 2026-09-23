@@ -44,7 +44,7 @@ public class User implements UserDetails {
     @Column(name = "email", length = 150, nullable = false, unique = true)
     private String email;
 
-    @Column(name = "password_hash", length = 255, nullable = false)
+    @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
     @Column(name = "first_name", length = 50, nullable = false)
@@ -82,6 +82,20 @@ public class User implements UserDetails {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    // --- Domain logic / data modification ---
+
+    public void updatePersonalData(String firstName, String lastName, String phoneNumber) {
+        if (firstName != null && !firstName.isBlank()) {
+            this.firstName = firstName.trim();
+        }
+        if (lastName != null && !lastName.isBlank()) {
+            this.lastName = lastName.trim();
+        }
+        if (phoneNumber != null && !phoneNumber.isBlank()) {
+            this.phoneNumber = phoneNumber.trim();
+        }
+    }
+
     // --- UserDetails implementation for Spring Security ---
 
     @Override
@@ -103,18 +117,8 @@ public class User implements UserDetails {
     }
 
     @Override
-    public boolean isAccountNonExpired() {
-        return true;
-    }
-
-    @Override
     public boolean isAccountNonLocked() {
         return status != UserStatus.BLOCKED;
-    }
-
-    @Override
-    public boolean isCredentialsNonExpired() {
-        return true;
     }
 
     @Override
