@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.modules.admin;
+package pl.edu.pk.pkampus.modules.admin.receptionists;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -7,6 +7,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
+import pl.edu.pk.pkampus.modules.admin.AdminResource;
+import pl.edu.pk.pkampus.modules.admin.AdminScope;
 import pl.edu.pk.pkampus.modules.admin.dto.CreateReceptionistRequestDto;
 import pl.edu.pk.pkampus.modules.admin.dto.ReceptionistDto;
 import pl.edu.pk.pkampus.modules.admin.dto.UpdateReceptionistRequestDto;
@@ -35,7 +37,7 @@ public class AdminReceptionistService {
 
     @Transactional(readOnly = true)
     public List<ReceptionistDto> list(User admin) {
-        UUID dormitoryId = AdminScope.requireDormitoryId(admin, "receptionists");
+        UUID dormitoryId = AdminScope.requireDormitoryId(admin, AdminResource.RECEPTIONISTS);
         return userRepository
                 .findAllByDormitoryIdAndRoleOrderByLastNameAscFirstNameAsc(dormitoryId, UserRole.RECEPTIONIST)
                 .stream()
@@ -45,7 +47,7 @@ public class AdminReceptionistService {
 
     @Transactional
     public ReceptionistDto create(User admin, CreateReceptionistRequestDto request) {
-        Dormitory dormitory = AdminScope.requireDormitory(admin, "receptionists");
+        Dormitory dormitory = AdminScope.requireDormitory(admin, AdminResource.RECEPTIONISTS);
 
         String email = request.getEmail().trim().toLowerCase();
         if (userRepository.existsByEmail(email)) {
@@ -71,7 +73,7 @@ public class AdminReceptionistService {
 
     @Transactional
     public ReceptionistDto update(User admin, UUID id, UpdateReceptionistRequestDto request) {
-        UUID dormitoryId = AdminScope.requireDormitoryId(admin, "receptionists");
+        UUID dormitoryId = AdminScope.requireDormitoryId(admin, AdminResource.RECEPTIONISTS);
         User receptionist = userRepository
                 .findByIdAndDormitoryIdAndRole(id, dormitoryId, UserRole.RECEPTIONIST)
                 .orElseThrow(() -> new ResourceNotFoundException("Receptionist not found"));

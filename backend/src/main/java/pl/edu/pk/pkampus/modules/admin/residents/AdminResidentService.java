@@ -1,7 +1,8 @@
-package pl.edu.pk.pkampus.modules.admin;
+package pl.edu.pk.pkampus.modules.admin.residents;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,7 +11,9 @@ import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
 import pl.edu.pk.pkampus.common.util.AcademicYear;
-import pl.edu.pk.pkampus.mail.EmailService;
+import pl.edu.pk.pkampus.modules.admin.AdminResource;
+import pl.edu.pk.pkampus.modules.admin.AdminAvatarUrls;
+import pl.edu.pk.pkampus.modules.admin.AdminScope;
 import pl.edu.pk.pkampus.modules.admin.dto.ActivateResidentRequestDto;
 import pl.edu.pk.pkampus.modules.admin.dto.ActivateResidentResponseDto;
 import pl.edu.pk.pkampus.modules.admin.dto.PendingResidentDto;
@@ -37,15 +40,15 @@ public class AdminResidentService {
     private final RoomRepository roomRepository;
     private final RoomAssignmentRepository roomAssignmentRepository;
     private final MinioStorageService minioStorageService;
-    private final EmailService emailService;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
     public List<PendingResidentDto> listPendingResidents(User admin) {
         List<User> pending = switch (admin.getRole()) {
             case SUPER_ADMIN -> userRepository.findAllByStatus(UserStatus.PENDING_APPROVAL);
             case DORM_ADMIN -> {
-                UUID dormitoryId = AdminScope.requireDormitoryId(admin, "residency applications");
+                UUID dormitoryId = AdminScope.requireDormitoryId(admin, AdminResource.APPLICATIONS);
                 yield userRepository.findAllByDormitoryIdAndStatus(dormitoryId, UserStatus.PENDING_APPROVAL);
             }
             default -> throw new AccessDeniedException(
@@ -76,12 +79,13 @@ public class AdminResidentService {
         resident.setDeclaredRoomNumber(roomNumber);
         userRepository.save(resident);
 
-        emailService.sendAccountActivatedEmail(
+        eventPublisher.publishEvent(new ResidentActivatedEvent(
+                resident.getId(),
                 resident.getEmail(),
                 resident.getFirstName(),
                 roomNumber,
                 resident.getDormitory().getName()
-        );
+        ));
 
         log.info("ADS {} activated resident {} into room {} ({})",
                 admin.getId(), resident.getId(), roomNumber, academicYear);
@@ -110,7 +114,7 @@ public class AdminResidentService {
 
         AdminAvatarUrls.removeQuietly(minioStorageService, avatarObject, residentId);
 
-        emailService.sendRegistrationRejectedEmail(email, firstName, reason);
+        eventPublisher.publishEvent(new RegistrationRejectedEvent(residentId, email, firstName, reason));
         log.info("ADS {} rejected resident application {} reason={}", admin.getId(), residentId, reason);
     }
 
@@ -159,7 +163,7 @@ public class AdminResidentService {
             return resident;
         }
 
-        UUID adminDormId = AdminScope.requireDormitoryId(admin, "residency applications");
+        UUID adminDormId = AdminScope.requireDormitoryId(admin, AdminResource.APPLICATIONS);
         if (!adminDormId.equals(resident.getDormitory().getId())) {
             throw new AccessDeniedException("Resident does not belong to your dormitory");
         }

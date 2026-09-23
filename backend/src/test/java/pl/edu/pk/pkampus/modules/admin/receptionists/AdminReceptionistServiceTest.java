@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.modules.admin;
+package pl.edu.pk.pkampus.modules.admin.receptionists;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

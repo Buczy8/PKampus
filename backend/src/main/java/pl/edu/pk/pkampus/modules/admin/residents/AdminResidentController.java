@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.modules.admin;
+package pl.edu.pk.pkampus.modules.admin.residents;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;

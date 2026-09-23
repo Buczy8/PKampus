@@ -1,13 +1,17 @@
-package pl.edu.pk.pkampus.modules.admin;
+package pl.edu.pk.pkampus.modules.admin.residents;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
-import pl.edu.pk.pkampus.mail.EmailService;
+import pl.edu.pk.pkampus.modules.admin.AdminResource;
+import pl.edu.pk.pkampus.modules.admin.AdminAvatarUrls;
+import pl.edu.pk.pkampus.modules.admin.AdminScope;
 import pl.edu.pk.pkampus.modules.admin.dto.CreateRoomBanRequestDto;
 import pl.edu.pk.pkampus.modules.admin.dto.ManagedResidentDto;
 import pl.edu.pk.pkampus.modules.admin.dto.SanctionDto;
@@ -43,13 +47,13 @@ public class AdminResidentDirectoryService {
     private final RoomAssignmentRepository roomAssignmentRepository;
     private final SanctionRepository sanctionRepository;
     private final MinioStorageService minioStorageService;
-    private final EmailService emailService;
     private final TokenRevocationService tokenRevocationService;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
     public List<ManagedResidentDto> listResidents(User admin) {
-        UUID dormitoryId = AdminScope.requireDormitoryId(admin, "residents");
+        UUID dormitoryId = AdminScope.requireDormitoryId(admin, AdminResource.RESIDENTS);
         List<User> residents = userRepository
                 .findAllByDormitoryIdAndRoleAndStatusInOrderByLastNameAscFirstNameAsc(
                         dormitoryId, UserRole.RESIDENT, DIRECTORY_STATUSES);
@@ -87,7 +91,8 @@ public class AdminResidentDirectoryService {
         resident.setStatus(UserStatus.BLOCKED);
         userRepository.save(resident);
         tokenRevocationService.revokeUser(resident.getId());
-        emailService.sendAccountBlockedEmail(resident.getEmail(), resident.getFirstName());
+        eventPublisher.publishEvent(new ResidentStatusEvent(
+                ResidentStatusEvent.Type.BLOCKED, resident.getId(), resident.getEmail(), resident.getFirstName()));
         log.info("ADS {} blocked resident {}", admin.getEmail(), resident.getEmail());
         return toManagedDto(resident, currentRoomBan(resident.getId()), activeAssignment(resident.getId()));
     }
@@ -121,12 +126,14 @@ public class AdminResidentDirectoryService {
         String avatarObject = resident.getAvatarUrl();
         resident.setStatus(UserStatus.CHECKED_OUT);
         resident.setAvatarUrl(null);
+        resident.setDeclaredRoomNumber(null);
         userRepository.save(resident);
         tokenRevocationService.revokeUser(resident.getId());
 
         AdminAvatarUrls.removeQuietly(minioStorageService, avatarObject, residentId);
 
-        emailService.sendCheckedOutEmail(resident.getEmail(), resident.getFirstName());
+        eventPublisher.publishEvent(new ResidentStatusEvent(
+                ResidentStatusEvent.Type.CHECKED_OUT, resident.getId(), resident.getEmail(), resident.getFirstName()));
         log.info("ADS {} checked out resident {}", admin.getEmail(), resident.getEmail());
         return toManagedDto(resident, null, null);
     }
@@ -158,9 +165,14 @@ public class AdminResidentDirectoryService {
                 .active(true)
                 .build();
 
-        Sanction saved = sanctionRepository.save(sanction);
-        emailService.sendRoomBanEmail(
-                resident.getEmail(), resident.getFirstName(), today, end, saved.getReason());
+        Sanction saved;
+        try {
+            saved = sanctionRepository.save(sanction);
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessRuleException("Resident already has an active ROOM_BAN");
+        }
+        eventPublisher.publishEvent(new RoomBanIssuedEvent(
+                resident.getId(), resident.getEmail(), resident.getFirstName(), today, end, saved.getReason()));
         log.info("ADS {} issued ROOM_BAN to {} until {}", admin.getEmail(), resident.getEmail(), end);
         return toSanctionDto(saved);
     }
@@ -183,7 +195,7 @@ public class AdminResidentDirectoryService {
     }
 
     private User loadManageableResident(User admin, UUID residentId) {
-        UUID dormitoryId = AdminScope.requireDormitoryId(admin, "residents");
+        UUID dormitoryId = AdminScope.requireDormitoryId(admin, AdminResource.RESIDENTS);
         User resident = userRepository.findByIdAndDormitoryIdAndRole(residentId, dormitoryId, UserRole.RESIDENT)
                 .orElseThrow(() -> new ResourceNotFoundException("Resident not found"));
         if (!DIRECTORY_STATUSES.contains(resident.getStatus())) {

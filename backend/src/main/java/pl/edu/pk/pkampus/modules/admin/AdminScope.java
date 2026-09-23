@@ -18,12 +18,18 @@ import java.util.UUID;
  */
 public final class AdminScope {
 
+    /**
+     * Application calendar zone. Sanction boundaries and check-in/out dates
+     * follow the dormitory wall clock, not the server's default zone.
+     */
+    public static final ZoneId APP_ZONE = ZoneId.of("Europe/Warsaw");
+
     private AdminScope() {
     }
 
-    public static Dormitory requireDormitory(User admin, String resource) {
+    public static Dormitory requireDormitory(User admin, AdminResource resource) {
         if (admin.getRole() != UserRole.DORM_ADMIN) {
-            throw new AccessDeniedException("Only dormitory administrators can manage " + resource);
+            throw new AccessDeniedException("Only dormitory administrators can manage " + resource.label());
         }
         if (admin.getDormitory() == null) {
             throw new BusinessRuleException("Administrator account has no dormitory assigned");
@@ -31,15 +37,15 @@ public final class AdminScope {
         return admin.getDormitory();
     }
 
-    public static UUID requireDormitoryId(User admin, String resource) {
+    public static UUID requireDormitoryId(User admin, AdminResource resource) {
         return requireDormitory(admin, resource).getId();
     }
 
     /**
-     * Current calendar date derived from the injected clock, in the server's default zone.
-     * Equivalent to {@link LocalDate#now()} for a system clock, but deterministic in tests.
+     * Current calendar date derived from the injected clock in the application zone.
+     * Deterministic in tests, independent of the deployment time zone.
      */
     public static LocalDate today(Clock clock) {
-        return LocalDate.ofInstant(clock.instant(), ZoneId.systemDefault());
+        return LocalDate.ofInstant(clock.instant(), APP_ZONE);
     }
 }

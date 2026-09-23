@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.modules.admin;
+package pl.edu.pk.pkampus.modules.admin.dormrooms;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -16,9 +16,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
-import pl.edu.pk.pkampus.modules.admin.dto.CreateReceptionistRequestDto;
-import pl.edu.pk.pkampus.modules.admin.dto.ReceptionistDto;
-import pl.edu.pk.pkampus.modules.admin.dto.UpdateReceptionistRequestDto;
+import pl.edu.pk.pkampus.modules.admin.dto.CreateDormRoomRequestDto;
+import pl.edu.pk.pkampus.modules.admin.dto.DormRoomDto;
+import pl.edu.pk.pkampus.modules.admin.dto.UpdateDormRoomRequestDto;
 import pl.edu.pk.pkampus.modules.user.User;
 import pl.edu.pk.pkampus.modules.user.UserRepository;
 import pl.edu.pk.pkampus.modules.user.UserRole;
@@ -40,11 +40,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(AdminReceptionistController.class)
+@WebMvcTest(AdminDormRoomController.class)
 @Import(SecurityConfig.class)
 @AutoConfigureMockMvc(addFilters = false)
-@DisplayName("AdminReceptionistController unit tests")
-class AdminReceptionistControllerTest {
+@DisplayName("AdminDormRoomController unit tests")
+class AdminDormRoomControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -53,7 +53,7 @@ class AdminReceptionistControllerTest {
     private ObjectMapper objectMapper;
 
     @MockitoBean
-    private AdminReceptionistService adminReceptionistService;
+    private AdminDormRoomService adminDormRoomService;
 
     @MockitoBean
     private JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -68,7 +68,7 @@ class AdminReceptionistControllerTest {
     private UserRepository userRepository;
 
     private User admin;
-    private UUID receptionistId;
+    private UUID roomId;
 
     @BeforeEach
     void setUp() {
@@ -78,7 +78,7 @@ class AdminReceptionistControllerTest {
                 .role(UserRole.DORM_ADMIN)
                 .status(UserStatus.ACTIVE)
                 .build();
-        receptionistId = UUID.randomUUID();
+        roomId = UUID.randomUUID();
 
         UsernamePasswordAuthenticationToken auth =
                 new UsernamePasswordAuthenticationToken(admin, null, admin.getAuthorities());
@@ -91,108 +91,105 @@ class AdminReceptionistControllerTest {
     }
 
     @Test
-    void listReceptionistsReturnsOk() throws Exception {
-        when(adminReceptionistService.list(any())).thenReturn(List.of(ReceptionistDto.builder()
-                .id(receptionistId)
-                .email("portier@pk.edu.pl")
-                .firstName("Stanisław")
-                .lastName("Kowalski")
-                .status(UserStatus.ACTIVE)
+    void listRoomsReturnsOk() throws Exception {
+        when(adminDormRoomService.list(any())).thenReturn(List.of(DormRoomDto.builder()
+                .id(roomId)
+                .roomNumber("101")
+                .floor(1)
+                .capacity(2)
                 .build()));
 
-        mockMvc.perform(get("/api/v1/admin/receptionists"))
+        mockMvc.perform(get("/api/v1/admin/dorm-rooms"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data[0].email").value("portier@pk.edu.pl"))
-                .andExpect(jsonPath("$.data[0].firstName").value("Stanisław"));
+                .andExpect(jsonPath("$.data[0].roomNumber").value("101"))
+                .andExpect(jsonPath("$.data[0].floor").value(1));
     }
 
     @Test
-    void createReceptionistReturnsCreated() throws Exception {
-        CreateReceptionistRequestDto request = CreateReceptionistRequestDto.builder()
-                .firstName("Jan")
-                .lastName("Nowak")
-                .email("jan.nowak@pk.edu.pl")
-                .phoneNumber("+48123456789")
-                .password("Password123!")
+    void createRoomReturnsCreated() throws Exception {
+        CreateDormRoomRequestDto request = CreateDormRoomRequestDto.builder()
+                .roomNumber("205")
+                .floor(2)
+                .capacity(2)
                 .build();
 
-        when(adminReceptionistService.create(any(), any())).thenReturn(ReceptionistDto.builder()
-                .id(receptionistId)
-                .email("jan.nowak@pk.edu.pl")
-                .status(UserStatus.MUST_CHANGE_PASSWORD)
+        when(adminDormRoomService.create(any(), any())).thenReturn(DormRoomDto.builder()
+                .id(roomId)
+                .roomNumber("205")
+                .floor(2)
+                .capacity(2)
                 .build());
 
-        mockMvc.perform(post("/api/v1/admin/receptionists")
+        mockMvc.perform(post("/api/v1/admin/dorm-rooms")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Receptionist account created"))
-                .andExpect(jsonPath("$.data.email").value("jan.nowak@pk.edu.pl"));
+                .andExpect(jsonPath("$.message").value("Room created"))
+                .andExpect(jsonPath("$.data.roomNumber").value("205"));
     }
 
     @Test
-    void createReceptionistRejectsInvalidDto() throws Exception {
-        CreateReceptionistRequestDto invalid = CreateReceptionistRequestDto.builder()
-                .firstName("")
-                .lastName("")
-                .email("invalid-email")
-                .phoneNumber("abc")
-                .password("weak")
+    void createRoomRejectsInvalidDto() throws Exception {
+        CreateDormRoomRequestDto invalid = CreateDormRoomRequestDto.builder()
+                .roomNumber("")
+                .floor(-1)
+                .capacity(0)
                 .build();
 
-        mockMvc.perform(post("/api/v1/admin/receptionists")
+        mockMvc.perform(post("/api/v1/admin/dorm-rooms")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalid)))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
-    void updateReceptionistReturnsOk() throws Exception {
-        UpdateReceptionistRequestDto request = UpdateReceptionistRequestDto.builder()
-                .status(UserStatus.BLOCKED)
+    void updateRoomReturnsOk() throws Exception {
+        UpdateDormRoomRequestDto request = UpdateDormRoomRequestDto.builder()
+                .capacity(3)
                 .build();
 
-        when(adminReceptionistService.update(any(), eq(receptionistId), any()))
-                .thenReturn(ReceptionistDto.builder()
-                        .id(receptionistId)
-                        .status(UserStatus.BLOCKED)
-                        .build());
+        when(adminDormRoomService.update(any(), eq(roomId), any())).thenReturn(DormRoomDto.builder()
+                .id(roomId)
+                .roomNumber("101")
+                .floor(1)
+                .capacity(3)
+                .build());
 
-        mockMvc.perform(patch("/api/v1/admin/receptionists/" + receptionistId)
+        mockMvc.perform(patch("/api/v1/admin/dorm-rooms/" + roomId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.status").value("BLOCKED"));
+                .andExpect(jsonPath("$.data.capacity").value(3));
     }
 
     @Test
-    void updateReceptionistPropagatesNotFound() throws Exception {
-        UpdateReceptionistRequestDto request = UpdateReceptionistRequestDto.builder()
-                .status(UserStatus.BLOCKED)
+    void updateRoomPropagatesNotFound() throws Exception {
+        UpdateDormRoomRequestDto request = UpdateDormRoomRequestDto.builder()
+                .capacity(3)
                 .build();
 
-        when(adminReceptionistService.update(any(), eq(receptionistId), any()))
-                .thenThrow(new ResourceNotFoundException("Receptionist not found"));
+        when(adminDormRoomService.update(any(), eq(roomId), any()))
+                .thenThrow(new ResourceNotFoundException("Room not found"));
 
-        mockMvc.perform(patch("/api/v1/admin/receptionists/" + receptionistId)
+        mockMvc.perform(patch("/api/v1/admin/dorm-rooms/" + roomId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    void updateReceptionistPropagatesBusinessRuleException() throws Exception {
-        UpdateReceptionistRequestDto request = UpdateReceptionistRequestDto.builder()
-                .status(UserStatus.ACTIVE)
+    void updateRoomPropagatesBusinessRuleException() throws Exception {
+        UpdateDormRoomRequestDto request = UpdateDormRoomRequestDto.builder()
+                .roomNumber("102")
                 .build();
 
-        when(adminReceptionistService.update(any(), eq(receptionistId), any()))
-                .thenThrow(new BusinessRuleException("Status must be ACTIVE or BLOCKED"));
+        when(adminDormRoomService.update(any(), eq(roomId), any()))
+                .thenThrow(new BusinessRuleException("A room with this number already exists in the dormitory"));
 
-        mockMvc.perform(patch("/api/v1/admin/receptionists/" + receptionistId)
+        mockMvc.perform(patch("/api/v1/admin/dorm-rooms/" + roomId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnprocessableEntity());

@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.modules.admin;
+package pl.edu.pk.pkampus.modules.admin.residents;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -9,13 +9,13 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import pl.edu.pk.pkampus.common.exception.AccountStatusException;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.FileStorageException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
-import pl.edu.pk.pkampus.mail.EmailService;
 import pl.edu.pk.pkampus.modules.admin.dto.ActivateResidentRequestDto;
 import pl.edu.pk.pkampus.modules.admin.dto.ActivateResidentResponseDto;
 import pl.edu.pk.pkampus.modules.admin.dto.PendingResidentDto;
@@ -56,7 +56,7 @@ class AdminResidentServiceTest {
     @Mock
     private MinioStorageService minioStorageService;
     @Mock
-    private EmailService emailService;
+    private ApplicationEventPublisher eventPublisher;
     @Mock
     private Clock clock;
 
@@ -259,7 +259,12 @@ class AdminResidentServiceTest {
             assertNotNull(response.getRoomAssignmentId());
             assertNotNull(response.getAcademicYear());
             assertTrue(response.getAcademicYear().matches("\\d{4}/\\d{4}"));
-            verify(emailService).sendAccountActivatedEmail("student@pk.edu.pl", "Jan", "101", "DS Akademik");
+            ArgumentCaptor<ResidentActivatedEvent> eventCaptor = ArgumentCaptor.forClass(ResidentActivatedEvent.class);
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            assertEquals(pendingResident.getId(), eventCaptor.getValue().userId());
+            assertEquals("student@pk.edu.pl", eventCaptor.getValue().email());
+            assertEquals("101", eventCaptor.getValue().roomNumber());
+            assertEquals("DS Akademik", eventCaptor.getValue().dormitoryName());
         }
 
         @Test
@@ -325,7 +330,7 @@ class AdminResidentServiceTest {
             assertThrows(ResourceNotFoundException.class, () ->
                     adminResidentService.activateResident(dormAdmin, pendingResident.getId(), null));
             verify(roomAssignmentRepository, never()).save(any());
-            verify(emailService, never()).sendAccountActivatedEmail(any(), any(), any(), any());
+            verify(eventPublisher, never()).publishEvent(any());
         }
 
         @Test
@@ -416,8 +421,12 @@ class AdminResidentServiceTest {
             verify(userRepository).delete(pendingResident);
             verify(userRepository).flush();
             verify(minioStorageService).removeAvatar("avatar.jpg");
-            verify(emailService).sendRegistrationRejectedEmail(
-                    "student@pk.edu.pl", "Jan", "Not on housing list");
+            ArgumentCaptor<RegistrationRejectedEvent> eventCaptor =
+                    ArgumentCaptor.forClass(RegistrationRejectedEvent.class);
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            assertEquals(pendingResident.getId(), eventCaptor.getValue().residentId());
+            assertEquals("student@pk.edu.pl", eventCaptor.getValue().email());
+            assertEquals("Not on housing list", eventCaptor.getValue().reason());
         }
 
         @Test
@@ -430,7 +439,7 @@ class AdminResidentServiceTest {
                     pendingResident.getId(),
                     new RejectResidentRequestDto("Rejected")));
 
-            verify(emailService).sendRegistrationRejectedEmail(eq("student@pk.edu.pl"), eq("Jan"), eq("Rejected"));
+            verify(eventPublisher).publishEvent(any(RegistrationRejectedEvent.class));
         }
 
         @Test
@@ -444,7 +453,7 @@ class AdminResidentServiceTest {
                     new RejectResidentRequestDto("Rejected"));
 
             verify(minioStorageService, never()).removeAvatar(any());
-            verify(emailService).sendRegistrationRejectedEmail(anyString(), anyString(), anyString());
+            verify(eventPublisher).publishEvent(any(RegistrationRejectedEvent.class));
         }
 
         @Test

@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.modules.admin;
+package pl.edu.pk.pkampus.modules.admin.residents;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -9,12 +9,13 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.FileStorageException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
-import pl.edu.pk.pkampus.mail.EmailService;
 import pl.edu.pk.pkampus.modules.admin.dto.CreateRoomBanRequestDto;
 import pl.edu.pk.pkampus.modules.admin.dto.ManagedResidentDto;
 import pl.edu.pk.pkampus.modules.admin.dto.SanctionDto;
@@ -63,7 +64,7 @@ class AdminResidentDirectoryServiceTest {
     private MinioStorageService minioStorageService;
 
     @Mock
-    private EmailService emailService;
+    private ApplicationEventPublisher eventPublisher;
 
     @Mock
     private TokenRevocationService tokenRevocationService;
@@ -251,7 +252,11 @@ class AdminResidentDirectoryServiceTest {
             assertEquals(UserStatus.BLOCKED, resident.getStatus());
             assertEquals(UserStatus.BLOCKED, result.getStatus());
             verify(tokenRevocationService).revokeUser(residentId);
-            verify(emailService).sendAccountBlockedEmail(eq("resident@pk.edu.pl"), eq("Piotr"));
+            ArgumentCaptor<ResidentStatusEvent> eventCaptor = ArgumentCaptor.forClass(ResidentStatusEvent.class);
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            assertEquals(ResidentStatusEvent.Type.BLOCKED, eventCaptor.getValue().type());
+            assertEquals(residentId, eventCaptor.getValue().residentId());
+            assertEquals("resident@pk.edu.pl", eventCaptor.getValue().email());
         }
 
         @Test
@@ -364,11 +369,16 @@ class AdminResidentDirectoryServiceTest {
 
             assertEquals(UserStatus.CHECKED_OUT, resident.getStatus());
             assertNull(resident.getAvatarUrl());
+            assertNull(resident.getDeclaredRoomNumber());
             assertEquals(UserStatus.CHECKED_OUT, result.getStatus());
+            assertNull(result.getRoomNumber());
 
             verify(minioStorageService).removeAvatar("avatar-piotr.jpg");
             verify(tokenRevocationService).revokeUser(residentId);
-            verify(emailService).sendCheckedOutEmail(eq("resident@pk.edu.pl"), eq("Piotr"));
+            ArgumentCaptor<ResidentStatusEvent> eventCaptor = ArgumentCaptor.forClass(ResidentStatusEvent.class);
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            assertEquals(ResidentStatusEvent.Type.CHECKED_OUT, eventCaptor.getValue().type());
+            assertEquals(residentId, eventCaptor.getValue().residentId());
         }
 
         @Test
@@ -387,7 +397,7 @@ class AdminResidentDirectoryServiceTest {
 
             // Assert
             assertEquals(UserStatus.CHECKED_OUT, result.getStatus());
-            verify(emailService).sendCheckedOutEmail(eq("resident@pk.edu.pl"), eq("Piotr"));
+            verify(eventPublisher).publishEvent(any(ResidentStatusEvent.class));
         }
 
         @Test
@@ -446,8 +456,12 @@ class AdminResidentDirectoryServiceTest {
             assertEquals(admin, saved.getIssuedBy());
             assertEquals(dormitory, saved.getDormitory());
 
-            verify(emailService).sendRoomBanEmail(eq("resident@pk.edu.pl"), eq("Piotr"),
-                    any(LocalDate.class), any(LocalDate.class), eq("Damage to kitchen amenities"));
+            ArgumentCaptor<RoomBanIssuedEvent> eventCaptor = ArgumentCaptor.forClass(RoomBanIssuedEvent.class);
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            assertEquals(residentId, eventCaptor.getValue().residentId());
+            assertEquals("Damage to kitchen amenities", eventCaptor.getValue().reason());
+            assertEquals(LocalDate.now(), eventCaptor.getValue().start());
+            assertEquals(LocalDate.now().plusMonths(2), eventCaptor.getValue().end());
         }
 
         @Test
@@ -470,6 +484,29 @@ class AdminResidentDirectoryServiceTest {
                     () -> adminResidentDirectoryService.issueRoomBan(admin, residentId, request));
             assertEquals("Resident already has an active ROOM_BAN", ex.getMessage());
             verify(sanctionRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("Should map concurrent unique violation to BusinessRuleException")
+        void issueRoomBanMapsConcurrentUniqueViolation() {
+            // Arrange
+            CreateRoomBanRequestDto request = CreateRoomBanRequestDto.builder()
+                    .durationMonths(1)
+                    .reason("Test")
+                    .build();
+
+            when(userRepository.findByIdAndDormitoryIdAndRole(residentId, dormitory.getId(), UserRole.RESIDENT))
+                    .thenReturn(Optional.of(resident));
+            when(sanctionRepository.findActiveByUserAndType(eq(residentId), eq(SanctionType.ROOM_BAN), any(LocalDate.class)))
+                    .thenReturn(List.of());
+            when(sanctionRepository.save(any(Sanction.class)))
+                    .thenThrow(new DataIntegrityViolationException("uq_active_sanction_per_user"));
+
+            // Act & Assert
+            BusinessRuleException ex = assertThrows(BusinessRuleException.class,
+                    () -> adminResidentDirectoryService.issueRoomBan(admin, residentId, request));
+            assertEquals("Resident already has an active ROOM_BAN", ex.getMessage());
+            verify(eventPublisher, never()).publishEvent(any());
         }
     }
 

@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.modules.admin;
+package pl.edu.pk.pkampus.modules.admin.dormrooms;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
+import pl.edu.pk.pkampus.modules.admin.AdminResource;
+import pl.edu.pk.pkampus.modules.admin.AdminScope;
 import pl.edu.pk.pkampus.modules.admin.dto.CreateDormRoomRequestDto;
 import pl.edu.pk.pkampus.modules.admin.dto.DormRoomDto;
 import pl.edu.pk.pkampus.modules.admin.dto.UpdateDormRoomRequestDto;
@@ -26,7 +28,7 @@ public class AdminDormRoomService {
 
     @Transactional(readOnly = true)
     public List<DormRoomDto> list(User admin) {
-        UUID dormitoryId = AdminScope.requireDormitoryId(admin, "rooms");
+        UUID dormitoryId = AdminScope.requireDormitoryId(admin, AdminResource.ROOMS);
         return roomRepository.findAllByDormitoryIdOrderByFloorAscRoomNumberAsc(dormitoryId).stream()
                 .map(DormRoomDto::from)
                 .toList();
@@ -34,7 +36,7 @@ public class AdminDormRoomService {
 
     @Transactional
     public DormRoomDto create(User admin, CreateDormRoomRequestDto request) {
-        Dormitory dormitory = AdminScope.requireDormitory(admin, "rooms");
+        Dormitory dormitory = AdminScope.requireDormitory(admin, AdminResource.ROOMS);
 
         String roomNumber = request.getRoomNumber().trim();
         assertRoomNumberFree(dormitory.getId(), roomNumber, null);
@@ -55,7 +57,7 @@ public class AdminDormRoomService {
 
     @Transactional
     public DormRoomDto update(User admin, UUID id, UpdateDormRoomRequestDto request) {
-        UUID dormitoryId = AdminScope.requireDormitoryId(admin, "rooms");
+        UUID dormitoryId = AdminScope.requireDormitoryId(admin, AdminResource.ROOMS);
         Room room = roomRepository.findByIdAndDormitoryId(id, dormitoryId)
                 .orElseThrow(() -> new ResourceNotFoundException("Room not found"));
 

@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.modules.admin;
+package pl.edu.pk.pkampus.modules.admin.receptionists;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -16,8 +16,6 @@ import pl.edu.pk.pkampus.common.storage.MinioStorageService;
 import pl.edu.pk.pkampus.mail.EmailService;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
 import pl.edu.pk.pkampus.modules.dormitory.DormitoryRepository;
-import pl.edu.pk.pkampus.modules.dormitory.Room;
-import pl.edu.pk.pkampus.modules.dormitory.RoomRepository;
 import pl.edu.pk.pkampus.modules.user.User;
 import pl.edu.pk.pkampus.modules.user.UserRepository;
 import pl.edu.pk.pkampus.modules.user.UserRole;
@@ -38,8 +36,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional
-@DisplayName("ADS dorm rooms API integration tests")
-class AdminDormRoomIntegrationTest {
+@DisplayName("ADS receptionist accounts API integration tests")
+class AdminReceptionistIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -49,9 +47,6 @@ class AdminDormRoomIntegrationTest {
 
     @Autowired
     private DormitoryRepository dormitoryRepository;
-
-    @Autowired
-    private RoomRepository roomRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -73,9 +68,9 @@ class AdminDormRoomIntegrationTest {
     @BeforeEach
     void setUp() {
         dorm1 = dormitoryRepository.save(Dormitory.builder()
-                .name("DS Rooms 1")
-                .code("R1-" + UUID.randomUUID().toString().substring(0, 4))
-                .address("ul. Pokoj 1")
+                .name("DS Portier 1")
+                .code("P1-" + UUID.randomUUID().toString().substring(0, 4))
+                .address("ul. Portier 1")
                 .floorsCount(4)
                 .laundryOpeningTime(LocalTime.of(7, 0))
                 .laundryClosingTime(LocalTime.of(23, 0))
@@ -83,113 +78,86 @@ class AdminDormRoomIntegrationTest {
                 .build());
 
         dorm2 = dormitoryRepository.save(Dormitory.builder()
-                .name("DS Rooms 2")
-                .code("R2-" + UUID.randomUUID().toString().substring(0, 4))
-                .address("ul. Pokoj 2")
+                .name("DS Portier 2")
+                .code("P2-" + UUID.randomUUID().toString().substring(0, 4))
+                .address("ul. Portier 2")
                 .floorsCount(3)
                 .laundryOpeningTime(LocalTime.of(7, 0))
                 .laundryClosingTime(LocalTime.of(23, 0))
                 .laundrySlotDurationMinutes(180)
                 .build());
 
-        dormAdmin1 = saveUser("ads-rm-" + UUID.randomUUID() + "@pk.edu.pl", UserRole.DORM_ADMIN, dorm1, null);
-        resident1 = saveUser("res-rm-" + UUID.randomUUID() + "@pk.edu.pl", UserRole.RESIDENT, dorm1, "101");
+        dormAdmin1 = saveUser("ads-port-" + UUID.randomUUID() + "@pk.edu.pl", UserRole.DORM_ADMIN, dorm1, null);
+        resident1 = saveUser("res-port-" + UUID.randomUUID() + "@pk.edu.pl", UserRole.RESIDENT, dorm1, "101");
     }
 
     @Test
-    @DisplayName("DORM_ADMIN can create and list rooms in own dormitory")
+    @DisplayName("DORM_ADMIN can create and list receptionists in own dormitory")
     void adminCreatesAndLists() throws Exception {
-        mockMvc.perform(post("/api/v1/admin/dorm-rooms")
+        String email = "portier-" + UUID.randomUUID() + "@pk.edu.pl";
+
+        mockMvc.perform(post("/api/v1/admin/receptionists")
                         .header("Authorization", bearer(dormAdmin1))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"roomNumber":"204","floor":2,"capacity":2}
-                                """))
+                                {
+                                  "firstName": "Jan",
+                                  "lastName": "Portier",
+                                  "email": "%s",
+                                  "phoneNumber": "+48123456789",
+                                  "password": "Password123!"
+                                }
+                                """.formatted(email)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.data.roomNumber").value("204"))
-                .andExpect(jsonPath("$.data.floor").value(2))
-                .andExpect(jsonPath("$.data.capacity").value(2));
+                .andExpect(jsonPath("$.data.email").value(email))
+                .andExpect(jsonPath("$.data.status").value("MUST_CHANGE_PASSWORD"))
+                .andExpect(jsonPath("$.data.dormitoryId").value(dorm1.getId().toString()));
 
-        mockMvc.perform(get("/api/v1/admin/dorm-rooms")
+        mockMvc.perform(get("/api/v1/admin/receptionists")
                         .header("Authorization", bearer(dormAdmin1)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data", hasSize(1)));
     }
 
     @Test
-    @DisplayName("Duplicate room number in same dormitory is rejected")
-    void duplicateRoomNumberRejected() throws Exception {
-        roomRepository.save(Room.builder()
-                .dormitory(dorm1)
-                .roomNumber("101")
-                .floor(1)
-                .capacity(2)
-                .build());
+    @DisplayName("Cannot update receptionist from another dormitory")
+    void cannotUpdateForeignReceptionist() throws Exception {
+        User foreign = saveUser(
+                "foreign-port-" + UUID.randomUUID() + "@pk.edu.pl",
+                UserRole.RECEPTIONIST,
+                dorm2,
+                null
+        );
 
-        mockMvc.perform(post("/api/v1/admin/dorm-rooms")
+        mockMvc.perform(patch("/api/v1/admin/receptionists/" + foreign.getId())
                         .header("Authorization", bearer(dormAdmin1))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"roomNumber":"101","floor":1,"capacity":2}
-                                """))
-                .andExpect(status().isUnprocessableEntity());
-    }
-
-    @Test
-    @DisplayName("Floor above dormitory floorsCount is rejected")
-    void floorAboveLimitRejected() throws Exception {
-        mockMvc.perform(post("/api/v1/admin/dorm-rooms")
-                        .header("Authorization", bearer(dormAdmin1))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"roomNumber":"501","floor":5,"capacity":2}
-                                """))
-                .andExpect(status().isUnprocessableEntity());
-    }
-
-    @Test
-    @DisplayName("DORM_ADMIN can update room capacity")
-    void adminUpdatesRoom() throws Exception {
-        Room room = roomRepository.save(Room.builder()
-                .dormitory(dorm1)
-                .roomNumber("303")
-                .floor(3)
-                .capacity(2)
-                .build());
-
-        mockMvc.perform(patch("/api/v1/admin/dorm-rooms/" + room.getId())
-                        .header("Authorization", bearer(dormAdmin1))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"capacity":3}
-                                """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.capacity").value(3));
-    }
-
-    @Test
-    @DisplayName("Room from another dormitory returns 404")
-    void otherDormRoomNotFound() throws Exception {
-        Room other = roomRepository.save(Room.builder()
-                .dormitory(dorm2)
-                .roomNumber("201")
-                .floor(2)
-                .capacity(2)
-                .build());
-
-        mockMvc.perform(patch("/api/v1/admin/dorm-rooms/" + other.getId())
-                        .header("Authorization", bearer(dormAdmin1))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"capacity":1}
-                                """))
+                        .content("{\"status\":\"BLOCKED\"}"))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    @DisplayName("RESIDENT cannot access dorm rooms admin API")
+    @DisplayName("DORM_ADMIN can block receptionist")
+    void adminBlocksReceptionist() throws Exception {
+        User porter = saveUser(
+                "block-port-" + UUID.randomUUID() + "@pk.edu.pl",
+                UserRole.RECEPTIONIST,
+                dorm1,
+                null
+        );
+
+        mockMvc.perform(patch("/api/v1/admin/receptionists/" + porter.getId())
+                        .header("Authorization", bearer(dormAdmin1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"BLOCKED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("BLOCKED"));
+    }
+
+    @Test
+    @DisplayName("RESIDENT is forbidden on admin receptionists API")
     void residentForbidden() throws Exception {
-        mockMvc.perform(get("/api/v1/admin/dorm-rooms")
+        mockMvc.perform(get("/api/v1/admin/receptionists")
                         .header("Authorization", bearer(resident1)))
                 .andExpect(status().isForbidden());
     }

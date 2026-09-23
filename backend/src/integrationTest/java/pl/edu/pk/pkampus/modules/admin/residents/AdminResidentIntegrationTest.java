@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.modules.admin;
+package pl.edu.pk.pkampus.modules.admin.residents;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -10,6 +10,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
@@ -29,9 +31,10 @@ import java.time.LocalTime;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -43,6 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional
+@RecordApplicationEvents
 @DisplayName("Admin residents API integration tests")
 class AdminResidentIntegrationTest {
 
@@ -67,6 +71,9 @@ class AdminResidentIntegrationTest {
     @Autowired
     private JwtService jwtService;
 
+    @Autowired
+    private ApplicationEvents events;
+
     @MockitoBean
     private MinioStorageService minioStorageService;
 
@@ -84,6 +91,7 @@ class AdminResidentIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        events.clear();
         dorm1 = dormitoryRepository.save(Dormitory.builder()
                 .name("DS Test 1")
                 .code("T1-" + UUID.randomUUID().toString().substring(0, 4))
@@ -247,12 +255,14 @@ class AdminResidentIntegrationTest {
         assertThat(refreshed.getStatus()).isEqualTo(UserStatus.ACTIVE);
         assertThat(roomAssignmentRepository.findByUserIdAndIsActiveTrue(residentPending.getId())).isPresent();
 
-        verify(emailService).sendAccountActivatedEmail(
-                eq(residentPending.getEmail()),
-                eq("Jan"),
-                eq("101"),
-                eq("DS Test 1")
-        );
+        verify(emailService, never()).sendAccountActivatedEmail(any(), any(), any(), any());
+        ResidentActivatedEvent event = events.stream(ResidentActivatedEvent.class)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected ResidentActivatedEvent"));
+        assertThat(event.email()).isEqualTo(residentPending.getEmail());
+        assertThat(event.firstName()).isEqualTo("Jan");
+        assertThat(event.roomNumber()).isEqualTo("101");
+        assertThat(event.dormitoryName()).isEqualTo("DS Test 1");
     }
 
     @Test
@@ -322,7 +332,13 @@ class AdminResidentIntegrationTest {
 
         assertThat(userRepository.findById(id)).isEmpty();
         verify(minioStorageService).removeAvatar("pending-avatar.jpg");
-        verify(emailService).sendRegistrationRejectedEmail(eq(email), eq("Jan"), eq("Not on housing list"));
+        verify(emailService, never()).sendRegistrationRejectedEmail(any(), any(), any());
+        RegistrationRejectedEvent event = events.stream(RegistrationRejectedEvent.class)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected RegistrationRejectedEvent"));
+        assertThat(event.email()).isEqualTo(email);
+        assertThat(event.firstName()).isEqualTo("Jan");
+        assertThat(event.reason()).isEqualTo("Not on housing list");
     }
 
     @Test
