@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.modules.auth;
+package pl.edu.pk.pkampus.modules.auth.registration;
 
 import java.util.UUID;
 

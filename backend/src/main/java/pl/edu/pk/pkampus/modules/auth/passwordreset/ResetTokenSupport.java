@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.modules.auth;
+package pl.edu.pk.pkampus.modules.auth.passwordreset;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

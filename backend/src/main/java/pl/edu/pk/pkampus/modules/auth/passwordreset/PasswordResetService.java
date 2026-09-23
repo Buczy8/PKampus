@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.modules.auth;
+package pl.edu.pk.pkampus.modules.auth.passwordreset;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

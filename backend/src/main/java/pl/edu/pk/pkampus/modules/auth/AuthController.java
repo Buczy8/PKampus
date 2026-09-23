@@ -28,6 +28,8 @@ import pl.edu.pk.pkampus.modules.auth.dto.ResetPasswordRequestDto;
 import pl.edu.pk.pkampus.modules.user.dto.UserProfileDto;
 import pl.edu.pk.pkampus.modules.auth.dto.VerifyEmailResponseDto;
 import pl.edu.pk.pkampus.modules.auth.dto.VerifyResetTokenResponseDto;
+import pl.edu.pk.pkampus.modules.auth.passwordreset.PasswordResetService;
+import pl.edu.pk.pkampus.modules.auth.registration.RegistrationService;
 import pl.edu.pk.pkampus.modules.user.User;
 
 import java.util.UUID;

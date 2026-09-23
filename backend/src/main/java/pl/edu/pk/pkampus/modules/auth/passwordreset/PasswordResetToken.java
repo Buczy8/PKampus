@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.modules.auth;
+package pl.edu.pk.pkampus.modules.auth.passwordreset;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

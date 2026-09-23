@@ -25,6 +25,8 @@ import pl.edu.pk.pkampus.modules.auth.dto.RegisterResponseDto;
 import pl.edu.pk.pkampus.modules.auth.dto.ResetPasswordRequestDto;
 import pl.edu.pk.pkampus.modules.auth.dto.VerifyEmailResponseDto;
 import pl.edu.pk.pkampus.modules.auth.dto.VerifyResetTokenResponseDto;
+import pl.edu.pk.pkampus.modules.auth.passwordreset.PasswordResetService;
+import pl.edu.pk.pkampus.modules.auth.registration.RegistrationService;
 import pl.edu.pk.pkampus.modules.user.User;
 import pl.edu.pk.pkampus.modules.user.UserRepository;
 import pl.edu.pk.pkampus.modules.user.UserRole;

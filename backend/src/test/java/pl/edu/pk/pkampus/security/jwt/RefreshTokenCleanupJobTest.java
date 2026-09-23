@@ -5,7 +5,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import pl.edu.pk.pkampus.modules.auth.PasswordResetTokenRepository;
+import pl.edu.pk.pkampus.modules.auth.passwordreset.PasswordResetTokenRepository;
 
 import java.time.Instant;
 

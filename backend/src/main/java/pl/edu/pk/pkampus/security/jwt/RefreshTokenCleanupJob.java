@@ -6,7 +6,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import pl.edu.pk.pkampus.modules.auth.PasswordResetTokenRepository;
+import pl.edu.pk.pkampus.modules.auth.passwordreset.PasswordResetTokenRepository;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
