@@ -62,6 +62,11 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
      * to moderators (FR-BOARD-06: CAMPUS is moderated by ADS of all dormitories
      * and by the Superadmin).
      *
+     * <p>RECEPTIONIST uses {@link #findDormitoryModerationFeed} instead, because
+     * CAMPUS posts are not moderatable by receptionists (see
+     * {@code PostAccessPolicy.requireModeratablePost}) — listing them would
+     * expose posts the caller cannot act on.
+     *
      * @param dormitoryId dormitory to scope DORMITORY posts to, or {@code null}
      *                    for the global Superadmin view (all dormitories)
      */
@@ -90,6 +95,40 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
                       AND (:status IS NULL OR p.status = :status)
                     """)
     Page<Post> findModerationFeed(
+            @Param("dormitoryId") UUID dormitoryId,
+            @Param("category") PostCategory category,
+            @Param("status") PostStatus status,
+            Pageable pageable
+    );
+
+    /**
+     * Dormitory-only moderation feed for receptionists. RECEPTIONIST can moderate
+     * solely DORMITORY posts of their own dormitory; CAMPUS posts return 404 for
+     * them, so they must not appear in the listing either.
+     */
+    @Query(
+            value = """
+                    SELECT p FROM Post p
+                    JOIN FETCH p.author a
+                    LEFT JOIN FETCH a.dormitory
+                    LEFT JOIN FETCH p.dormitory
+                    WHERE p.deleted = FALSE
+                      AND p.status <> pl.edu.pk.pkampus.modules.board.PostStatus.REMOVED_MODERATOR
+                      AND p.scope = pl.edu.pk.pkampus.modules.board.PostScope.DORMITORY
+                      AND p.dormitory.id = :dormitoryId
+                      AND (:category IS NULL OR p.category = :category)
+                      AND (:status IS NULL OR p.status = :status)
+                    """,
+            countQuery = """
+                    SELECT COUNT(p) FROM Post p
+                    WHERE p.deleted = FALSE
+                      AND p.status <> pl.edu.pk.pkampus.modules.board.PostStatus.REMOVED_MODERATOR
+                      AND p.scope = pl.edu.pk.pkampus.modules.board.PostScope.DORMITORY
+                      AND p.dormitory.id = :dormitoryId
+                      AND (:category IS NULL OR p.category = :category)
+                      AND (:status IS NULL OR p.status = :status)
+                    """)
+    Page<Post> findDormitoryModerationFeed(
             @Param("dormitoryId") UUID dormitoryId,
             @Param("category") PostCategory category,
             @Param("status") PostStatus status,

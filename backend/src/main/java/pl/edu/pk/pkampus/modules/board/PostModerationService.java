@@ -11,6 +11,7 @@ import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
 import pl.edu.pk.pkampus.modules.board.dto.PostDto;
 import pl.edu.pk.pkampus.modules.board.PostAccessPolicy.ModeratorScope;
 import pl.edu.pk.pkampus.modules.user.User;
+import pl.edu.pk.pkampus.modules.user.UserRole;
 
 import java.util.List;
 import java.util.UUID;
@@ -39,12 +40,22 @@ public class PostModerationService {
     ) {
         ModeratorScope scope = accessPolicy.requireModeratorScope(staff);
         PostStatus status = PostStatusFilter.from(statusFilter, PostStatusFilter.ALL).toPostStatus();
-        Page<Post> posts = postRepository.findModerationFeed(
-                scope.global() ? null : scope.dormitoryId(),
-                category,
-                status,
-                BoardPagination.feedPageable(page, size)
-        );
+        Page<Post> posts;
+        if (scope.role() == UserRole.RECEPTIONIST) {
+            posts = postRepository.findDormitoryModerationFeed(
+                    scope.dormitoryId(),
+                    category,
+                    status,
+                    BoardPagination.feedPageable(page, size)
+            );
+        } else {
+            posts = postRepository.findModerationFeed(
+                    scope.global() ? null : scope.dormitoryId(),
+                    category,
+                    status,
+                    BoardPagination.feedPageable(page, size)
+            );
+        }
         List<PostDto> content = boardViewService.toPostDtos(posts.getContent(), staff);
         return PagedResponse.of(content, posts.getNumber(), posts.getSize(), posts.getTotalElements());
     }
