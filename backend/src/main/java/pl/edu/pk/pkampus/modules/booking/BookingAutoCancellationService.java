@@ -2,9 +2,11 @@ package pl.edu.pk.pkampus.modules.booking;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import pl.edu.pk.pkampus.mail.EmailService;
+import pl.edu.pk.pkampus.mail.BookingAutoCancelledEvent;
+import pl.edu.pk.pkampus.mail.ResourceSchedulePage;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBooking;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBookingRepository;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBookingStatus;
@@ -30,7 +32,7 @@ public class BookingAutoCancellationService {
 
     private final LaundryBookingRepository laundryBookingRepository;
     private final RoomBookingRepository roomBookingRepository;
-    private final EmailService emailService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public int cancelExpiredLaundryBookings(Instant now, int thresholdMinutes) {
@@ -44,13 +46,13 @@ public class BookingAutoCancellationService {
 
             User resident = booking.getUser();
             String machineLabel = booking.getMachine().getMachineIdentifier();
-            emailService.sendBookingAutoCancelled15MinEmail(
+            eventPublisher.publishEvent(new BookingAutoCancelledEvent(
                     resident.getEmail(),
                     resident.getFirstName(),
                     "Laundry machine " + machineLabel,
                     SLOT_LABEL.format(booking.getStartTime()),
-                    "laundry"
-            );
+                    ResourceSchedulePage.LAUNDRY
+            ));
         }
 
         return expired.size();
@@ -68,13 +70,13 @@ public class BookingAutoCancellationService {
 
             User resident = booking.getUser();
             String roomLabel = booking.getRoom().getName();
-            emailService.sendBookingAutoCancelled15MinEmail(
+            eventPublisher.publishEvent(new BookingAutoCancelledEvent(
                     resident.getEmail(),
                     resident.getFirstName(),
                     "Room " + roomLabel,
                     SLOT_LABEL.format(booking.getStartTime()),
-                    "rooms"
-            );
+                    ResourceSchedulePage.ROOMS
+            ));
         }
 
         return expired.size();

@@ -10,13 +10,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 import pl.edu.pk.pkampus.common.exception.AccountStatusException;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
-import pl.edu.pk.pkampus.mail.EmailService;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
 import pl.edu.pk.pkampus.modules.dormitory.Room;
 import pl.edu.pk.pkampus.modules.dormitory.RoomAssignment;
@@ -54,7 +54,7 @@ class IssueServiceTest {
     private MinioStorageService minioStorageService;
 
     @Mock
-    private EmailService emailService;
+    private ApplicationEventPublisher eventPublisher;
 
     @Mock
     private TransactionTemplate transactionTemplate;
@@ -364,7 +364,7 @@ class IssueServiceTest {
     class UpdateStaffIssueStatus {
 
         @Test
-        @DisplayName("Should transition from NEW to ASSIGNED_TO_MAINTENANCE and send email")
+        @DisplayName("Should transition from NEW to ASSIGNED_TO_MAINTENANCE and publish notification event")
         void updateStatusToAssignedSuccess() {
             // Arrange
             when(issueRepository.findByIdAndDormitoryIdWithDetails(issueId, dorm1.getId()))
@@ -379,9 +379,10 @@ class IssueServiceTest {
             // Assert
             assertEquals(IssueStatus.ASSIGNED_TO_MAINTENANCE, result.status());
             assertEquals("Przydzielono hydraulika", result.staffNotes());
-            verify(emailService).sendIssueStatusChangedEmail(
-                    eq(resident.getEmail()), eq(resident.getFirstName()), eq("ASSIGNED_TO_MAINTENANCE"), eq("Przydzielono hydraulika")
-            );
+            verify(eventPublisher).publishEvent(eq(new IssueStatusChangedEvent(
+                    resident.getEmail(), resident.getFirstName(),
+                    "ASSIGNED_TO_MAINTENANCE", "Przydzielono hydraulika"
+            )));
         }
 
         @Test

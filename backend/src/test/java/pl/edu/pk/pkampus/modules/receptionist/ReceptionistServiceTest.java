@@ -5,13 +5,18 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import pl.edu.pk.pkampus.common.PagedResponse;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
-import pl.edu.pk.pkampus.mail.EmailService;
+import pl.edu.pk.pkampus.mail.BookingAutoCancelledEvent;
+import pl.edu.pk.pkampus.mail.LaundryBreakdownNoticeEvent;
+import pl.edu.pk.pkampus.mail.ResourceSchedulePage;
+import pl.edu.pk.pkampus.mail.RoomMaintenanceNoticeEvent;
 import pl.edu.pk.pkampus.modules.board.PostCategory;
 import pl.edu.pk.pkampus.modules.board.PostModerationService;
 import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
@@ -108,7 +113,7 @@ class ReceptionistServiceTest {
     private PostModerationService postModerationService;
 
     @Mock
-    private EmailService emailService;
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private ReceptionistService service;
@@ -231,8 +236,13 @@ class ReceptionistServiceTest {
             // Assert
             assertNotNull(result);
             assertEquals(LaundryBookingStatus.AUTO_CANCELLED_15MIN, booking.getStatus());
-            verify(emailService).sendBookingAutoCancelled15MinEmail(
-                    eq(resident.getEmail()), eq(resident.getFirstName()), any(), any(), eq("laundry"));
+            ArgumentCaptor<BookingAutoCancelledEvent> eventCaptor =
+                    ArgumentCaptor.forClass(BookingAutoCancelledEvent.class);
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            BookingAutoCancelledEvent event = eventCaptor.getValue();
+            assertEquals(resident.getEmail(), event.email());
+            assertEquals("Laundry machine Pralka P1", event.resourceName());
+            assertEquals(ResourceSchedulePage.LAUNDRY, event.page());
         }
 
         @Test
@@ -346,8 +356,12 @@ class ReceptionistServiceTest {
             assertEquals("Wyciek wody", machine.getNotes());
             assertEquals(1, response.cancelledCount());
             assertEquals(LaundryBookingStatus.CANCELLED_MACHINE_OUT_OF_ORDER, futureBooking.getStatus());
-            verify(emailService).sendLaundryMachineBreakdownEmail(
-                    eq(resident.getEmail()), eq(resident.getFirstName()), eq(machine.getMachineIdentifier()), any());
+            ArgumentCaptor<LaundryBreakdownNoticeEvent> eventCaptor =
+                    ArgumentCaptor.forClass(LaundryBreakdownNoticeEvent.class);
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            LaundryBreakdownNoticeEvent event = eventCaptor.getValue();
+            assertEquals(resident.getEmail(), event.email());
+            assertEquals(machine.getMachineIdentifier(), event.machineIdentifier());
         }
 
         @Test
@@ -400,8 +414,13 @@ class ReceptionistServiceTest {
             // Assert
             assertNotNull(result);
             assertEquals(RoomBookingStatus.AUTO_CANCELLED_15MIN, booking.getStatus());
-            verify(emailService).sendBookingAutoCancelled15MinEmail(
-                    eq(resident.getEmail()), eq(resident.getFirstName()), any(), any(), eq("rooms"));
+            ArgumentCaptor<BookingAutoCancelledEvent> eventCaptor =
+                    ArgumentCaptor.forClass(BookingAutoCancelledEvent.class);
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            BookingAutoCancelledEvent event = eventCaptor.getValue();
+            assertEquals(resident.getEmail(), event.email());
+            assertEquals("Room Salka Cichej Nauki", event.resourceName());
+            assertEquals(ResourceSchedulePage.ROOMS, event.page());
         }
 
         @Test
@@ -488,8 +507,12 @@ class ReceptionistServiceTest {
             assertEquals(ThematicRoomStatus.MAINTENANCE, thematicRoom.getStatus());
             assertEquals(1, response.cancelledCount());
             assertEquals(RoomBookingStatus.CANCELLED_ROOM_MAINTENANCE, futureBooking.getStatus());
-            verify(emailService).sendRoomMaintenanceEmail(
-                    eq(resident.getEmail()), eq(resident.getFirstName()), eq(thematicRoom.getName()), any());
+            ArgumentCaptor<RoomMaintenanceNoticeEvent> eventCaptor =
+                    ArgumentCaptor.forClass(RoomMaintenanceNoticeEvent.class);
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            RoomMaintenanceNoticeEvent event = eventCaptor.getValue();
+            assertEquals(resident.getEmail(), event.email());
+            assertEquals(thematicRoom.getName(), event.roomName());
         }
 
         @Test

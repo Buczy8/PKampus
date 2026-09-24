@@ -9,7 +9,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import pl.edu.pk.pkampus.mail.EmailService;
+import org.springframework.context.ApplicationEventPublisher;
+import pl.edu.pk.pkampus.mail.BookingAutoCancelledEvent;
+import pl.edu.pk.pkampus.mail.ResourceSchedulePage;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBooking;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBookingRepository;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBookingStatus;
@@ -21,6 +23,8 @@ import pl.edu.pk.pkampus.modules.rooms.ThematicRoom;
 import pl.edu.pk.pkampus.modules.user.User;
 
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
@@ -42,7 +46,7 @@ class BookingAutoCancellationServiceTest {
     private RoomBookingRepository roomBookingRepository;
 
     @Mock
-    private EmailService emailService;
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private BookingAutoCancellationService bookingAutoCancellationService;
@@ -102,13 +106,14 @@ class BookingAutoCancellationServiceTest {
             assertEquals(1, cancelled);
             assertEquals(LaundryBookingStatus.AUTO_CANCELLED_15MIN, booking.getStatus());
             verify(laundryBookingRepository).save(booking);
-            verify(emailService).sendBookingAutoCancelled15MinEmail(
-                    eq("student@pk.edu.pl"),
-                    eq("Kamil"),
-                    eq("Laundry machine PRALKA-01"),
-                    anyString(),
-                    eq("laundry")
-            );
+            verify(eventPublisher).publishEvent(eq(new BookingAutoCancelledEvent(
+                    "student@pk.edu.pl",
+                    "Kamil",
+                    "Laundry machine PRALKA-01",
+                    booking.getStartTime().atZone(ZoneId.of("Europe/Warsaw"))
+                            .format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")),
+                    ResourceSchedulePage.LAUNDRY
+            )));
         }
 
         @Test
@@ -124,7 +129,7 @@ class BookingAutoCancellationServiceTest {
             // Assert
             assertEquals(0, cancelled);
             verify(laundryBookingRepository, never()).save(any());
-            verify(emailService, never()).sendBookingAutoCancelled15MinEmail(any(), any(), any(), any(), any());
+            verify(eventPublisher, never()).publishEvent(any());
         }
     }
 
@@ -156,13 +161,14 @@ class BookingAutoCancellationServiceTest {
             assertEquals(1, cancelled);
             assertEquals(RoomBookingStatus.AUTO_CANCELLED_15MIN, booking.getStatus());
             verify(roomBookingRepository).save(booking);
-            verify(emailService).sendBookingAutoCancelled15MinEmail(
-                    eq("student@pk.edu.pl"),
-                    eq("Kamil"),
-                    eq("Room Salka Muzyczna"),
-                    anyString(),
-                    eq("rooms")
-            );
+            verify(eventPublisher).publishEvent(eq(new BookingAutoCancelledEvent(
+                    "student@pk.edu.pl",
+                    "Kamil",
+                    "Room Salka Muzyczna",
+                    booking.getStartTime().atZone(ZoneId.of("Europe/Warsaw"))
+                            .format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")),
+                    ResourceSchedulePage.ROOMS
+            )));
         }
 
         @Test
@@ -178,7 +184,7 @@ class BookingAutoCancellationServiceTest {
             // Assert
             assertEquals(0, cancelled);
             verify(roomBookingRepository, never()).save(any());
-            verify(emailService, never()).sendBookingAutoCancelled15MinEmail(any(), any(), any(), any(), any());
+            verify(eventPublisher, never()).publishEvent(any());
         }
     }
 

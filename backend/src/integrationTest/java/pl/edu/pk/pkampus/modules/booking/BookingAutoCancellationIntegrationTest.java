@@ -9,8 +9,12 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
+import pl.edu.pk.pkampus.mail.BookingAutoCancelledEvent;
 import pl.edu.pk.pkampus.mail.EmailService;
+import pl.edu.pk.pkampus.mail.ResourceSchedulePage;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
 import pl.edu.pk.pkampus.modules.dormitory.DormitoryRepository;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBooking;
@@ -44,8 +48,12 @@ import static org.mockito.Mockito.verify;
 @SpringBootTest
 @ActiveProfiles("test")
 @Transactional
+@RecordApplicationEvents
 @DisplayName("Booking 15-minute auto-cancellation integration tests (BR-02 / NFR-REL-03)")
 class BookingAutoCancellationIntegrationTest {
+
+    @Autowired
+    private ApplicationEvents events;
 
     @Autowired
     private BookingAutoCancellationService autoCancellationService;
@@ -91,6 +99,7 @@ class BookingAutoCancellationIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        events.clear();
         dormitory = dormitoryRepository.save(Dormitory.builder()
                 .name("DS-1 DS-AutoCancel")
                 .code("DS1-AC")
@@ -166,13 +175,12 @@ class BookingAutoCancellationIntegrationTest {
         LaundryBooking updated = laundryBookingRepository.findById(booking.getId()).orElseThrow();
         assertThat(updated.getStatus()).isEqualTo(LaundryBookingStatus.AUTO_CANCELLED_15MIN);
 
-        verify(emailService).sendBookingAutoCancelled15MinEmail(
-                eq(resident.getEmail()),
-                eq(resident.getFirstName()),
-                eq("Laundry machine " + machine.getMachineIdentifier()),
-                anyString(),
-                eq("laundry")
-        );
+        BookingAutoCancelledEvent event = events.stream(BookingAutoCancelledEvent.class)
+                .filter(e -> e.email().equals(resident.getEmail()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected BookingAutoCancelledEvent"));
+        assertThat(event.resourceName()).isEqualTo("Laundry machine " + machine.getMachineIdentifier());
+        assertThat(event.page()).isEqualTo(ResourceSchedulePage.LAUNDRY);
     }
 
     @Test
@@ -240,13 +248,12 @@ class BookingAutoCancellationIntegrationTest {
         RoomBooking updated = roomBookingRepository.findById(booking.getId()).orElseThrow();
         assertThat(updated.getStatus()).isEqualTo(RoomBookingStatus.AUTO_CANCELLED_15MIN);
 
-        verify(emailService).sendBookingAutoCancelled15MinEmail(
-                eq(resident.getEmail()),
-                eq(resident.getFirstName()),
-                eq("Room " + room.getName()),
-                anyString(),
-                eq("rooms")
-        );
+        BookingAutoCancelledEvent event = events.stream(BookingAutoCancelledEvent.class)
+                .filter(e -> e.email().equals(resident.getEmail()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected BookingAutoCancelledEvent"));
+        assertThat(event.resourceName()).isEqualTo("Room " + room.getName());
+        assertThat(event.page()).isEqualTo(ResourceSchedulePage.ROOMS);
     }
 
     @Test
@@ -291,13 +298,12 @@ class BookingAutoCancellationIntegrationTest {
         LaundryBooking updated = laundryBookingRepository.findById(booking.getId()).orElseThrow();
         assertThat(updated.getStatus()).isEqualTo(LaundryBookingStatus.AUTO_CANCELLED_15MIN);
 
-        verify(emailService).sendBookingAutoCancelled15MinEmail(
-                eq(resident.getEmail()),
-                eq(resident.getFirstName()),
-                eq("Laundry machine " + machine.getMachineIdentifier()),
-                anyString(),
-                eq("laundry")
-        );
+        BookingAutoCancelledEvent event = events.stream(BookingAutoCancelledEvent.class)
+                .filter(e -> e.email().equals(resident.getEmail()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected BookingAutoCancelledEvent"));
+        assertThat(event.resourceName()).isEqualTo("Laundry machine " + machine.getMachineIdentifier());
+        assertThat(event.page()).isEqualTo(ResourceSchedulePage.LAUNDRY);
     }
 
     @Test
@@ -345,13 +351,12 @@ class BookingAutoCancellationIntegrationTest {
         RoomBooking updated = roomBookingRepository.findById(booking.getId()).orElseThrow();
         assertThat(updated.getStatus()).isEqualTo(RoomBookingStatus.AUTO_CANCELLED_15MIN);
 
-        verify(emailService).sendBookingAutoCancelled15MinEmail(
-                eq(resident.getEmail()),
-                eq(resident.getFirstName()),
-                eq("Room " + room.getName()),
-                anyString(),
-                eq("rooms")
-        );
+        BookingAutoCancelledEvent event = events.stream(BookingAutoCancelledEvent.class)
+                .filter(e -> e.email().equals(resident.getEmail()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected BookingAutoCancelledEvent"));
+        assertThat(event.resourceName()).isEqualTo("Room " + room.getName());
+        assertThat(event.page()).isEqualTo(ResourceSchedulePage.ROOMS);
     }
 
     @Test

@@ -10,7 +10,7 @@ import pl.edu.pk.pkampus.common.exception.AccountStatusException;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
-import pl.edu.pk.pkampus.mail.EmailService;
+import org.springframework.context.ApplicationEventPublisher;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
 import pl.edu.pk.pkampus.modules.dormitory.Room;
 import pl.edu.pk.pkampus.modules.dormitory.RoomAssignment;
@@ -57,7 +57,7 @@ public class IssueService {
     private final IssueRepository issueRepository;
     private final RoomAssignmentRepository roomAssignmentRepository;
     private final MinioStorageService minioStorageService;
-    private final EmailService emailService;
+    private final ApplicationEventPublisher eventPublisher;
     private final TransactionTemplate transactionTemplate;
 
     @Transactional(readOnly = true)
@@ -154,12 +154,12 @@ public class IssueService {
         Issue saved = issueRepository.save(issue);
 
         User reporter = saved.getReporter();
-        emailService.sendIssueStatusChangedEmail(
+        eventPublisher.publishEvent(new IssueStatusChangedEvent(
                 reporter.getEmail(),
                 reporter.getFirstName(),
                 newStatus.name(),
                 saved.getStaffNotes()
-        );
+        ));
 
         log.info("Staff updated issue {} to {} in dormitory {}", saved.getId(), newStatus, dormitoryId);
         return toStaffDto(saved, true);

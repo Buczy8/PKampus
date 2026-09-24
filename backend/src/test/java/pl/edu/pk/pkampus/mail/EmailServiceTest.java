@@ -1,19 +1,20 @@
 package pl.edu.pk.pkampus.mail;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mail.MailSendException;
 import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayOutputStream;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -25,13 +26,13 @@ class EmailServiceTest {
     @Mock
     private JavaMailSender mailSender;
 
-    @InjectMocks
+    private SimpleMeterRegistry meterRegistry;
     private EmailService emailService;
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(emailService, "frontendUrl", "http://localhost:5173");
-        ReflectionTestUtils.setField(emailService, "fromEmail", "noreply@pkampus.pk.edu.pl");
+        meterRegistry = new SimpleMeterRegistry();
+        emailService = new EmailService(mailSender, meterRegistry, "http://localhost:5173", "noreply@pkampus.pk.edu.pl");
     }
 
     @Test
@@ -240,7 +241,7 @@ class EmailServiceTest {
                 "Jan",
                 "Pralka #1",
                 "12:00",
-                "laundry"
+                ResourceSchedulePage.LAUNDRY
         );
 
         // Assert
@@ -286,24 +287,127 @@ class EmailServiceTest {
     }
 
     @Test
-    void shouldGracefullyHandleExceptionWhenMailSenderThrows() {
+    void shouldReturnFailedFutureAndIncrementFailedMetricWhenMailSenderThrowsForCriticalEmail() {
         // Arrange
         MimeMessage mimeMessage = new MimeMessage((Session) null);
         when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
         doThrow(new MailSendException("SMTP connection refused")).when(mailSender).send(any(MimeMessage.class));
 
-        // Act & Assert (sendHtmlEmail catches Exception, logs it, and does not crash caller)
-        assertDoesNotThrow(() -> emailService.sendVerificationEmail("student@pk.edu.pl", "test-token"));
-        verify(mailSender).send(any(MimeMessage.class));
+        // Act
+        CompletableFuture<Void> future = emailService.sendVerificationEmail("student@pk.edu.pl", "test-token");
+
+        // Assert
+        assertTrue(future.isCompletedExceptionally());
+        ExecutionException ex = assertThrows(ExecutionException.class, future::get);
+        assertInstanceOf(MailDeliveryException.class, ex.getCause());
+        assertEquals(1.0, meterRegistry.counter("mail.failed").count());
+        assertEquals(0.0, meterRegistry.counter("mail.sent").count());
     }
 
     @Test
-    void shouldGracefullyHandleExceptionWhenCreateMimeMessageThrows() {
+    void shouldReturnFailedFutureWhenCreateMimeMessageThrowsForCriticalEmail() {
         // Arrange
         when(mailSender.createMimeMessage()).thenThrow(new RuntimeException("Mime creation failed"));
 
-        // Act & Assert
-        assertDoesNotThrow(() -> emailService.sendVerificationEmail("student@pk.edu.pl", "test-token"));
+        // Act
+        CompletableFuture<Void> future = emailService.sendPasswordResetEmail("student@pk.edu.pl", "Jan", "token");
+
+        // Assert
+        assertTrue(future.isCompletedExceptionally());
+        assertEquals(1.0, meterRegistry.counter("mail.failed").count());
         verify(mailSender, never()).send(any(MimeMessage.class));
+    }
+
+    @Test
+    void shouldThrowMailDeliveryExceptionAndIncrementFailedMetricForVoidNotificationEmail() {
+        // Arrange
+        MimeMessage mimeMessage = new MimeMessage((Session) null);
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+        doThrow(new MailSendException("SMTP connection refused")).when(mailSender).send(any(MimeMessage.class));
+
+        // Act & Assert (in production Spring @Async catches and invokes AsyncUncaughtExceptionHandler)
+        assertThrows(MailDeliveryException.class, () ->
+                emailService.sendRegistrationRejectedEmail("student@pk.edu.pl", "Jan", "Reason"));
+        assertEquals(1.0, meterRegistry.counter("mail.failed").count());
+        assertEquals(0.0, meterRegistry.counter("mail.sent").count());
+    }
+
+    @Test
+    void shouldIncrementSentMetricOnSuccess() {
+        // Arrange
+        MimeMessage mimeMessage = new MimeMessage((Session) null);
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+
+        // Act
+        emailService.sendCheckedOutEmail("student@pk.edu.pl", "Jan");
+
+        // Assert
+        assertEquals(1.0, meterRegistry.counter("mail.sent").count());
+        assertEquals(0.0, meterRegistry.counter("mail.failed").count());
+    }
+
+    @Test
+    void shouldEscapeUserControlledValuesInterpolatedIntoHtml() throws Exception {
+        // Arrange
+        MimeMessage mimeMessage = new MimeMessage((Session) null);
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+
+        // Act
+        emailService.sendRegistrationRejectedEmail(
+                "student@pk.edu.pl", "<img src=x onerror=alert(1)>", "<script>alert(2)</script>");
+
+        // Assert on the decoded payload (raw MIME may QP-wrap long lines).
+        // The plain-text alternative legitimately restores raw characters;
+        // only the HTML part must never contain unescaped markup.
+        ArgumentCaptor<MimeMessage> messageCaptor = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(mailSender).send(messageCaptor.capture());
+
+        // saveChanges materializes part Content-Type headers (send() does this in production;
+        // without it every part reports the default text/plain)
+        MimeMessage sentMessage = messageCaptor.getValue();
+        sentMessage.saveChanges();
+        String html = textPartContent(sentMessage, "text/html");
+        String plain = textPartContent(sentMessage, "text/plain");
+        assertFalse(html.contains("<img src=x onerror=alert(1)>"));
+        assertFalse(html.contains("<script>alert(2)</script>"));
+        assertTrue(html.contains("&lt;img src=x onerror=alert(1)&gt;"));
+        assertTrue(html.contains("&lt;script&gt;alert(2)&lt;/script&gt;"));
+        assertTrue(plain.contains("<img src=x onerror=alert(1)>"));
+    }
+
+    private static String textPartContent(MimeMessage message, String mimeType) throws Exception {
+        return textPartContent(message.getContent(), mimeType);
+    }
+
+    private static String dumpMime(Object content) throws Exception {
+        if (content instanceof jakarta.mail.Multipart multipart) {
+            StringBuilder sb = new StringBuilder("MP[" + multipart.getCount() + "]{");
+            for (int i = 0; i < multipart.getCount(); i++) {
+                jakarta.mail.BodyPart part = multipart.getBodyPart(i);
+                sb.append(part.getContentType()).append("=>").append(dumpMime(part.getContent())).append(";");
+            }
+            return sb.append("}").toString();
+        }
+        String s = String.valueOf(content);
+        return "LEAF[" + s.length() + "]:" + s.substring(0, Math.min(80, s.length()));
+    }
+
+    private static String textPartContent(Object content, String mimeType) throws Exception {
+        if (content instanceof jakarta.mail.Multipart multipart) {
+            StringBuilder flattened = new StringBuilder();
+            for (int i = 0; i < multipart.getCount(); i++) {
+                jakarta.mail.BodyPart part = multipart.getBodyPart(i);
+                if (part.isMimeType(mimeType)) {
+                    Object partContent = part.getContent();
+                    if (partContent instanceof String text) {
+                        flattened.append(text);
+                    }
+                } else {
+                    flattened.append(textPartContent(part.getContent(), mimeType));
+                }
+            }
+            return flattened.toString();
+        }
+        return "";
     }
 }

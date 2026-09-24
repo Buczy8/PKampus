@@ -6,7 +6,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
-import pl.edu.pk.pkampus.mail.EmailService;
+import org.springframework.context.ApplicationEventPublisher;
+import pl.edu.pk.pkampus.mail.BookingAutoCancelledEvent;
+import pl.edu.pk.pkampus.mail.LaundryBreakdownNoticeEvent;
+import pl.edu.pk.pkampus.mail.ResourceSchedulePage;
+import pl.edu.pk.pkampus.mail.RoomMaintenanceNoticeEvent;
 import pl.edu.pk.pkampus.common.PagedResponse;
 import pl.edu.pk.pkampus.modules.board.PostCategory;
 import pl.edu.pk.pkampus.modules.board.PostModerationService;
@@ -98,7 +102,7 @@ public class ReceptionistService {
     private final IssueService issueService;
     private final EventService eventService;
     private final PostModerationService postModerationService;
-    private final EmailService emailService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
     public ReceptionistDeskDto getDesk(User actor) {
@@ -256,13 +260,13 @@ public class ReceptionistService {
 
         if (lateOrPast) {
             User resident = booking.getUser();
-            emailService.sendBookingAutoCancelled15MinEmail(
+            eventPublisher.publishEvent(new BookingAutoCancelledEvent(
                     resident.getEmail(),
                     resident.getFirstName(),
                     "Room " + booking.getRoom().getName(),
                     SLOT_LABEL.format(booking.getStartTime()),
-                    "rooms"
-            );
+                    ResourceSchedulePage.ROOMS
+            ));
         }
 
         return toRoomDto(saved);
@@ -311,12 +315,12 @@ public class ReceptionistService {
 
         for (RoomBooking booking : futureConfirmed) {
             User resident = booking.getUser();
-            emailService.sendRoomMaintenanceEmail(
+            eventPublisher.publishEvent(new RoomMaintenanceNoticeEvent(
                     resident.getEmail(),
                     resident.getFirstName(),
                     room.getName(),
                     SLOT_LABEL.format(booking.getStartTime())
-            );
+            ));
         }
 
         log.info("Staff {} marked room {} MAINTENANCE; cancelled {}; issue {}",
@@ -357,13 +361,13 @@ public class ReceptionistService {
 
         if (lateOrPast) {
             User resident = booking.getUser();
-            emailService.sendBookingAutoCancelled15MinEmail(
+            eventPublisher.publishEvent(new BookingAutoCancelledEvent(
                     resident.getEmail(),
                     resident.getFirstName(),
                     "Laundry machine " + booking.getMachine().getMachineIdentifier(),
                     SLOT_LABEL.format(booking.getStartTime()),
-                    "laundry"
-            );
+                    ResourceSchedulePage.LAUNDRY
+            ));
         }
 
         return toLaundryDto(saved);
@@ -413,12 +417,12 @@ public class ReceptionistService {
 
         for (LaundryBooking booking : futureConfirmed) {
             User resident = booking.getUser();
-            emailService.sendLaundryMachineBreakdownEmail(
+            eventPublisher.publishEvent(new LaundryBreakdownNoticeEvent(
                     resident.getEmail(),
                     resident.getFirstName(),
                     machine.getMachineIdentifier(),
                     SLOT_LABEL.format(booking.getStartTime())
-            );
+            ));
         }
 
         log.info("Staff {} marked machine {} OUT_OF_ORDER; cancelled {}; issue {}",

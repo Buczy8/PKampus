@@ -57,6 +57,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
+import pl.edu.pk.pkampus.mail.LaundryBreakdownNoticeEvent;
+import pl.edu.pk.pkampus.mail.RoomMaintenanceNoticeEvent;
+import pl.edu.pk.pkampus.modules.issues.IssueStatusChangedEvent;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -68,10 +74,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional
+@RecordApplicationEvents
 @DisplayName("Receptionist desk API integration tests")
 class ReceptionistIntegrationTest {
 
     private static final ZoneId WARSAW = ZoneId.of("Europe/Warsaw");
+
+    @Autowired
+    private ApplicationEvents events;
 
     @Autowired
     private MockMvc mockMvc;
@@ -127,6 +137,7 @@ class ReceptionistIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        events.clear();
         dorm1 = dormitoryRepository.save(Dormitory.builder()
                 .name("DS Desk 1")
                 .code("D1-" + UUID.randomUUID().toString().substring(0, 4))
@@ -430,8 +441,10 @@ class ReceptionistIntegrationTest {
             assertThat(issue.getReporter().getId()).isEqualTo(receptionist.getId());
         });
 
-        verify(emailService).sendLaundryMachineBreakdownEmail(
-                anyString(), anyString(), anyString(), anyString());
+        assertThat(events.stream(LaundryBreakdownNoticeEvent.class))
+                .anySatisfy(event -> {
+                    assertThat(event.machineIdentifier()).isEqualTo(machine1.getMachineIdentifier());
+                });
 
         mockMvc.perform(post("/api/v1/receptionist/laundry/machines/" + machine1.getId() + "/restore")
                         .header("Authorization", bearer(receptionist)))
@@ -552,8 +565,10 @@ class ReceptionistIntegrationTest {
             assertThat(issue.getReporter().getId()).isEqualTo(receptionist.getId());
         });
 
-        verify(emailService).sendRoomMaintenanceEmail(
-                anyString(), anyString(), anyString(), anyString());
+        assertThat(events.stream(RoomMaintenanceNoticeEvent.class))
+                .anySatisfy(event -> {
+                    assertThat(event.roomName()).isEqualTo(room1.getName());
+                });
 
         mockMvc.perform(post("/api/v1/receptionist/rooms/" + room1.getId() + "/restore")
                         .header("Authorization", bearer(receptionist)))
@@ -618,8 +633,11 @@ class ReceptionistIntegrationTest {
                 .andExpect(jsonPath("$.data.status").value("ASSIGNED_TO_MAINTENANCE"))
                 .andExpect(jsonPath("$.data.staffNotes").value("Przekazano konserwatorowi"));
 
-        verify(emailService).sendIssueStatusChangedEmail(
-                anyString(), anyString(), anyString(), anyString());
+        assertThat(events.stream(IssueStatusChangedEvent.class))
+                .anySatisfy(event -> {
+                    assertThat(event.statusLabel()).isEqualTo("ASSIGNED_TO_MAINTENANCE");
+                    assertThat(event.staffNotes()).isEqualTo("Przekazano konserwatorowi");
+                });
 
         mockMvc.perform(patch("/api/v1/receptionist/issues/" + issue.getId() + "/status")
                         .header("Authorization", bearer(receptionist))
