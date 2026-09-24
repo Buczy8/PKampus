@@ -378,6 +378,28 @@ class EmailServiceTest {
     }
 
     @Test
+    void shouldRenderSingleSlashLinksWhenFrontendUrlEndsWithSlash() throws Exception {
+        // Arrange
+        emailService = new EmailService(
+                mailSender, new EmailTemplateRenderer(), meterRegistry,
+                FRONTEND_URL + "/", FROM_EMAIL);
+        MimeMessage mimeMessage = new MimeMessage((Session) null);
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+
+        // Act
+        emailService.sendAccountActivatedEmail("student@pk.edu.pl", "Jan", "101", "DS-1");
+
+        // Assert
+        ArgumentCaptor<MimeMessage> messageCaptor = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(mailSender).send(messageCaptor.capture());
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        messageCaptor.getValue().writeTo(baos);
+        String content = baos.toString();
+        assertTrue(content.contains("http://localhost:5173/login"));
+        assertFalse(content.contains("5173//"));
+    }
+
+    @Test
     void shouldEscapeUserControlledValuesInterpolatedIntoHtml() throws Exception {
         // Arrange
         MimeMessage mimeMessage = new MimeMessage((Session) null);

@@ -53,7 +53,9 @@ public class EmailService {
         this.mailSender = mailSender;
         this.templateRenderer = templateRenderer;
         this.meterRegistry = meterRegistry;
-        this.frontendUrl = frontendUrl;
+        // normalize once so that both concatenated and builder-based template
+        // links stay single-slash even when the configured URL ends with a slash
+        this.frontendUrl = frontendUrl.replaceAll("/+$", "");
         this.fromEmail = fromEmail;
     }
 
