@@ -369,7 +369,7 @@ class PostServiceTest {
             assertEquals(2, result.commentCount());
             verify(postRepository).save(postDormitory);
             verify(commentRepository).countActiveByPostId(postId);
-            verify(commentRepository, never()).findActiveByPostIdOrderByCreatedAtAsc(any());
+            verify(commentRepository, never()).findActiveByPostId(any(), any());
         }
 
         @Test
@@ -528,7 +528,7 @@ class PostServiceTest {
         }
 
         @Test
-        @DisplayName("Should list active comments under post")
+        @DisplayName("Should list active comments under post with pagination metadata")
         void listCommentsSuccess() {
             // Arrange
             Comment comment = Comment.builder()
@@ -541,15 +541,34 @@ class PostServiceTest {
                     .build();
 
             when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
-            when(commentRepository.findActiveByPostIdOrderByCreatedAtAsc(postId)).thenReturn(List.of(comment));
+            when(commentRepository.findActiveByPostId(eq(postId), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(comment), PageRequest.of(0, 50), 1));
 
             // Act
-            List<CommentDto> result = postService.listComments(residentAuthor, postId);
+            PagedResponse<CommentDto> result = postService.listComments(residentAuthor, postId, 0, 50);
 
             // Assert
-            assertEquals(1, result.size());
-            assertEquals("Komentarz testowy", result.getFirst().content());
-            assertEquals("Jan Kowalski", result.getFirst().authorDisplayName());
+            assertEquals(1, result.content().size());
+            assertEquals(1, result.totalElements());
+            assertEquals("Komentarz testowy", result.content().getFirst().content());
+            assertEquals("Jan Kowalski", result.content().getFirst().authorDisplayName());
+
+            ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+            verify(commentRepository).findActiveByPostId(eq(postId), captor.capture());
+            assertEquals(0, captor.getValue().getPageNumber());
+            assertEquals(50, captor.getValue().getPageSize());
+            assertTrue(captor.getValue().getSort().getOrderFor("createdAt").isAscending());
+        }
+
+        @Test
+        @DisplayName("Should throw BusinessRuleException on negative comments page")
+        void listCommentsThrowsOnNegativePage() {
+            // Arrange
+            when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
+
+            // Act & Assert
+            assertThrows(BusinessRuleException.class,
+                    () -> postService.listComments(residentAuthor, postId, -1, 50));
         }
 
         @Test

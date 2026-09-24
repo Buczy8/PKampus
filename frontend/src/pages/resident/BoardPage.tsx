@@ -482,7 +482,7 @@ function PostCard({
     },
   })
 
-  const comments = commentsQuery.data ?? []
+  const comments = commentsQuery.data?.content ?? []
 
   return (
     <Card className={cn(resolved && "opacity-70")}>

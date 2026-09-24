@@ -14,6 +14,7 @@ import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import pl.edu.pk.pkampus.common.ApiResponse;
+import pl.edu.pk.pkampus.modules.board.Post;
 
 import java.lang.reflect.Method;
 import java.sql.SQLException;
@@ -242,5 +243,21 @@ class GlobalExceptionHandlerUnitTest {
         assertNotNull(response.getBody());
         assertFalse(response.getBody().success());
         assertTrue(response.getBody().message().contains("Variable was unexpectedly null"));
+    }
+
+    @Test
+    @DisplayName("handleOptimisticLock should return 409 Conflict for both exception hierarchies")
+    void handleOptimisticLock() {
+        ResponseEntity<ApiResponse<Void>> spring = exceptionHandler.handleOptimisticLock(
+                new org.springframework.orm.ObjectOptimisticLockingFailureException(Post.class, "id"));
+        ResponseEntity<ApiResponse<Void>> jakarta = exceptionHandler.handleOptimisticLock(
+                new jakarta.persistence.OptimisticLockException("stale post"));
+
+        for (ResponseEntity<ApiResponse<Void>> response : new ResponseEntity[]{spring, jakarta}) {
+            assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+            assertNotNull(response.getBody());
+            assertFalse(response.getBody().success());
+            assertEquals("Resource was modified concurrently, please retry", response.getBody().message());
+        }
     }
 }

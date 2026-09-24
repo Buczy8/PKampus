@@ -631,18 +631,18 @@ class ReceptionistServiceTest {
 
             when(postModerationService.listForStaff(staff, PostCategory.GENERAL, "ALL", 0, 20)).thenReturn(PagedResponse.of(List.of(), 0, 20, 0));
             when(postModerationService.removePostAsModerator(staff, postId)).thenReturn(null);
-            when(postModerationService.listCommentsForStaff(staff, postId)).thenReturn(List.of());
+            when(postModerationService.listCommentsForStaff(staff, postId, 0, 50)).thenReturn(PagedResponse.of(List.of(), 0, 50, 0));
 
             // Act
             service.listBoardPosts(staff, PostCategory.GENERAL, "ALL", 0, 20);
             service.removeBoardPost(staff, postId);
-            service.listBoardComments(staff, postId);
+            service.listBoardComments(staff, postId, 0, 50);
             service.removeBoardComment(staff, commentId);
 
             // Assert
             verify(postModerationService).listForStaff(staff, PostCategory.GENERAL, "ALL", 0, 20);
             verify(postModerationService).removePostAsModerator(staff, postId);
-            verify(postModerationService).listCommentsForStaff(staff, postId);
+            verify(postModerationService).listCommentsForStaff(staff, postId, 0, 50);
             verify(postModerationService).removeCommentAsModerator(staff, commentId);
         }
     }

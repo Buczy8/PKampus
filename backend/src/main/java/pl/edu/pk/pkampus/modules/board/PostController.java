@@ -65,11 +65,13 @@ public class PostController {
 
     @GetMapping("/{id}/comments")
     @Operation(summary = "List comments under a post")
-    public ResponseEntity<ApiResponse<List<CommentDto>>> listComments(
+    public ResponseEntity<ApiResponse<PagedResponse<CommentDto>>> listComments(
             @AuthenticationPrincipal User user,
-            @PathVariable UUID id
+            @PathVariable UUID id,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "50") int size
     ) {
-        return ResponseEntity.ok(ApiResponse.ok(postService.listComments(user, id)));
+        return ResponseEntity.ok(ApiResponse.ok(postService.listComments(user, id, page, size)));
     }
 
     @PostMapping("/{id}/comments")

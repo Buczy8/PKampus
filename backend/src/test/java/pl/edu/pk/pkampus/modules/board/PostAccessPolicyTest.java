@@ -132,6 +132,36 @@ class PostAccessPolicyTest {
     }
 
     @Test
+    @DisplayName("Should return 404 instead of NPE when viewer has no dormitory")
+    void requireVisiblePostWithoutViewerDormitory() {
+        // Arrange
+        UUID postId = UUID.randomUUID();
+        Post dormPost = Post.builder()
+                .id(postId)
+                .author(resident)
+                .dormitory(dorm)
+                .title("Lokalny")
+                .content("Treść")
+                .category(PostCategory.GENERAL)
+                .scope(PostScope.DORMITORY)
+                .status(PostStatus.ACTIVE)
+                .deleted(false)
+                .createdAt(Instant.now())
+                .build();
+        User homeless = User.builder()
+                .id(UUID.randomUUID())
+                .role(UserRole.RESIDENT)
+                .status(UserStatus.ACTIVE)
+                .dormitory(null)
+                .build();
+        when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(dormPost));
+
+        // Act & Assert
+        assertThrows(ResourceNotFoundException.class,
+                () -> policy.requireVisiblePost(homeless, postId));
+    }
+
+    @Test
     @DisplayName("Should hide CAMPUS posts from staff moderation with 404")
     void requireStaffModeratablePostRejectsCampus() {
         // Arrange

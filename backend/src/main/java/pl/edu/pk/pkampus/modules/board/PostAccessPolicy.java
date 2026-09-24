@@ -65,8 +65,10 @@ public class PostAccessPolicy {
             throw new ResourceNotFoundException("Post not found");
         }
         if (post.getScope() == PostScope.DORMITORY) {
-            UUID viewerDorm = user.getDormitory().getId();
-            if (post.getDormitory() == null || !post.getDormitory().getId().equals(viewerDorm)) {
+            Dormitory viewerDorm = user.getDormitory();
+            if (viewerDorm == null || viewerDorm.getId() == null
+                    || post.getDormitory() == null
+                    || !post.getDormitory().getId().equals(viewerDorm.getId())) {
                 throw new ResourceNotFoundException("Post not found");
             }
         }
@@ -99,5 +101,15 @@ public class PostAccessPolicy {
             throw new BusinessRuleException("size must be between 1 and " + MAX_FEED_PAGE_SIZE);
         }
         return PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+    }
+
+    public PageRequest commentPageable(int page, int size) {
+        if (page < 0) {
+            throw new BusinessRuleException("page must be greater than or equal to 0");
+        }
+        if (size < 1 || size > MAX_FEED_PAGE_SIZE) {
+            throw new BusinessRuleException("size must be between 1 and " + MAX_FEED_PAGE_SIZE);
+        }
+        return PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "createdAt"));
     }
 }

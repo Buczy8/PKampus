@@ -110,6 +110,8 @@ export function ReceptionistBoardPage() {
     enabled: expandedId != null,
   })
 
+  const comments = commentsQuery.data?.content ?? []
+
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ["receptionist", "posts"] })
   }
@@ -292,10 +294,10 @@ export function ReceptionistBoardPage() {
                         {getApiErrorMessage(commentsQuery.error)}
                       </p>
                     )}
-                    {commentsQuery.data?.length === 0 && (
+                    {comments.length === 0 && (
                       <p className="text-sm text-muted-foreground">Brak komentarzy.</p>
                     )}
-                    {commentsQuery.data?.map((c) => (
+                    {comments.map((c) => (
                       <div
                         key={c.id}
                         className="flex flex-wrap items-start justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2"

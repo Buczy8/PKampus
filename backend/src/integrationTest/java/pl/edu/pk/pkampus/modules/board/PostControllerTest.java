@@ -197,13 +197,15 @@ class PostControllerTest {
                 OffsetDateTime.now()
         );
 
-        when(postService.listComments(any(), eq(postId))).thenReturn(List.of(commentDto));
+        when(postService.listComments(any(), eq(postId), eq(0), eq(50)))
+                .thenReturn(PagedResponse.of(List.of(commentDto), 0, 50, 1));
 
         mockMvc.perform(get("/api/v1/posts/" + postId + "/comments"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data[0].id").value(commentId.toString()))
-                .andExpect(jsonPath("$.data[0].content").value("Mam do sprzedania!"));
+                .andExpect(jsonPath("$.data.content[0].id").value(commentId.toString()))
+                .andExpect(jsonPath("$.data.content[0].content").value("Mam do sprzedania!"))
+                .andExpect(jsonPath("$.data.totalElements").value(1));
     }
 
     @Test

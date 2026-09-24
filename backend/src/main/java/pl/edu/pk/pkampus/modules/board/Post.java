@@ -11,6 +11,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -80,6 +81,10 @@ public class Post {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     /**
      * Marks the post as resolved. Only the author can trigger this via
      * {@code PostService.resolve}; only ACTIVE posts can transition.
@@ -93,9 +98,13 @@ public class Post {
 
     /**
      * Soft-deletes the post. Only the author can trigger this via
-     * {@code PostService.softDelete}.
+     * {@code PostService.softDelete}. Repeating the call is a no-op and keeps
+     * the original deletion timestamp.
      */
     public void softDelete() {
+        if (this.deleted) {
+            return;
+        }
         this.deleted = true;
         this.deletedAt = Instant.now();
     }
@@ -106,6 +115,9 @@ public class Post {
      * dormitory/scope checks in {@code PostAccessPolicy}.
      */
     public void removeAsModerator() {
+        if (this.status == PostStatus.REMOVED_MODERATOR) {
+            throw new BusinessRuleException("Post is already removed by moderator");
+        }
         this.status = PostStatus.REMOVED_MODERATOR;
     }
 }

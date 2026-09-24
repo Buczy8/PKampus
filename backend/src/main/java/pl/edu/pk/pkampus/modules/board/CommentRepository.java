@@ -1,5 +1,7 @@
 package pl.edu.pk.pkampus.modules.board;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,14 +14,18 @@ import java.util.UUID;
 @Repository
 public interface CommentRepository extends JpaRepository<Comment, UUID> {
 
-    @Query("""
-            SELECT c FROM Comment c
-            JOIN FETCH c.author a
-            LEFT JOIN FETCH a.dormitory
-            WHERE c.post.id = :postId AND c.deleted = FALSE
-            ORDER BY c.createdAt ASC
-            """)
-    List<Comment> findActiveByPostIdOrderByCreatedAtAsc(@Param("postId") UUID postId);
+    @Query(
+            value = """
+                    SELECT c FROM Comment c
+                    JOIN FETCH c.author a
+                    LEFT JOIN FETCH a.dormitory
+                    WHERE c.post.id = :postId AND c.deleted = FALSE
+                    """,
+            countQuery = """
+                    SELECT COUNT(c) FROM Comment c
+                    WHERE c.post.id = :postId AND c.deleted = FALSE
+                    """)
+    Page<Comment> findActiveByPostId(@Param("postId") UUID postId, Pageable pageable);
 
     @Query("""
             SELECT c.post.id, COUNT(c) FROM Comment c

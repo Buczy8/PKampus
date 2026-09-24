@@ -33,6 +33,7 @@ import java.time.LocalTime;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -75,6 +76,9 @@ class PostIntegrationTest {
 
     @Autowired
     private JwtService jwtService;
+
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
 
     @MockitoBean
     private MinioStorageService minioStorageService;
@@ -373,7 +377,16 @@ class PostIntegrationTest {
         mockMvc.perform(get("/api/v1/posts/" + id + "/comments")
                         .header("Authorization", bearer(resident1)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data", hasSize(1)));
+                .andExpect(jsonPath("$.data.content", hasSize(1)))
+                .andExpect(jsonPath("$.data.totalElements").value(1));
+
+        mockMvc.perform(get("/api/v1/posts/" + id + "/comments")
+                        .param("page", "1")
+                        .param("size", "10")
+                        .header("Authorization", bearer(resident1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(0)))
+                .andExpect(jsonPath("$.data.page").value(1));
 
         mockMvc.perform(get("/api/v1/posts")
                         .header("Authorization", bearer(resident1)))
@@ -430,7 +443,7 @@ class PostIntegrationTest {
         mockMvc.perform(get("/api/v1/posts/" + postId + "/comments")
                         .header("Authorization", bearer(resident1)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data", hasSize(0)));
+                .andExpect(jsonPath("$.data.content", hasSize(0)));
 
         mockMvc.perform(get("/api/v1/posts")
                         .header("Authorization", bearer(resident1)))
@@ -527,6 +540,37 @@ class PostIntegrationTest {
         mockMvc.perform(patch("/api/v1/posts/" + id + "/resolve")
                         .header("Authorization", bearer(resident1)))
                 .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    @DisplayName("Stale post update fails with optimistic locking instead of silent lost update")
+    void staleUpdateDetected() {
+        Post post = postRepository.saveAndFlush(Post.builder()
+                .author(resident1)
+                .dormitory(dorm1)
+                .title("Wersjonowany")
+                .content("Treść")
+                .category(PostCategory.GENERAL)
+                .scope(PostScope.DORMITORY)
+                .status(PostStatus.ACTIVE)
+                .deleted(false)
+                .build());
+        UUID id = post.getId();
+        entityManager.clear();
+
+        Post fresh = postRepository.findById(id).orElseThrow();
+        fresh.markResolved();
+        postRepository.saveAndFlush(fresh);
+        entityManager.clear();
+
+        Post stale = post.toBuilder().build();
+        stale.markResolved();
+
+        // Act & Assert
+        assertThrows(jakarta.persistence.OptimisticLockException.class, () -> {
+            entityManager.merge(stale);
+            entityManager.flush();
+        });
     }
 
     @Test

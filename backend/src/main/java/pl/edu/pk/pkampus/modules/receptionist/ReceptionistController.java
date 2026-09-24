@@ -313,12 +313,14 @@ public class ReceptionistController {
 
     @GetMapping("/posts/{id}/comments")
     @Operation(summary = "List comments under a dormitory board post")
-    public ResponseEntity<ApiResponse<List<CommentDto>>> listPostComments(
+    public ResponseEntity<ApiResponse<PagedResponse<CommentDto>>> listPostComments(
             @AuthenticationPrincipal User user,
-            @PathVariable UUID id
+            @PathVariable UUID id,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "50") int size
     ) {
         return ResponseEntity.ok(ApiResponse.ok(
-                receptionistService.listBoardComments(user, id)));
+                receptionistService.listBoardComments(user, id, page, size)));
     }
 
     @PostMapping("/comments/{id}/remove")

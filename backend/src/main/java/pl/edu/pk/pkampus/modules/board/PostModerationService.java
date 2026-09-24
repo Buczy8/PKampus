@@ -59,11 +59,13 @@ public class PostModerationService {
     }
 
     @Transactional(readOnly = true)
-    public List<CommentDto> listCommentsForStaff(User staff, UUID postId) {
+    public PagedResponse<CommentDto> listCommentsForStaff(User staff, UUID postId, int page, int size) {
         UUID dormitoryId = accessPolicy.requireStaffDormitoryId(staff);
         Post post = accessPolicy.requireStaffModeratablePost(postId, dormitoryId);
-        List<Comment> comments = commentRepository.findActiveByPostIdOrderByCreatedAtAsc(post.getId());
-        return postMapper.toCommentDtos(post, comments, staff);
+        Page<Comment> comments = commentRepository.findActiveByPostId(
+                post.getId(), accessPolicy.commentPageable(page, size));
+        List<CommentDto> content = postMapper.toCommentDtos(post, comments.getContent(), staff);
+        return PagedResponse.of(content, comments.getNumber(), comments.getSize(), comments.getTotalElements());
     }
 
     @Transactional

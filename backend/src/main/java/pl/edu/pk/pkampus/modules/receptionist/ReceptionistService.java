@@ -189,8 +189,8 @@ public class ReceptionistService {
         return postModerationService.removePostAsModerator(actor, postId);
     }
 
-    public List<CommentDto> listBoardComments(User actor, UUID postId) {
-        return postModerationService.listCommentsForStaff(actor, postId);
+    public PagedResponse<CommentDto> listBoardComments(User actor, UUID postId, int page, int size) {
+        return postModerationService.listCommentsForStaff(actor, postId, page, size);
     }
 
     public void removeBoardComment(User actor, UUID commentId) {

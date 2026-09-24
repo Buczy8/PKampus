@@ -270,9 +270,12 @@ export async function removeReceptionistBoardPost(id: string): Promise<BoardPost
 
 export async function listReceptionistBoardComments(
   postId: string,
-): Promise<BoardComment[]> {
-  const { data } = await apiClient.get<ApiResponse<BoardComment[]>>(
+  page = 0,
+  size = 50,
+): Promise<PagedResponse<BoardComment>> {
+  const { data } = await apiClient.get<ApiResponse<PagedResponse<BoardComment>>>(
     `/receptionist/posts/${postId}/comments`,
+    { params: { page: String(page), size: String(size) } },
   )
   if (!data.success || !data.data) {
     throw new Error(data.message ?? 'Failed to load comments')

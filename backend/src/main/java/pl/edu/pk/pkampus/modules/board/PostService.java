@@ -98,11 +98,13 @@ public class PostService {
     }
 
     @Transactional(readOnly = true)
-    public List<CommentDto> listComments(User user, UUID postId) {
+    public PagedResponse<CommentDto> listComments(User user, UUID postId, int page, int size) {
         accessPolicy.requireActiveResident(user);
         Post post = accessPolicy.requireVisiblePost(user, postId);
-        List<Comment> comments = commentRepository.findActiveByPostIdOrderByCreatedAtAsc(post.getId());
-        return postMapper.toCommentDtos(post, comments, user);
+        Page<Comment> comments = commentRepository.findActiveByPostId(
+                post.getId(), accessPolicy.commentPageable(page, size));
+        List<CommentDto> content = postMapper.toCommentDtos(post, comments.getContent(), user);
+        return PagedResponse.of(content, comments.getNumber(), comments.getSize(), comments.getTotalElements());
     }
 
     @Transactional
