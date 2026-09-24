@@ -357,7 +357,7 @@ class PostServiceTest {
             // Arrange
             when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
             when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
-            when(commentRepository.findActiveByPostIdOrderByCreatedAtAsc(postId)).thenReturn(List.of());
+            when(commentRepository.countActiveByPostId(postId)).thenReturn(2L);
 
             // Act
             PostDto result = postService.resolve(residentAuthor, postId);
@@ -365,7 +365,10 @@ class PostServiceTest {
             // Assert
             assertEquals(PostStatus.RESOLVED, result.status());
             assertEquals(PostStatus.RESOLVED, postDormitory.getStatus());
+            assertEquals(2, result.commentCount());
             verify(postRepository).save(postDormitory);
+            verify(commentRepository).countActiveByPostId(postId);
+            verify(commentRepository, never()).findActiveByPostIdOrderByCreatedAtAsc(any());
         }
 
         @Test

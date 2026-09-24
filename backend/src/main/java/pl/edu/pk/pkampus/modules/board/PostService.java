@@ -105,7 +105,7 @@ public class PostService {
         }
         post.setStatus(PostStatus.RESOLVED);
         Post saved = postRepository.save(post);
-        int count = commentRepository.findActiveByPostIdOrderByCreatedAtAsc(saved.getId()).size();
+        int count = (int) commentRepository.countActiveByPostId(saved.getId());
         return toDto(saved, user, count, roomNumbersByUserIds(dormitoryAuthorIds(List.of(saved))));
     }
 
