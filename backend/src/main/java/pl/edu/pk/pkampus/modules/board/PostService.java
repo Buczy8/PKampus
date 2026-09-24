@@ -186,7 +186,8 @@ public class PostService {
         post.setStatus(PostStatus.REMOVED_MODERATOR);
         Post saved = postRepository.save(post);
         log.info("Staff {} moderated board post {} to REMOVED_MODERATOR", staff.getEmail(), postId);
-        return toDto(saved, staff, 0, roomNumbersByUserIds(dormitoryAuthorIds(List.of(saved))));
+        int count = (int) commentRepository.countActiveByPostId(saved.getId());
+        return toDto(saved, staff, count, roomNumbersByUserIds(dormitoryAuthorIds(List.of(saved))));
     }
 
     @Transactional(readOnly = true)

@@ -582,6 +582,7 @@ class PostServiceTest {
             // Arrange
             when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
             when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(commentRepository.countActiveByPostId(postId)).thenReturn(3L);
 
             // Act
             PostDto result = postService.removePostAsModerator(staffDormAdmin, postId);
@@ -589,7 +590,9 @@ class PostServiceTest {
             // Assert
             assertEquals(PostStatus.REMOVED_MODERATOR, result.status());
             assertEquals(PostStatus.REMOVED_MODERATOR, postDormitory.getStatus());
+            assertEquals(3, result.commentCount());
             verify(postRepository).save(postDormitory);
+            verify(commentRepository).countActiveByPostId(postId);
         }
 
         @Test
