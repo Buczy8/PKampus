@@ -21,8 +21,14 @@ class EmailTemplateRenderer {
     private static final DateTimeFormatter SLOT_LABEL =
             DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm").withZone(WARSAW);
 
+    private static final Pattern ANCHOR_WITH_TEXT =
+            Pattern.compile("<a\\b[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Pattern BLOCK_BOUNDARY =
+            Pattern.compile("</?(?:p|div|h[1-6]|br|hr|li|tr)\\b[^>]*>", Pattern.CASE_INSENSITIVE);
     private static final Pattern HTML_TAGS = Pattern.compile("<[^>]*>");
-    private static final Pattern MULTI_WHITESPACE = Pattern.compile("\\s+");
+    private static final Pattern RUNS_OF_SPACES = Pattern.compile("[ \\t]+");
+    private static final Pattern SPACES_AROUND_BREAKS = Pattern.compile("[ \\t]*\\n[ \\t]*");
+    private static final Pattern RUNS_OF_BREAKS = Pattern.compile("\\n{2,}");
 
     public RenderedEmail renderVerificationEmail(String frontendUrl, String token) {
         String encodedToken = URLEncoder.encode(token, StandardCharsets.UTF_8);
@@ -203,7 +209,7 @@ class EmailTemplateRenderer {
                 <p><strong>Period:</strong> %s – %s<br>
                 <strong>Reason:</strong> %s</p>
                 <p>During this period you cannot book thematic rooms across the campus.</p>
-                """.formatted(esc(firstName), start, end, esc(reason));
+                """.formatted(esc(firstName), escDate(start), escDate(end), esc(reason));
         String html = layout("Room reservation ban", "#b91c1c", body);
         return new RenderedEmail(subject, html, toPlainText(html));
     }
@@ -234,13 +240,38 @@ class EmailTemplateRenderer {
                 .replace("'", "&#39;");
     }
 
+    /**
+     * Derives the plain-text alternative from the HTML body. Anchor URLs are
+     * preserved inline (otherwise stripping tags would drop every link) and
+     * block-level tags become line breaks, so the result stays readable in
+     * clients that do not render HTML.
+     */
     static String toPlainText(String html) {
-        String stripped = HTML_TAGS.matcher(html).replaceAll(" ")
+        String withLinkUrls = ANCHOR_WITH_TEXT.matcher(html).replaceAll(match -> {
+            String href = match.group(1);
+            String text = HTML_TAGS.matcher(match.group(2)).replaceAll(" ").trim();
+            return href.equals(text) || text.isEmpty() ? href : text + " (" + href + ")";
+        });
+        String withBreaks = BLOCK_BOUNDARY.matcher(withLinkUrls).replaceAll("\n");
+        String stripped = HTML_TAGS.matcher(withBreaks).replaceAll(" ");
+        String decoded = decodeEntities(stripped);
+        String singleSpaced = RUNS_OF_SPACES.matcher(decoded).replaceAll(" ");
+        String tidyBreaks = SPACES_AROUND_BREAKS.matcher(singleSpaced).replaceAll("\n");
+        String singleBreaks = RUNS_OF_BREAKS.matcher(tidyBreaks).replaceAll("\n");
+        return singleBreaks.trim();
+    }
+
+    private static String decodeEntities(String value) {
+        return value
                 .replace("&lt;", "<")
                 .replace("&gt;", ">")
                 .replace("&quot;", "\"")
                 .replace("&#39;", "'")
                 .replace("&amp;", "&");
-        return MULTI_WHITESPACE.matcher(stripped).replaceAll(" ").trim();
     }
+
+    private static String escDate(LocalDate date) {
+        return esc(date == null ? "" : date.toString());
+    }
+
 }

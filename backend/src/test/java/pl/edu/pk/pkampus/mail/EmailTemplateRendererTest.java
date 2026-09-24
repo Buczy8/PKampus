@@ -27,7 +27,7 @@ class EmailTemplateRendererTest {
     }
 
     @Test
-    @DisplayName("Should convert HTML to plain text cleanly")
+    @DisplayName("Should convert HTML to plain text preserving links and line breaks")
     void shouldConvertToPlainText() {
         // Arrange
         String html = "<p>Hello <strong>World</strong>!</p><p>Check <a href=\"http://test\">link</a> &amp; &#39;quote&#39;.</p>";
@@ -36,7 +36,20 @@ class EmailTemplateRendererTest {
         String plain = EmailTemplateRenderer.toPlainText(html);
 
         // Assert
-        assertEquals("Hello World ! Check link & 'quote'.", plain);
+        assertEquals("Hello World !\nCheck link (http://test) & 'quote'.", plain);
+    }
+
+    @Test
+    @DisplayName("Should not duplicate the URL when the anchor text equals the href")
+    void shouldNotDuplicateUrlWhenAnchorTextEqualsHref() {
+        // Arrange
+        String html = "<p>Link: <a href=\"http://x\">http://x</a></p>";
+
+        // Act
+        String plain = EmailTemplateRenderer.toPlainText(html);
+
+        // Assert
+        assertEquals("Link: http://x", plain);
     }
 
     @Test
@@ -46,9 +59,26 @@ class EmailTemplateRendererTest {
         RenderedEmail rendered = renderer.renderVerificationEmail("http://localhost:5173", "token+with/special=chars");
 
         // Assert
-        assertTrue(rendered.htmlBody().contains("http://localhost:5173/verify-email?token=token+with/special=chars")
-                || rendered.htmlBody().contains("token%2Bwith%2Fspecial%3Dchars"));
+        assertTrue(rendered.htmlBody()
+                .contains("http://localhost:5173/verify-email?token=token%2Bwith%2Fspecial%3Dchars"));
         assertTrue(rendered.subject().contains("Confirm your registration"));
+    }
+
+    @Test
+    @DisplayName("Should escape room-ban dates together with the reason")
+    void shouldEscapeRoomBanDates() {
+        // Arrange
+        LocalDate start = LocalDate.of(2026, 10, 1);
+        LocalDate end = LocalDate.of(2026, 10, 14);
+
+        // Act
+        RenderedEmail rendered = renderer.renderRoomBanEmail("Jan", start, end, "<b>reason</b>");
+
+        // Assert
+        assertTrue(rendered.htmlBody().contains("2026-10-01"));
+        assertTrue(rendered.htmlBody().contains("2026-10-14"));
+        assertFalse(rendered.htmlBody().contains("<b>reason</b>"));
+        assertTrue(rendered.htmlBody().contains("&lt;b&gt;reason&lt;/b&gt;"));
     }
 
     @Test
