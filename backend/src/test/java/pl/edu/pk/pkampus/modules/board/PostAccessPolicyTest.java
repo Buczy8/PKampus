@@ -98,16 +98,18 @@ class PostAccessPolicyTest {
     }
 
     @Test
-    @DisplayName("Should normalize status filter case-insensitively with ACTIVE default")
-    void normalizeStatusFilter() {
+    @DisplayName("Should resolve status filter case-insensitively with default fallback")
+    void resolvePostStatus() {
         // Arrange — setUp
 
         // Act & Assert
-        assertEquals("ACTIVE", policy.normalizeStatusFilter(null));
-        assertEquals("ACTIVE", policy.normalizeStatusFilter("  "));
-        assertEquals("RESOLVED", policy.normalizeStatusFilter("resolved"));
-        assertEquals("ALL", policy.normalizeStatusFilter(" all "));
-        assertThrows(BusinessRuleException.class, () -> policy.normalizeStatusFilter("DELETED"));
+        assertEquals(PostStatus.ACTIVE, policy.resolvePostStatus(null, PostStatusFilter.ACTIVE));
+        assertEquals(PostStatus.ACTIVE, policy.resolvePostStatus("  ", PostStatusFilter.ACTIVE));
+        assertEquals(PostStatus.RESOLVED, policy.resolvePostStatus("resolved", PostStatusFilter.ACTIVE));
+        assertNull(policy.resolvePostStatus(" all ", PostStatusFilter.ACTIVE));
+        assertNull(policy.resolvePostStatus(null, PostStatusFilter.ALL));
+        assertThrows(BusinessRuleException.class,
+                () -> policy.resolvePostStatus("DELETED", PostStatusFilter.ACTIVE));
     }
 
     @Test

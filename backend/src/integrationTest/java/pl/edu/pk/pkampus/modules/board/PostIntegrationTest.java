@@ -382,6 +382,63 @@ class PostIntegrationTest {
     }
 
     @Test
+    @DisplayName("Author soft-deletes own comment; stranger cannot")
+    void deleteOwnComment() throws Exception {
+        MvcResult created = mockMvc.perform(post("/api/v1/posts")
+                        .header("Authorization", bearer(resident1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Pomoc",
+                                  "content": "Ktoś ma sól?",
+                                  "category": "BORROW_HELP",
+                                  "scope": "DORMITORY"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String postId = objectMapper.readTree(created.getResponse().getContentAsString())
+                .path("data").path("id").asText();
+
+        MvcResult commented = mockMvc.perform(post("/api/v1/posts/" + postId + "/comments")
+                        .header("Authorization", bearer(resident1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "content": "Literówka" }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String commentId = objectMapper.readTree(commented.getResponse().getContentAsString())
+                .path("data").path("id").asText();
+
+        mockMvc.perform(delete("/api/v1/posts/comments/" + commentId)
+                        .header("Authorization", bearer(resident2OtherDorm)))
+                .andExpect(status().isNotFound());
+
+        User residentSameDorm = saveResident(dorm1, "313");
+        mockMvc.perform(delete("/api/v1/posts/comments/" + commentId)
+                        .header("Authorization", bearer(residentSameDorm)))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(delete("/api/v1/posts/comments/" + commentId)
+                        .header("Authorization", bearer(resident1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Comment deleted"));
+
+        mockMvc.perform(get("/api/v1/posts/" + postId + "/comments")
+                        .header("Authorization", bearer(resident1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(0)));
+
+        mockMvc.perform(get("/api/v1/posts")
+                        .header("Authorization", bearer(resident1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].commentCount").value(0));
+    }
+
+    @Test
     @DisplayName("Unauthenticated request to board returns 401")
     void unauthenticatedRequestIsUnauthorized() throws Exception {
         mockMvc.perform(get("/api/v1/posts"))

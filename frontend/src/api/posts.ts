@@ -78,3 +78,12 @@ export async function createBoardComment(
   }
   return data.data
 }
+
+export async function deleteBoardComment(commentId: string): Promise<void> {
+  const { data } = await apiClient.delete<ApiResponse<null>>(
+    `/posts/comments/${commentId}`,
+  )
+  if (!data.success) {
+    throw new Error(data.message ?? 'Failed to delete comment')
+  }
+}

@@ -120,7 +120,7 @@ class PostModerationServiceTest {
     @DisplayName("Should list dormitory posts for staff")
     void listForStaffSuccess() {
         // Arrange
-        when(postRepository.findStaffDormitoryFeed(eq(dorm1.getId()), eq(false), eq(PostCategory.BORROW_HELP), eq("ACTIVE"), any(Pageable.class)))
+        when(postRepository.findStaffDormitoryFeed(eq(dorm1.getId()), eq(PostCategory.BORROW_HELP), eq(PostStatus.ACTIVE), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(postDormitory)));
         when(commentRepository.countActiveByPostIds(List.of(postId)))
                 .thenReturn(List.of());

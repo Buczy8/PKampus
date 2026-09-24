@@ -6,6 +6,7 @@ import { getApiErrorMessage } from "@/api/errors"
 import {
   createBoardComment,
   createBoardPost,
+  deleteBoardComment,
   deleteBoardPost,
   listBoardComments,
   listBoardPosts,
@@ -469,6 +470,18 @@ function PostCard({
     },
   })
 
+  const deleteCommentMutation = useMutation({
+    mutationFn: (commentId: string) => deleteBoardComment(commentId),
+    onSuccess: async () => {
+      setCommentError(null)
+      await queryClient.invalidateQueries({ queryKey: ["posts", post.id, "comments"] })
+      onCommentsChanged()
+    },
+    onError: (error) => {
+      setCommentError(getApiErrorMessage(error, "Nie udało się usunąć komentarza"))
+    },
+  })
+
   const comments = commentsQuery.data ?? []
 
   return (
@@ -553,9 +566,25 @@ function PostCard({
                     key={c.id}
                     className="rounded-md border border-border bg-background px-2.5 py-2"
                   >
-                    <p className="text-[11px] text-muted-foreground">
-                      {commentAuthorLine(c, post.scope)} · {formatWhen(c.createdAt)}
-                    </p>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[11px] text-muted-foreground">
+                        {commentAuthorLine(c, post.scope)} · {formatWhen(c.createdAt)}
+                      </p>
+                      {c.mine ? (
+                        <button
+                          type="button"
+                          className="text-[11px] text-destructive hover:underline disabled:opacity-50"
+                          disabled={deleteCommentMutation.isPending}
+                          onClick={() => {
+                            if (window.confirm("Usunąć ten komentarz?")) {
+                              deleteCommentMutation.mutate(c.id)
+                            }
+                          }}
+                        >
+                          Usuń
+                        </button>
+                      ) : null}
+                    </div>
                     <p className="text-sm whitespace-pre-wrap mt-0.5">{c.content}</p>
                   </li>
                 ))}

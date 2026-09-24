@@ -155,7 +155,7 @@ class PostServiceTest {
                     .isActive(true)
                     .build();
 
-            when(postRepository.findFeed(eq(dorm1.getId()), eq(PostCategory.BORROW_HELP), eq(PostScope.DORMITORY), eq("ACTIVE"), any(Pageable.class)))
+            when(postRepository.findFeed(eq(dorm1.getId()), eq(PostCategory.BORROW_HELP), eq(PostScope.DORMITORY), eq(PostStatus.ACTIVE), any(Pageable.class)))
                     .thenReturn(new PageImpl<>(List.of(postDormitory)));
             when(commentRepository.countActiveByPostIds(List.of(postId)))
                     .thenReturn(List.<Object[]>of(new Object[]{postId, 3L}));
@@ -181,7 +181,7 @@ class PostServiceTest {
         @DisplayName("Should hide room number for CAMPUS scope posts")
         void listFeedCampusHidesRoom() {
             // Arrange
-            when(postRepository.findFeed(eq(dorm1.getId()), eq(null), eq(null), eq("ACTIVE"), any(Pageable.class)))
+            when(postRepository.findFeed(eq(dorm1.getId()), eq(null), eq(null), eq(PostStatus.ACTIVE), any(Pageable.class)))
                     .thenReturn(new PageImpl<>(List.of(postCampus)));
             when(commentRepository.countActiveByPostIds(List.of(postCampus.getId())))
                     .thenReturn(List.of());
@@ -237,7 +237,7 @@ class PostServiceTest {
         @DisplayName("Should pass page and size to repository")
         void listFeedPassesPagination() {
             // Arrange
-            when(postRepository.findFeed(eq(dorm1.getId()), eq(null), eq(null), eq("ACTIVE"), any(Pageable.class)))
+            when(postRepository.findFeed(eq(dorm1.getId()), eq(null), eq(null), eq(PostStatus.ACTIVE), any(Pageable.class)))
                     .thenReturn(new PageImpl<>(List.of(), PageRequest.of(2, 5), 12));
 
             // Act
@@ -251,7 +251,7 @@ class PostServiceTest {
             assertTrue(result.last());
 
             ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-            verify(postRepository).findFeed(eq(dorm1.getId()), eq(null), eq(null), eq("ACTIVE"), captor.capture());
+            verify(postRepository).findFeed(eq(dorm1.getId()), eq(null), eq(null), eq(PostStatus.ACTIVE), captor.capture());
             assertEquals(2, captor.getValue().getPageNumber());
             assertEquals(5, captor.getValue().getPageSize());
         }
@@ -550,6 +550,83 @@ class PostServiceTest {
             assertEquals(1, result.size());
             assertEquals("Komentarz testowy", result.getFirst().content());
             assertEquals("Jan Kowalski", result.getFirst().authorDisplayName());
+        }
+
+        @Test
+        @DisplayName("Should soft-delete own comment")
+        void deleteCommentSuccess() {
+            // Arrange
+            UUID commentId = UUID.randomUUID();
+            Comment comment = Comment.builder()
+                    .id(commentId)
+                    .post(postDormitory)
+                    .author(residentAuthor)
+                    .content("Literówka do usunięcia")
+                    .deleted(false)
+                    .build();
+
+            when(commentRepository.findByIdWithPost(commentId)).thenReturn(Optional.of(comment));
+            when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
+
+            // Act
+            postService.deleteComment(residentAuthor, commentId);
+
+            // Assert
+            assertTrue(comment.isDeleted());
+            assertNotNull(comment.getDeletedAt());
+            verify(commentRepository).save(comment);
+        }
+
+        @Test
+        @DisplayName("Should throw AccessDeniedException when stranger attempts to delete comment")
+        void deleteCommentThrowsWhenNotAuthor() {
+            // Arrange
+            UUID commentId = UUID.randomUUID();
+            Comment comment = Comment.builder()
+                    .id(commentId)
+                    .post(postDormitory)
+                    .author(residentAuthor)
+                    .content("Cudzy komentarz")
+                    .deleted(false)
+                    .build();
+            User residentSameDorm = User.builder()
+                    .id(UUID.randomUUID())
+                    .role(UserRole.RESIDENT)
+                    .status(UserStatus.ACTIVE)
+                    .dormitory(dorm1)
+                    .build();
+
+            when(commentRepository.findByIdWithPost(commentId)).thenReturn(Optional.of(comment));
+            when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
+
+            // Act & Assert
+            assertThrows(AccessDeniedException.class,
+                    () -> postService.deleteComment(residentSameDorm, commentId));
+            verify(commentRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("Should throw ResourceNotFoundException when comment already deleted or unknown")
+        void deleteCommentThrowsWhenNotFound() {
+            // Arrange
+            UUID commentId = UUID.randomUUID();
+            Comment deleted = Comment.builder()
+                    .id(commentId)
+                    .post(postDormitory)
+                    .author(residentAuthor)
+                    .content("Usunięty")
+                    .deleted(true)
+                    .build();
+
+            when(commentRepository.findByIdWithPost(commentId)).thenReturn(Optional.of(deleted));
+            when(commentRepository.findByIdWithPost(postId)).thenReturn(Optional.empty());
+
+            // Act & Assert
+            assertThrows(ResourceNotFoundException.class,
+                    () -> postService.deleteComment(residentAuthor, commentId));
+            assertThrows(ResourceNotFoundException.class,
+                    () -> postService.deleteComment(residentAuthor, postId));
+            verify(commentRepository, never()).save(any());
         }
     }
 }

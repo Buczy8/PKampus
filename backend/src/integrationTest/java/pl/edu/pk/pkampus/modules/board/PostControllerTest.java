@@ -293,6 +293,30 @@ class PostControllerTest {
     }
 
     @Test
+    @DisplayName("DELETE /api/v1/posts/comments/{id} returns 200 on soft delete")
+    void deleteCommentReturnsOk() throws Exception {
+        UUID commentId = UUID.randomUUID();
+
+        mockMvc.perform(delete("/api/v1/posts/comments/" + commentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Comment deleted"));
+
+        verify(postService).deleteComment(any(), eq(commentId));
+    }
+
+    @Test
+    @DisplayName("DELETE /api/v1/posts/comments/{id} propagates ResourceNotFoundException")
+    void deleteCommentPropagatesNotFound() throws Exception {
+        UUID commentId = UUID.randomUUID();
+        doThrow(new ResourceNotFoundException("Comment not found"))
+                .when(postService).deleteComment(any(), eq(commentId));
+
+        mockMvc.perform(delete("/api/v1/posts/comments/" + commentId))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     @DisplayName("DELETE /api/v1/posts/{id} propagates ResourceNotFoundException")
     void deletePropagatesNotFound() throws Exception {
         doThrow(new ResourceNotFoundException("Post not found"))

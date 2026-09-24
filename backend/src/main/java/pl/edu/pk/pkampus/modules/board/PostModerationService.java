@@ -37,12 +37,11 @@ public class PostModerationService {
             int size
     ) {
         UUID dormitoryId = accessPolicy.requireStaffDormitoryId(staff);
-        String filter = accessPolicy.normalizeStatusFilter(statusFilter == null ? "ALL" : statusFilter);
+        PostStatus status = accessPolicy.resolvePostStatus(statusFilter, PostStatusFilter.ALL);
         Page<Post> posts = postRepository.findStaffDormitoryFeed(
                 dormitoryId,
-                category == null,
-                category != null ? category : PostCategory.GENERAL,
-                filter,
+                category,
+                status,
                 accessPolicy.feedPageable(page, size)
         );
         List<PostDto> content = postMapper.toPostDtos(posts.getContent(), staff);
@@ -55,7 +54,7 @@ public class PostModerationService {
         Post post = accessPolicy.requireStaffModeratablePost(postId, dormitoryId);
         post.removeAsModerator();
         Post saved = postRepository.save(post);
-        log.info("Staff {} moderated board post {} to REMOVED_MODERATOR", staff.getEmail(), postId);
+        log.info("Staff {} moderated board post {} to REMOVED_MODERATOR", staff.getId(), postId);
         return postMapper.toPostDto(saved, staff);
     }
 
@@ -80,6 +79,6 @@ public class PostModerationService {
         comment.softDelete();
         commentRepository.save(comment);
         log.info("Staff {} soft-deleted comment {} on post {}",
-                staff.getEmail(), commentId, post.getId());
+                staff.getId(), commentId, post.getId());
     }
 }

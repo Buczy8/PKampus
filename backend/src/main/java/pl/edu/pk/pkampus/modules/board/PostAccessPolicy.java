@@ -13,7 +13,6 @@ import pl.edu.pk.pkampus.modules.user.User;
 import pl.edu.pk.pkampus.modules.user.UserRole;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
 
-import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -88,15 +87,8 @@ public class PostAccessPolicy {
         return post;
     }
 
-    public String normalizeStatusFilter(String statusFilter) {
-        if (statusFilter == null || statusFilter.isBlank()) {
-            return "ACTIVE";
-        }
-        String normalized = statusFilter.trim().toUpperCase(Locale.ROOT);
-        return switch (normalized) {
-            case "ACTIVE", "RESOLVED", "ALL" -> normalized;
-            default -> throw new BusinessRuleException("status must be ACTIVE, RESOLVED, or ALL");
-        };
+    public PostStatus resolvePostStatus(String statusFilter, PostStatusFilter defaultIfBlank) {
+        return PostStatusFilter.from(statusFilter, defaultIfBlank).toPostStatus();
     }
 
     public PageRequest feedPageable(int page, int size) {

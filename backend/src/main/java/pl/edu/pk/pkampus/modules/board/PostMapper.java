@@ -2,12 +2,12 @@ package pl.edu.pk.pkampus.modules.board;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import pl.edu.pk.pkampus.common.config.TimeConfig;
 import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
 import pl.edu.pk.pkampus.modules.board.dto.PostDto;
 import pl.edu.pk.pkampus.modules.dormitory.RoomAssignmentRepository;
 import pl.edu.pk.pkampus.modules.user.User;
 
-import java.time.ZoneId;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -23,8 +23,6 @@ import java.util.stream.Collectors;
 @Component
 @RequiredArgsConstructor
 public class PostMapper {
-
-    private static final ZoneId WARSAW = ZoneId.of("Europe/Warsaw");
 
     private final RoomAssignmentRepository roomAssignmentRepository;
     private final CommentRepository commentRepository;
@@ -133,7 +131,7 @@ public class PostMapper {
                 dormName,
                 author.getId().equals(viewer.getId()),
                 commentCount,
-                post.getCreatedAt().atZone(WARSAW).toOffsetDateTime()
+                post.getCreatedAt().atZone(TimeConfig.WARSAW).toOffsetDateTime()
         );
     }
 
@@ -152,7 +150,7 @@ public class PostMapper {
                 roomNumber,
                 dormName,
                 author.getId().equals(viewer.getId()),
-                comment.getCreatedAt().atZone(WARSAW).toOffsetDateTime()
+                comment.getCreatedAt().atZone(TimeConfig.WARSAW).toOffsetDateTime()
         );
     }
 }

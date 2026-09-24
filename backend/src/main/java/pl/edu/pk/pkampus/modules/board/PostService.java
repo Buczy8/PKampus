@@ -3,10 +3,12 @@ package pl.edu.pk.pkampus.modules.board;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.PagedResponse;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
+import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
 import pl.edu.pk.pkampus.modules.board.dto.CreateCommentRequestDto;
 import pl.edu.pk.pkampus.modules.board.dto.CreatePostRequestDto;
@@ -41,9 +43,9 @@ public class PostService {
             int size
     ) {
         Dormitory dorm = accessPolicy.requireActiveResident(user);
-        String filter = accessPolicy.normalizeStatusFilter(statusFilter);
+        PostStatus status = accessPolicy.resolvePostStatus(statusFilter, PostStatusFilter.ACTIVE);
         Page<Post> posts = postRepository.findFeed(
-                dorm.getId(), category, scope, filter, accessPolicy.feedPageable(page, size));
+                dorm.getId(), category, scope, status, accessPolicy.feedPageable(page, size));
         List<PostDto> content = postMapper.toPostDtos(posts.getContent(), user);
         return PagedResponse.of(content, posts.getNumber(), posts.getSize(), posts.getTotalElements());
     }
@@ -73,7 +75,7 @@ public class PostService {
 
         Post saved = postRepository.saveAndFlush(post);
         log.info("Resident {} created board post {} ({}/{})",
-                user.getEmail(), saved.getId(), saved.getCategory(), saved.getScope());
+                user.getId(), saved.getId(), saved.getCategory(), saved.getScope());
         return postMapper.toPostDto(saved, user);
     }
 
@@ -92,7 +94,7 @@ public class PostService {
         Post post = accessPolicy.requireOwnVisiblePost(user, postId);
         post.softDelete();
         postRepository.save(post);
-        log.info("Resident {} soft-deleted board post {}", user.getEmail(), postId);
+        log.info("Resident {} soft-deleted board post {}", user.getId(), postId);
     }
 
     @Transactional(readOnly = true)
@@ -123,7 +125,24 @@ public class PostService {
                 .deleted(false)
                 .build();
         Comment saved = commentRepository.saveAndFlush(comment);
-        log.info("Resident {} commented on post {}", user.getEmail(), postId);
+        log.info("Resident {} commented on post {}", user.getId(), postId);
         return postMapper.toCommentDto(saved, post, user);
+    }
+
+    @Transactional
+    public void deleteComment(User user, UUID commentId) {
+        accessPolicy.requireActiveResident(user);
+        Comment comment = commentRepository.findByIdWithPost(commentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
+        if (comment.isDeleted()) {
+            throw new ResourceNotFoundException("Comment not found");
+        }
+        accessPolicy.requireVisiblePost(user, comment.getPost().getId());
+        if (!comment.getAuthor().getId().equals(user.getId())) {
+            throw new AccessDeniedException("Only the author can delete this comment");
+        }
+        comment.softDelete();
+        commentRepository.save(comment);
+        log.info("Resident {} soft-deleted comment {} on post {}", user.getId(), commentId, comment.getPost().getId());
     }
 }

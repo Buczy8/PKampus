@@ -28,11 +28,7 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
                            OR p.dormitory.id = :viewerDormitoryId)
                       AND (:category IS NULL OR p.category = :category)
                       AND (:scope IS NULL OR p.scope = :scope)
-                      AND (
-                            :statusFilter = 'ALL'
-                            OR (:statusFilter = 'ACTIVE' AND p.status = pl.edu.pk.pkampus.modules.board.PostStatus.ACTIVE)
-                            OR (:statusFilter = 'RESOLVED' AND p.status = pl.edu.pk.pkampus.modules.board.PostStatus.RESOLVED)
-                          )
+                      AND (:status IS NULL OR p.status = :status)
                     """,
             countQuery = """
                     SELECT COUNT(p) FROM Post p
@@ -42,17 +38,13 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
                            OR p.dormitory.id = :viewerDormitoryId)
                       AND (:category IS NULL OR p.category = :category)
                       AND (:scope IS NULL OR p.scope = :scope)
-                      AND (
-                            :statusFilter = 'ALL'
-                            OR (:statusFilter = 'ACTIVE' AND p.status = pl.edu.pk.pkampus.modules.board.PostStatus.ACTIVE)
-                            OR (:statusFilter = 'RESOLVED' AND p.status = pl.edu.pk.pkampus.modules.board.PostStatus.RESOLVED)
-                          )
+                      AND (:status IS NULL OR p.status = :status)
                     """)
     Page<Post> findFeed(
             @Param("viewerDormitoryId") UUID viewerDormitoryId,
             @Param("category") PostCategory category,
             @Param("scope") PostScope scope,
-            @Param("statusFilter") String statusFilter,
+            @Param("status") PostStatus status,
             Pageable pageable
     );
 
@@ -75,12 +67,8 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
                       AND p.scope = pl.edu.pk.pkampus.modules.board.PostScope.DORMITORY
                       AND p.dormitory.id = :dormitoryId
                       AND p.status <> pl.edu.pk.pkampus.modules.board.PostStatus.REMOVED_MODERATOR
-                      AND (:categoryEmpty = true OR p.category = :category)
-                      AND (
-                            :statusFilter = 'ALL'
-                            OR (:statusFilter = 'ACTIVE' AND p.status = pl.edu.pk.pkampus.modules.board.PostStatus.ACTIVE)
-                            OR (:statusFilter = 'RESOLVED' AND p.status = pl.edu.pk.pkampus.modules.board.PostStatus.RESOLVED)
-                          )
+                      AND (:category IS NULL OR p.category = :category)
+                      AND (:status IS NULL OR p.status = :status)
                     """,
             countQuery = """
                     SELECT COUNT(p) FROM Post p
@@ -88,18 +76,13 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
                       AND p.scope = pl.edu.pk.pkampus.modules.board.PostScope.DORMITORY
                       AND p.dormitory.id = :dormitoryId
                       AND p.status <> pl.edu.pk.pkampus.modules.board.PostStatus.REMOVED_MODERATOR
-                      AND (:categoryEmpty = true OR p.category = :category)
-                      AND (
-                            :statusFilter = 'ALL'
-                            OR (:statusFilter = 'ACTIVE' AND p.status = pl.edu.pk.pkampus.modules.board.PostStatus.ACTIVE)
-                            OR (:statusFilter = 'RESOLVED' AND p.status = pl.edu.pk.pkampus.modules.board.PostStatus.RESOLVED)
-                          )
+                      AND (:category IS NULL OR p.category = :category)
+                      AND (:status IS NULL OR p.status = :status)
                     """)
     Page<Post> findStaffDormitoryFeed(
             @Param("dormitoryId") UUID dormitoryId,
-            @Param("categoryEmpty") boolean categoryEmpty,
             @Param("category") PostCategory category,
-            @Param("statusFilter") String statusFilter,
+            @Param("status") PostStatus status,
             Pageable pageable
     );
 

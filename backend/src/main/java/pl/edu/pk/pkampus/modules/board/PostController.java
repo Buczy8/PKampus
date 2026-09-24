@@ -102,4 +102,14 @@ public class PostController {
         postService.softDelete(user, id);
         return ResponseEntity.ok(ApiResponse.ok(null, "Post deleted"));
     }
+
+    @DeleteMapping("/comments/{commentId}")
+    @Operation(summary = "Soft-delete own comment")
+    public ResponseEntity<ApiResponse<Void>> deleteComment(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID commentId
+    ) {
+        postService.deleteComment(user, commentId);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Comment deleted"));
+    }
 }
