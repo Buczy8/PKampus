@@ -143,17 +143,6 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
             """)
     List<UUID> findPostIdsForRetention(
             @Param("resolvedCutoff") Instant resolvedCutoff,
-            @Param("deletedCutoff") Instant deletedCutoff
-    );
-
-    @Query("""
-            SELECT p.id FROM Post p
-            WHERE (p.status = pl.edu.pk.pkampus.modules.board.PostStatus.RESOLVED AND p.updatedAt < :resolvedCutoff)
-               OR (p.deleted = TRUE AND p.deletedAt < :deletedCutoff)
-               OR (p.status = pl.edu.pk.pkampus.modules.board.PostStatus.REMOVED_MODERATOR AND p.updatedAt < :deletedCutoff)
-            """)
-    List<UUID> findPostIdsForRetention(
-            @Param("resolvedCutoff") Instant resolvedCutoff,
             @Param("deletedCutoff") Instant deletedCutoff,
             org.springframework.data.domain.Pageable pageable
     );
