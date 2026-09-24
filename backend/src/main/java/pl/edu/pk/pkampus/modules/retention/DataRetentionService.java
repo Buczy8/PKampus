@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
 import pl.edu.pk.pkampus.modules.board.BoardRetentionService;
 import pl.edu.pk.pkampus.modules.issues.IssuePhoto;
@@ -53,7 +52,13 @@ public class DataRetentionService {
     @Value("${app.scheduling.retention.checked-out-anonymize-days:365}")
     private int checkedOutAnonymizeDays = 365;
 
-    @Transactional
+    /**
+     * Runs all retention tasks. Intentionally NOT wrapped in a single transaction:
+     * MinIO deletions are non-transactional I/O and must not hold a DB connection,
+     * and each purge step is independently transactional (see repository and
+     * {@link BoardRetentionService} annotations) so partial progress survives
+     * a later step failing.
+     */
     public DataRetentionReportDto runRetentionTasks() {
         long startTime = System.currentTimeMillis();
         Instant now = Instant.now();

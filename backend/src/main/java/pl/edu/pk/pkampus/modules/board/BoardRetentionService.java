@@ -18,20 +18,30 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class BoardRetentionService {
 
+    private static final int PURGE_BATCH_SIZE = 500;
+
     private final PostRepository postRepository;
     private final CommentRepository commentRepository;
 
     @Transactional
     public int purgeOldPosts(Instant resolvedCutoff, Instant deletedCutoff) {
-        List<UUID> postIds = postRepository.findPostIdsForRetention(resolvedCutoff, deletedCutoff);
-        if (postIds.isEmpty()) {
-            return 0;
+        int totalRemoved = 0;
+        List<UUID> batch;
+        do {
+            batch = postRepository.findPostIdsForRetention(
+                    resolvedCutoff,
+                    deletedCutoff,
+                    org.springframework.data.domain.PageRequest.of(0, PURGE_BATCH_SIZE));
+            if (batch.isEmpty()) {
+                break;
+            }
+            commentRepository.deleteByPostIdIn(batch);
+            totalRemoved += postRepository.deleteByIdIn(batch);
+        } while (batch.size() >= PURGE_BATCH_SIZE);
+        if (totalRemoved > 0) {
+            log.info("Purged {} old/resolved/deleted board posts", totalRemoved);
         }
-
-        commentRepository.deleteByPostIdIn(postIds);
-        int removed = postRepository.deleteByIdIn(postIds);
-        log.info("Purged {} old/resolved/deleted board posts", removed);
-        return removed;
+        return totalRemoved;
     }
 
     @Transactional

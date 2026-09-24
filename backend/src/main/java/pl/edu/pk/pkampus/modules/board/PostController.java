@@ -26,7 +26,6 @@ import pl.edu.pk.pkampus.modules.board.dto.CreatePostRequestDto;
 import pl.edu.pk.pkampus.modules.board.dto.PostDto;
 import pl.edu.pk.pkampus.modules.user.User;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController

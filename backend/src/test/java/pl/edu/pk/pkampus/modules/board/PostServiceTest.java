@@ -656,7 +656,6 @@ class PostServiceTest {
                     .build();
 
             when(commentRepository.findByIdWithPost(commentId)).thenReturn(Optional.of(comment));
-            when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
 
             // Act
             postService.deleteComment(residentAuthor, commentId);
@@ -688,7 +687,6 @@ class PostServiceTest {
 
             when(userRepository.findById(residentSameDorm.getId())).thenReturn(Optional.of(residentSameDorm));
             when(commentRepository.findByIdWithPost(commentId)).thenReturn(Optional.of(comment));
-            when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
 
             // Act & Assert
             assertThrows(AccessDeniedException.class,

@@ -29,17 +29,17 @@ class PostDomainTest {
     }
 
     @Test
-    @DisplayName("Repeated removeAsModerator throws instead of silently re-setting status")
-    void removeAsModeratorGuardsRepeatedRemoval() {
+    @DisplayName("Repeated removeAsModerator is a no-op for retry safety")
+    void removeAsModeratorIsIdempotent() {
         // Arrange
         Post post = activePost();
 
         // Act
         post.removeAsModerator();
+        post.removeAsModerator();
 
         // Assert
         assertEquals(PostStatus.REMOVED_MODERATOR, post.getStatus());
-        assertThrows(BusinessRuleException.class, post::removeAsModerator);
     }
 
     @Test

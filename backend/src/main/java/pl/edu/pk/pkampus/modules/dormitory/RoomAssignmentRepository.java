@@ -13,10 +13,10 @@ import java.util.UUID;
 @Repository
 public interface RoomAssignmentRepository extends JpaRepository<RoomAssignment, UUID> {
 
-    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"room"})
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"room", "user"})
     Optional<RoomAssignment> findByUserIdAndIsActiveTrue(UUID userId);
 
-    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"room"})
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"room", "user"})
     @Query("SELECT a FROM RoomAssignment a WHERE a.user.id IN :userIds AND a.isActive = true")
     List<RoomAssignment> findActiveByUserIdIn(@Param("userIds") Collection<UUID> userIds);
 

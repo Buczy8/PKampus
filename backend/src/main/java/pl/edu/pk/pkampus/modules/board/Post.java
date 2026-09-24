@@ -112,11 +112,12 @@ public class Post {
     /**
      * Hides the post from residents. Only staff can trigger this via
      * {@code PostModerationService.removePostAsModerator} after the
-     * dormitory/scope checks in {@code PostAccessPolicy}.
+     * dormitory/scope checks in {@code PostAccessPolicy}. Repeating the call
+     * is a no-op for retry safety (network retries, double clicks).
      */
     public void removeAsModerator() {
         if (this.status == PostStatus.REMOVED_MODERATOR) {
-            throw new BusinessRuleException("Post is already removed by moderator");
+            return;
         }
         this.status = PostStatus.REMOVED_MODERATOR;
     }

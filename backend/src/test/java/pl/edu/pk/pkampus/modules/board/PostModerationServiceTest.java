@@ -317,7 +317,6 @@ class PostModerationServiceTest {
                 .build();
 
         when(commentRepository.findByIdWithPost(commentId)).thenReturn(Optional.of(comment));
-        when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
 
         // Act
         moderationService.removeCommentAsModerator(staffDormAdmin, commentId);

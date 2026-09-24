@@ -133,7 +133,8 @@ public interface LaundryBookingRepository extends JpaRepository<LaundryBooking, 
             @Param("cutoff") Instant cutoff
     );
 
-    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
     @Query("""
             DELETE FROM LaundryBooking b
             WHERE b.status IN :statuses

@@ -101,6 +101,17 @@ class PostAccessPolicy {
     public Post requireVisiblePost(User freshUser, UUID postId) {
         Post post = postRepository.findByIdAndNotDeleted(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+        return requireVisiblePost(freshUser, post);
+    }
+
+    /**
+     * Visibility check against an already-loaded post. Avoids a second SELECT
+     * when the caller already fetched the post (e.g. via {@code findByIdWithPost}).
+     */
+    public Post requireVisiblePost(User freshUser, Post post) {
+        if (post == null || post.isDeleted()) {
+            throw new ResourceNotFoundException("Post not found");
+        }
         if (post.getStatus() == PostStatus.REMOVED_MODERATOR) {
             throw new ResourceNotFoundException("Post not found");
         }
@@ -124,6 +135,17 @@ class PostAccessPolicy {
     public Post requireModeratablePost(UUID postId, ModeratorScope scope) {
         Post post = postRepository.findByIdAndNotDeleted(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+        return requireModeratablePost(post, scope);
+    }
+
+    /**
+     * Moderation check against an already-loaded post. Avoids a second SELECT
+     * when the caller already holds the post (e.g. via {@code findByIdWithPost}).
+     */
+    public Post requireModeratablePost(Post post, ModeratorScope scope) {
+        if (post == null || post.isDeleted()) {
+            throw new ResourceNotFoundException("Post not found");
+        }
         if (post.getStatus() == PostStatus.REMOVED_MODERATOR) {
             throw new ResourceNotFoundException("Post not found");
         }

@@ -63,13 +63,16 @@ public class PostService {
     public PostDto create(User user, CreatePostRequestDto request) {
         User current = accessPolicy.requireActiveResidentUser(user);
         Dormitory dorm = current.getDormitory();
-        rateLimiterService.checkPostRateLimit(current.getId());
 
         String title = request.title().trim();
         String content = request.content().trim();
         if (title.isEmpty() || content.isEmpty()) {
             throw new BusinessRuleException("Title and content are required");
         }
+        rejectHtml(title, "Title");
+        rejectHtml(content, "Content");
+
+        rateLimiterService.checkPostRateLimit(current.getId());
 
         Dormitory postDorm = request.scope() == PostScope.DORMITORY ? dorm : null;
 
@@ -121,7 +124,6 @@ public class PostService {
     @Transactional
     public CommentDto addComment(User user, UUID postId, CreateCommentRequestDto request) {
         User current = accessPolicy.requireActiveResidentUser(user);
-        rateLimiterService.checkCommentRateLimit(current.getId());
         Post post = accessPolicy.requireVisiblePost(current, postId);
         if (post.getStatus() == PostStatus.REMOVED_MODERATOR) {
             throw new BusinessRuleException("Cannot comment on a removed post");
@@ -131,6 +133,9 @@ public class PostService {
         if (content.isEmpty()) {
             throw new BusinessRuleException("Comment content is required");
         }
+        rejectHtml(content, "Comment content");
+
+        rateLimiterService.checkCommentRateLimit(current.getId());
 
         Comment comment = Comment.builder()
                 .post(post)
@@ -151,12 +156,26 @@ public class PostService {
         if (comment.isDeleted()) {
             throw new ResourceNotFoundException("Comment not found");
         }
-        accessPolicy.requireVisiblePost(current, comment.getPost().getId());
+        accessPolicy.requireVisiblePost(current, comment.getPost());
         if (!comment.getAuthor().getId().equals(current.getId())) {
             throw new AccessDeniedException("Only the author can delete this comment");
         }
         comment.softDelete();
         commentRepository.save(comment);
         log.info("Resident {} soft-deleted comment {} on post {}", current.getId(), commentId, comment.getPost().getId());
+    }
+
+    private static final java.util.regex.Pattern HTML_TAG =
+            java.util.regex.Pattern.compile("<\\s*/?\\s*[a-zA-Z][^>]*>");
+
+    /**
+     * Defense-in-depth against stored XSS. React escapes by default, but the API
+     * must not persist HTML tags — one {@code dangerouslySetInnerHTML} on the
+     * frontend would otherwise turn stored content into an XSS payload.
+     */
+    static void rejectHtml(String value, String fieldLabel) {
+        if (value != null && HTML_TAG.matcher(value).find()) {
+            throw new BusinessRuleException(fieldLabel + " must not contain HTML");
+        }
     }
 }

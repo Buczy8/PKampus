@@ -16,6 +16,11 @@ import java.util.UUID;
 /**
  * Token-bucket rate limiter per authenticated resident for community board operations.
  * Protects against spamming posts and comments.
+ *
+ * <p>MVP note: buckets live in a local Caffeine cache (single JVM). With more
+ * than one application instance limits are enforced per instance, and a restart
+ * clears history. For a multi-instance deployment replace this with a shared
+ * store (e.g. Redis + Bucket4j distributed proxy).
  */
 @Service
 class BoardRateLimiterService {
@@ -73,11 +78,13 @@ class BoardRateLimiterService {
     void setPostLimits(long capacity, long durationMinutes) {
         this.postCapacity = capacity;
         this.postDurationMinutes = durationMinutes;
+        buckets.invalidateAll();
     }
 
     void setCommentLimits(long capacity, long durationMinutes) {
         this.commentCapacity = capacity;
         this.commentDurationMinutes = durationMinutes;
+        buckets.invalidateAll();
     }
 
     private Bucket createPostBucket() {

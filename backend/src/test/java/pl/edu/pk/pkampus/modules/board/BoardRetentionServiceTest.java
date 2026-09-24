@@ -13,6 +13,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,7 +37,8 @@ class BoardRetentionServiceTest {
         // Arrange
         Instant resolvedCutoff = Instant.now().minusSeconds(3600);
         Instant deletedCutoff = Instant.now().minusSeconds(1800);
-        when(postRepository.findPostIdsForRetention(resolvedCutoff, deletedCutoff)).thenReturn(List.of());
+        when(postRepository.findPostIdsForRetention(eq(resolvedCutoff), eq(deletedCutoff), any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(List.of());
 
         // Act
         int result = boardRetentionService.purgeOldPosts(resolvedCutoff, deletedCutoff);
@@ -54,7 +56,9 @@ class BoardRetentionServiceTest {
         Instant resolvedCutoff = Instant.now().minusSeconds(3600);
         Instant deletedCutoff = Instant.now().minusSeconds(1800);
         List<UUID> postIds = List.of(UUID.randomUUID(), UUID.randomUUID());
-        when(postRepository.findPostIdsForRetention(resolvedCutoff, deletedCutoff)).thenReturn(postIds);
+        when(postRepository.findPostIdsForRetention(eq(resolvedCutoff), eq(deletedCutoff), any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(postIds)
+                .thenReturn(List.of());
         when(postRepository.deleteByIdIn(postIds)).thenReturn(2);
 
         // Act

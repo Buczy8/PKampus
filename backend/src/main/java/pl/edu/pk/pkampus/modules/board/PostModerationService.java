@@ -89,7 +89,7 @@ public class PostModerationService {
             throw new ResourceNotFoundException("Comment not found");
         }
         Post post = comment.getPost();
-        accessPolicy.requireModeratablePost(post.getId(), scope);
+        accessPolicy.requireModeratablePost(post, scope);
         comment.softDelete();
         commentRepository.save(comment);
         log.info("Staff {} soft-deleted comment {} on post {}",
