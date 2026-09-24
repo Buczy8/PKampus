@@ -13,7 +13,7 @@ import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.mail.EmailService;
 import pl.edu.pk.pkampus.modules.board.PostCategory;
-import pl.edu.pk.pkampus.modules.board.PostService;
+import pl.edu.pk.pkampus.modules.board.PostModerationService;
 import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
 import pl.edu.pk.pkampus.modules.board.dto.PostDto;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
@@ -105,7 +105,7 @@ class ReceptionistServiceTest {
     private EventService eventService;
 
     @Mock
-    private PostService postService;
+    private PostModerationService postModerationService;
 
     @Mock
     private EmailService emailService;
@@ -623,15 +623,15 @@ class ReceptionistServiceTest {
         }
 
         @Test
-        @DisplayName("listBoardPosts, removeBoardPost, listBoardComments, removeBoardComment delegate to postService")
+        @DisplayName("listBoardPosts, removeBoardPost, listBoardComments, removeBoardComment delegate to postModerationService")
         void postDelegations() {
             // Arrange
             UUID postId = UUID.randomUUID();
             UUID commentId = UUID.randomUUID();
 
-            when(postService.listForStaff(staff, PostCategory.GENERAL, "ALL", 0, 20)).thenReturn(PagedResponse.of(List.of(), 0, 20, 0));
-            when(postService.removePostAsModerator(staff, postId)).thenReturn(null);
-            when(postService.listCommentsForStaff(staff, postId)).thenReturn(List.of());
+            when(postModerationService.listForStaff(staff, PostCategory.GENERAL, "ALL", 0, 20)).thenReturn(PagedResponse.of(List.of(), 0, 20, 0));
+            when(postModerationService.removePostAsModerator(staff, postId)).thenReturn(null);
+            when(postModerationService.listCommentsForStaff(staff, postId)).thenReturn(List.of());
 
             // Act
             service.listBoardPosts(staff, PostCategory.GENERAL, "ALL", 0, 20);
@@ -640,10 +640,10 @@ class ReceptionistServiceTest {
             service.removeBoardComment(staff, commentId);
 
             // Assert
-            verify(postService).listForStaff(staff, PostCategory.GENERAL, "ALL", 0, 20);
-            verify(postService).removePostAsModerator(staff, postId);
-            verify(postService).listCommentsForStaff(staff, postId);
-            verify(postService).removeCommentAsModerator(staff, commentId);
+            verify(postModerationService).listForStaff(staff, PostCategory.GENERAL, "ALL", 0, 20);
+            verify(postModerationService).removePostAsModerator(staff, postId);
+            verify(postModerationService).listCommentsForStaff(staff, postId);
+            verify(postModerationService).removeCommentAsModerator(staff, commentId);
         }
     }
 }

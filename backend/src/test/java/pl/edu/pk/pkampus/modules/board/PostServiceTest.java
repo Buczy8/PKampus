@@ -51,7 +51,8 @@ class PostServiceTest {
     @Mock
     private RoomAssignmentRepository roomAssignmentRepository;
 
-    @InjectMocks
+    private PostMapper postMapper;
+    private PostAccessPolicy accessPolicy;
     private PostService postService;
 
     private Dormitory dorm1;
@@ -65,6 +66,10 @@ class PostServiceTest {
 
     @BeforeEach
     void setUp() {
+        postMapper = new PostMapper(roomAssignmentRepository, commentRepository);
+        accessPolicy = new PostAccessPolicy(postRepository);
+        postService = new PostService(postRepository, commentRepository, postMapper, accessPolicy);
+
         dorm1 = Dormitory.builder()
                 .id(UUID.randomUUID())
                 .name("DS Board 1")
@@ -551,112 +556,6 @@ class PostServiceTest {
             assertEquals(1, result.size());
             assertEquals("Komentarz testowy", result.getFirst().content());
             assertEquals("Jan Kowalski", result.getFirst().authorDisplayName());
-        }
-    }
-
-    @Nested
-    @DisplayName("staff moderation")
-    class StaffModeration {
-
-        @Test
-        @DisplayName("Should list dormitory posts for staff")
-        void listForStaffSuccess() {
-            // Arrange
-            when(postRepository.findStaffDormitoryFeed(eq(dorm1.getId()), eq(false), eq(PostCategory.BORROW_HELP), eq("ACTIVE"), any(Pageable.class)))
-                    .thenReturn(new PageImpl<>(List.of(postDormitory)));
-            when(commentRepository.countActiveByPostIds(List.of(postId)))
-                    .thenReturn(List.of());
-
-            // Act
-            PagedResponse<PostDto> result = postService.listForStaff(staffDormAdmin, PostCategory.BORROW_HELP, "ACTIVE", 0, 20);
-
-            // Assert
-            assertEquals(1, result.content().size());
-            assertEquals(1, result.totalElements());
-            assertEquals(postId, result.content().getFirst().id());
-        }
-
-        @Test
-        @DisplayName("Should remove DORMITORY post as moderator")
-        void removePostAsModeratorSuccess() {
-            // Arrange
-            when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
-            when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
-            when(commentRepository.countActiveByPostId(postId)).thenReturn(3L);
-
-            // Act
-            PostDto result = postService.removePostAsModerator(staffDormAdmin, postId);
-
-            // Assert
-            assertEquals(PostStatus.REMOVED_MODERATOR, result.status());
-            assertEquals(PostStatus.REMOVED_MODERATOR, postDormitory.getStatus());
-            assertEquals(3, result.commentCount());
-            verify(postRepository).save(postDormitory);
-            verify(commentRepository).countActiveByPostId(postId);
-        }
-
-        @Test
-        @DisplayName("Should not allow staff to moderate CAMPUS scope posts")
-        void removePostAsModeratorThrowsOnCampusScope() {
-            // Arrange
-            when(postRepository.findByIdAndNotDeleted(postCampus.getId())).thenReturn(Optional.of(postCampus));
-
-            // Act & Assert
-            assertThrows(ResourceNotFoundException.class,
-                    () -> postService.removePostAsModerator(staffDormAdmin, postCampus.getId()));
-            verify(postRepository, never()).save(any());
-        }
-
-        @Test
-        @DisplayName("Should throw AccessDeniedException when resident tries to use staff moderation")
-        void removePostThrowsWhenNotStaff() {
-            // Act & Assert
-            assertThrows(AccessDeniedException.class,
-                    () -> postService.removePostAsModerator(residentAuthor, postId));
-        }
-
-        @Test
-        @DisplayName("Should remove comment as moderator")
-        void removeCommentAsModeratorSuccess() {
-            // Arrange
-            UUID commentId = UUID.randomUUID();
-            Comment comment = Comment.builder()
-                    .id(commentId)
-                    .post(postDormitory)
-                    .author(residentAuthor)
-                    .content("Inappropriate comment")
-                    .deleted(false)
-                    .build();
-
-            when(commentRepository.findByIdWithPost(commentId)).thenReturn(Optional.of(comment));
-            when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
-
-            // Act
-            postService.removeCommentAsModerator(staffDormAdmin, commentId);
-
-            // Assert
-            assertTrue(comment.isDeleted());
-            assertNotNull(comment.getDeletedAt());
-            verify(commentRepository).save(comment);
-        }
-
-        @Test
-        @DisplayName("Should throw ResourceNotFoundException when comment already deleted")
-        void removeCommentThrowsWhenAlreadyDeleted() {
-            // Arrange
-            UUID commentId = UUID.randomUUID();
-            Comment comment = Comment.builder()
-                    .id(commentId)
-                    .post(postDormitory)
-                    .deleted(true)
-                    .build();
-
-            when(commentRepository.findByIdWithPost(commentId)).thenReturn(Optional.of(comment));
-
-            // Act & Assert
-            assertThrows(ResourceNotFoundException.class,
-                    () -> postService.removeCommentAsModerator(staffDormAdmin, commentId));
-            verify(commentRepository, never()).save(any());
         }
     }
 }

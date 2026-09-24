@@ -9,7 +9,7 @@ import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.mail.EmailService;
 import pl.edu.pk.pkampus.common.PagedResponse;
 import pl.edu.pk.pkampus.modules.board.PostCategory;
-import pl.edu.pk.pkampus.modules.board.PostService;
+import pl.edu.pk.pkampus.modules.board.PostModerationService;
 import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
 import pl.edu.pk.pkampus.modules.board.dto.PostDto;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
@@ -97,7 +97,7 @@ public class ReceptionistService {
     private final IssueRepository issueRepository;
     private final IssueService issueService;
     private final EventService eventService;
-    private final PostService postService;
+    private final PostModerationService postModerationService;
     private final EmailService emailService;
 
     @Transactional(readOnly = true)
@@ -181,24 +181,20 @@ public class ReceptionistService {
         eventService.deleteForStaff(actor, id);
     }
 
-    @Transactional(readOnly = true)
     public PagedResponse<PostDto> listBoardPosts(User actor, PostCategory category, String status, int page, int size) {
-        return postService.listForStaff(actor, category, status, page, size);
+        return postModerationService.listForStaff(actor, category, status, page, size);
     }
 
-    @Transactional
     public PostDto removeBoardPost(User actor, UUID postId) {
-        return postService.removePostAsModerator(actor, postId);
+        return postModerationService.removePostAsModerator(actor, postId);
     }
 
-    @Transactional(readOnly = true)
     public List<CommentDto> listBoardComments(User actor, UUID postId) {
-        return postService.listCommentsForStaff(actor, postId);
+        return postModerationService.listCommentsForStaff(actor, postId);
     }
 
-    @Transactional
     public void removeBoardComment(User actor, UUID commentId) {
-        postService.removeCommentAsModerator(actor, commentId);
+        postModerationService.removeCommentAsModerator(actor, commentId);
     }
 
     @Transactional(readOnly = true)
