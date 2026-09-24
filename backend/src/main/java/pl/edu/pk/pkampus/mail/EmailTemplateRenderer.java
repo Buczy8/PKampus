@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -250,7 +251,10 @@ class EmailTemplateRenderer {
         String withLinkUrls = ANCHOR_WITH_TEXT.matcher(html).replaceAll(match -> {
             String href = match.group(1);
             String text = HTML_TAGS.matcher(match.group(2)).replaceAll(" ").trim();
-            return href.equals(text) || text.isEmpty() ? href : text + " (" + href + ")";
+            String replacement = href.equals(text) || text.isEmpty() ? href : text + " (" + href + ")";
+            // replaceAll feeds the lambda result through appendReplacement, which
+            // parses $ and \ as group references unless the replacement is quoted
+            return Matcher.quoteReplacement(replacement);
         });
         String withBreaks = BLOCK_BOUNDARY.matcher(withLinkUrls).replaceAll("\n");
         String stripped = HTML_TAGS.matcher(withBreaks).replaceAll(" ");

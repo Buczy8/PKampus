@@ -53,6 +53,19 @@ class EmailTemplateRendererTest {
     }
 
     @Test
+    @DisplayName("Should treat $ and backslash in anchor text and URLs literally")
+    void shouldQuoteAnchorReplacementCharacters() {
+        // Arrange
+        String html = "<p>Fee: <a href=\"http://x?cost=$5\">pay \\$5 now</a></p>";
+
+        // Act
+        String plain = EmailTemplateRenderer.toPlainText(html);
+
+        // Assert
+        assertEquals("Fee: pay \\$5 now (http://x?cost=$5)", plain);
+    }
+
+    @Test
     @DisplayName("Should build verification email using UriComponentsBuilder")
     void shouldRenderVerificationEmailWithUriComponents() {
         // Act
