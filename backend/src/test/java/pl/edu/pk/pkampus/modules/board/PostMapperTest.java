@@ -3,98 +3,125 @@ package pl.edu.pk.pkampus.modules.board;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
 import pl.edu.pk.pkampus.modules.board.dto.PostDto;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
-import pl.edu.pk.pkampus.modules.dormitory.Room;
-import pl.edu.pk.pkampus.modules.dormitory.RoomAssignment;
-import pl.edu.pk.pkampus.modules.dormitory.RoomAssignmentRepository;
 import pl.edu.pk.pkampus.modules.user.User;
 import pl.edu.pk.pkampus.modules.user.UserRole;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
 
 import java.time.Instant;
-import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
-@ExtendWith(MockitoExtension.class)
-@DisplayName("PostMapper unit tests (AAA)")
+@DisplayName("PostMapper pure mapping unit tests (AAA)")
 class PostMapperTest {
-
-    @Mock
-    private RoomAssignmentRepository roomAssignmentRepository;
-
-    @Mock
-    private CommentRepository commentRepository;
 
     private PostMapper postMapper;
 
     private Dormitory dorm;
-    private User authorWithAssignment;
-    private User authorWithoutAssignment;
+    private User author;
     private User viewer;
 
     @BeforeEach
     void setUp() {
-        postMapper = new PostMapper(roomAssignmentRepository, commentRepository);
+        postMapper = new PostMapper();
 
         dorm = Dormitory.builder()
                 .id(UUID.randomUUID())
-                .name("DS Mapper")
+                .name("DS-1 Olimp")
                 .build();
 
-        authorWithAssignment = resident("Jan", "Kowalski", "999");
-        authorWithoutAssignment = resident("Anna", "Nowak", "105");
-        viewer = resident("Ewa", "Wiśniewska", "310");
+        author = User.builder()
+                .id(UUID.randomUUID())
+                .firstName("Jan")
+                .lastName("Kowalski")
+                .role(UserRole.RESIDENT)
+                .status(UserStatus.ACTIVE)
+                .dormitory(dorm)
+                .declaredRoomNumber("101")
+                .build();
+
+        viewer = User.builder()
+                .id(UUID.randomUUID())
+                .firstName("Ewa")
+                .lastName("Nowak")
+                .role(UserRole.RESIDENT)
+                .status(UserStatus.ACTIVE)
+                .dormitory(dorm)
+                .declaredRoomNumber("202")
+                .build();
     }
 
     @Test
-    @DisplayName("Should batch room numbers with fallback to declared room")
-    void toPostDtosBatchWithFallback() {
+    @DisplayName("Should map post to DTO with assigned room and author display name")
+    void toDto_withAssignedRoom_usesAssignedRoom() {
         // Arrange
-        Post withRoom = dormPost(authorWithAssignment);
-        Post withoutRoom = dormPost(authorWithoutAssignment);
-        Room room = Room.builder().roomNumber("201-A").build();
+        Post post = Post.builder()
+                .id(UUID.randomUUID())
+                .author(author)
+                .dormitory(dorm)
+                .title("Książka")
+                .content("Do oddania")
+                .category(PostCategory.GENERAL)
+                .scope(PostScope.DORMITORY)
+                .status(PostStatus.ACTIVE)
+                .deleted(false)
+                .createdAt(Instant.now())
+                .build();
 
-        when(commentRepository.countActiveByPostIds(List.of(withRoom.getId(), withoutRoom.getId())))
-                .thenReturn(List.<Object[]>of(new Object[]{withRoom.getId(), 2L}));
-        when(roomAssignmentRepository.findActiveByUserIdIn(
-                List.of(authorWithAssignment.getId(), authorWithoutAssignment.getId())))
-                .thenReturn(List.of(RoomAssignment.builder()
-                        .user(authorWithAssignment)
-                        .room(room)
-                        .isActive(true)
-                        .build()));
+        Map<UUID, String> rooms = Map.of(author.getId(), "315-B");
 
         // Act
-        List<PostDto> result = postMapper.toPostDtos(List.of(withRoom, withoutRoom), viewer);
+        PostDto dto = postMapper.toDto(post, viewer, 3, rooms);
 
         // Assert
-        assertEquals(2, result.size());
-        assertEquals("201-A", result.get(0).authorRoomNumber());
-        assertEquals(2, result.get(0).commentCount());
-        assertEquals("105", result.get(1).authorRoomNumber());
-        assertEquals(0, result.get(1).commentCount());
-        verify(roomAssignmentRepository, times(1)).findActiveByUserIdIn(any());
+        assertThat(dto.id()).isEqualTo(post.getId());
+        assertThat(dto.title()).isEqualTo("Książka");
+        assertThat(dto.authorDisplayName()).isEqualTo("Jan Kowalski");
+        assertThat(dto.authorRoomNumber()).isEqualTo("315-B");
+        assertThat(dto.authorDormitoryName()).isEqualTo("DS-1 Olimp");
+        assertThat(dto.commentCount()).isEqualTo(3);
+        assertThat(dto.mine()).isFalse();
     }
 
     @Test
-    @DisplayName("Should hide room number for CAMPUS scope without querying assignments")
-    void campusScopeHidesRoom() {
+    @DisplayName("Should fallback to declared room when no assignment present in room map")
+    void toDto_withoutAssignedRoom_fallbacksToDeclaredRoom() {
         // Arrange
-        Post campus = Post.builder()
+        Post post = Post.builder()
                 .id(UUID.randomUUID())
-                .author(authorWithAssignment)
+                .author(author)
+                .dormitory(dorm)
+                .title("Książka")
+                .content("Do oddania")
+                .category(PostCategory.GENERAL)
+                .scope(PostScope.DORMITORY)
+                .status(PostStatus.ACTIVE)
+                .deleted(false)
+                .createdAt(Instant.now())
+                .build();
+
+        // Act
+        PostDto dto = postMapper.toDto(post, author, 0, Map.of());
+
+        // Assert
+        assertThat(dto.authorRoomNumber()).isEqualTo("101");
+        assertThat(dto.mine()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Should hide room number for CAMPUS scope")
+    void toDto_campusScope_hidesRoomNumber() {
+        // Arrange
+        Post post = Post.builder()
+                .id(UUID.randomUUID())
+                .author(author)
                 .dormitory(null)
                 .title("Sprzedam rower")
-                .content("Treść")
+                .content("Opis")
                 .category(PostCategory.BUY_SELL)
                 .scope(PostScope.CAMPUS)
                 .status(PostStatus.ACTIVE)
@@ -102,69 +129,46 @@ class PostMapperTest {
                 .createdAt(Instant.now())
                 .build();
 
-        when(commentRepository.countActiveByPostIds(List.of(campus.getId())))
-                .thenReturn(List.of());
+        Map<UUID, String> rooms = Map.of(author.getId(), "315-B");
 
         // Act
-        List<PostDto> result = postMapper.toPostDtos(List.of(campus), viewer);
+        PostDto dto = postMapper.toDto(post, viewer, 1, rooms);
 
         // Assert
-        assertNull(result.getFirst().authorRoomNumber());
-        assertEquals("DS Mapper", result.getFirst().authorDormitoryName());
-        verify(roomAssignmentRepository, never()).findActiveByUserIdIn(any());
+        assertThat(dto.authorRoomNumber()).isNull();
+        assertThat(dto.authorDormitoryName()).isEqualTo("DS-1 Olimp");
     }
 
     @Test
-    @DisplayName("Should map single comment with room batch of one")
-    void toCommentDtoSingle() {
+    @DisplayName("Should map comment to DTO with proper display name and room number")
+    void toCommentDto_validComment_mapsProperly() {
         // Arrange
-        Post post = dormPost(authorWithAssignment);
-        Comment comment = Comment.builder()
-                .id(UUID.randomUUID())
-                .post(post)
-                .author(authorWithoutAssignment)
-                .content("Mogę pożyczyć")
-                .deleted(false)
-                .createdAt(Instant.now())
-                .build();
-
-        when(roomAssignmentRepository.findActiveByUserIdIn(List.of(authorWithoutAssignment.getId())))
-                .thenReturn(List.of());
-
-        // Act
-        CommentDto result = postMapper.toCommentDto(comment, post, viewer);
-
-        // Assert
-        assertEquals("Mogę pożyczyć", result.content());
-        assertEquals("105", result.authorRoomNumber());
-        assertFalse(result.mine());
-    }
-
-    private User resident(String firstName, String lastName, String declaredRoom) {
-        return User.builder()
-                .id(UUID.randomUUID())
-                .email(firstName + "." + lastName + UUID.randomUUID() + "@pk.edu.pl")
-                .firstName(firstName)
-                .lastName(lastName)
-                .role(UserRole.RESIDENT)
-                .status(UserStatus.ACTIVE)
-                .dormitory(dorm)
-                .declaredRoomNumber(declaredRoom)
-                .build();
-    }
-
-    private Post dormPost(User author) {
-        return Post.builder()
+        Post post = Post.builder()
                 .id(UUID.randomUUID())
                 .author(author)
                 .dormitory(dorm)
-                .title("Tytuł")
-                .content("Treść")
-                .category(PostCategory.GENERAL)
                 .scope(PostScope.DORMITORY)
-                .status(PostStatus.ACTIVE)
-                .deleted(false)
+                .build();
+
+        Comment comment = Comment.builder()
+                .id(UUID.randomUUID())
+                .post(post)
+                .author(author)
+                .content("Komentarz testowy")
                 .createdAt(Instant.now())
                 .build();
+
+        Map<UUID, String> rooms = Map.of(author.getId(), "315-B");
+
+        // Act
+        CommentDto dto = postMapper.toCommentDto(comment, post, author, rooms);
+
+        // Assert
+        assertThat(dto.id()).isEqualTo(comment.getId());
+        assertThat(dto.postId()).isEqualTo(post.getId());
+        assertThat(dto.content()).isEqualTo("Komentarz testowy");
+        assertThat(dto.authorDisplayName()).isEqualTo("Jan Kowalski");
+        assertThat(dto.authorRoomNumber()).isEqualTo("315-B");
+        assertThat(dto.mine()).isTrue();
     }
 }

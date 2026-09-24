@@ -25,7 +25,7 @@ public class PostModerationService {
 
     private final PostRepository postRepository;
     private final CommentRepository commentRepository;
-    private final PostMapper postMapper;
+    private final BoardViewService boardViewService;
     private final PostAccessPolicy accessPolicy;
 
     @Transactional(readOnly = true)
@@ -37,14 +37,14 @@ public class PostModerationService {
             int size
     ) {
         UUID dormitoryId = accessPolicy.requireStaffDormitoryId(staff);
-        PostStatus status = accessPolicy.resolvePostStatus(statusFilter, PostStatusFilter.ALL);
+        PostStatus status = PostStatusFilter.from(statusFilter, PostStatusFilter.ALL).toPostStatus();
         Page<Post> posts = postRepository.findStaffDormitoryFeed(
                 dormitoryId,
                 category,
                 status,
-                accessPolicy.feedPageable(page, size)
+                BoardPagination.feedPageable(page, size)
         );
-        List<PostDto> content = postMapper.toPostDtos(posts.getContent(), staff);
+        List<PostDto> content = boardViewService.toPostDtos(posts.getContent(), staff);
         return PagedResponse.of(content, posts.getNumber(), posts.getSize(), posts.getTotalElements());
     }
 
@@ -55,7 +55,7 @@ public class PostModerationService {
         post.removeAsModerator();
         Post saved = postRepository.save(post);
         log.info("Staff {} moderated board post {} to REMOVED_MODERATOR", staff.getId(), postId);
-        return postMapper.toPostDto(saved, staff);
+        return boardViewService.toPostDto(saved, staff);
     }
 
     @Transactional(readOnly = true)
@@ -63,8 +63,8 @@ public class PostModerationService {
         UUID dormitoryId = accessPolicy.requireStaffDormitoryId(staff);
         Post post = accessPolicy.requireStaffModeratablePost(postId, dormitoryId);
         Page<Comment> comments = commentRepository.findActiveByPostId(
-                post.getId(), accessPolicy.commentPageable(page, size));
-        List<CommentDto> content = postMapper.toCommentDtos(post, comments.getContent(), staff);
+                post.getId(), BoardPagination.commentPageable(page, size));
+        List<CommentDto> content = boardViewService.toCommentDtos(post, comments.getContent(), staff);
         return PagedResponse.of(content, comments.getNumber(), comments.getSize(), comments.getTotalElements());
     }
 

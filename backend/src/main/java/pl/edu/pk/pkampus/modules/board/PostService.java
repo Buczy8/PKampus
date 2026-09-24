@@ -30,7 +30,7 @@ public class PostService {
 
     private final PostRepository postRepository;
     private final CommentRepository commentRepository;
-    private final PostMapper postMapper;
+    private final BoardViewService boardViewService;
     private final PostAccessPolicy accessPolicy;
     private final BoardRateLimiterService rateLimiterService;
 
@@ -44,10 +44,10 @@ public class PostService {
             int size
     ) {
         Dormitory dorm = accessPolicy.requireActiveResident(user);
-        PostStatus status = accessPolicy.resolvePostStatus(statusFilter, PostStatusFilter.ACTIVE);
+        PostStatus status = PostStatusFilter.from(statusFilter, PostStatusFilter.ACTIVE).toPostStatus();
         Page<Post> posts = postRepository.findFeed(
-                dorm.getId(), category, scope, status, accessPolicy.feedPageable(page, size));
-        List<PostDto> content = postMapper.toPostDtos(posts.getContent(), user);
+                dorm.getId(), category, scope, status, BoardPagination.feedPageable(page, size));
+        List<PostDto> content = boardViewService.toPostDtos(posts.getContent(), user);
         return PagedResponse.of(content, posts.getNumber(), posts.getSize(), posts.getTotalElements());
     }
 
@@ -55,7 +55,7 @@ public class PostService {
     public PostDto getById(User user, UUID postId) {
         accessPolicy.requireActiveResident(user);
         Post post = accessPolicy.requireVisiblePost(user, postId);
-        return postMapper.toPostDto(post, user);
+        return boardViewService.toPostDto(post, user);
     }
 
     @Transactional
@@ -85,7 +85,7 @@ public class PostService {
         Post saved = postRepository.saveAndFlush(post);
         log.info("Resident {} created board post {} ({}/{})",
                 user.getId(), saved.getId(), saved.getCategory(), saved.getScope());
-        return postMapper.toPostDto(saved, user);
+        return boardViewService.toNewPostDto(saved, user);
     }
 
     @Transactional
@@ -94,7 +94,7 @@ public class PostService {
         Post post = accessPolicy.requireOwnVisiblePost(user, postId);
         post.markResolved();
         Post saved = postRepository.save(post);
-        return postMapper.toPostDto(saved, user);
+        return boardViewService.toPostDto(saved, user);
     }
 
     @Transactional
@@ -111,8 +111,8 @@ public class PostService {
         accessPolicy.requireActiveResident(user);
         Post post = accessPolicy.requireVisiblePost(user, postId);
         Page<Comment> comments = commentRepository.findActiveByPostId(
-                post.getId(), accessPolicy.commentPageable(page, size));
-        List<CommentDto> content = postMapper.toCommentDtos(post, comments.getContent(), user);
+                post.getId(), BoardPagination.commentPageable(page, size));
+        List<CommentDto> content = boardViewService.toCommentDtos(post, comments.getContent(), user);
         return PagedResponse.of(content, comments.getNumber(), comments.getSize(), comments.getTotalElements());
     }
 
@@ -138,7 +138,7 @@ public class PostService {
                 .build();
         Comment saved = commentRepository.saveAndFlush(comment);
         log.info("Resident {} commented on post {}", user.getId(), postId);
-        return postMapper.toCommentDto(saved, post, user);
+        return boardViewService.toCommentDto(saved, post, user);
     }
 
     @Transactional

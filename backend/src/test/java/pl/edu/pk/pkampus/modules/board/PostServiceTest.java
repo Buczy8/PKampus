@@ -55,6 +55,7 @@ class PostServiceTest {
     private BoardRateLimiterService rateLimiterService;
 
     private PostMapper postMapper;
+    private BoardViewService boardViewService;
     private PostAccessPolicy accessPolicy;
     private PostService postService;
 
@@ -69,9 +70,10 @@ class PostServiceTest {
 
     @BeforeEach
     void setUp() {
-        postMapper = new PostMapper(roomAssignmentRepository, commentRepository);
+        postMapper = new PostMapper();
+        boardViewService = new BoardViewService(roomAssignmentRepository, commentRepository, postMapper);
         accessPolicy = new PostAccessPolicy(postRepository);
-        postService = new PostService(postRepository, commentRepository, postMapper, accessPolicy, rateLimiterService);
+        postService = new PostService(postRepository, commentRepository, boardViewService, accessPolicy, rateLimiterService);
 
         dorm1 = Dormitory.builder()
                 .id(UUID.randomUUID())

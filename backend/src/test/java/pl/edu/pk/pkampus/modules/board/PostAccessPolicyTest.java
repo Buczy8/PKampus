@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import pl.edu.pk.pkampus.common.exception.AccountStatusException;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
@@ -95,40 +94,6 @@ class PostAccessPolicyTest {
         assertEquals(dorm.getId(), policy.requireStaffDormitoryId(receptionist));
         assertThrows(AccessDeniedException.class, () -> policy.requireStaffDormitoryId(resident));
         assertThrows(BusinessRuleException.class, () -> policy.requireStaffDormitoryId(staffHomeless));
-    }
-
-    @Test
-    @DisplayName("Should resolve status filter case-insensitively with default fallback")
-    void resolvePostStatus() {
-        // Arrange — setUp
-
-        // Act & Assert
-        assertEquals(PostStatus.ACTIVE, policy.resolvePostStatus(null, PostStatusFilter.ACTIVE));
-        assertEquals(PostStatus.ACTIVE, policy.resolvePostStatus("  ", PostStatusFilter.ACTIVE));
-        assertEquals(PostStatus.RESOLVED, policy.resolvePostStatus("resolved", PostStatusFilter.ACTIVE));
-        assertNull(policy.resolvePostStatus(" all ", PostStatusFilter.ACTIVE));
-        assertNull(policy.resolvePostStatus(null, PostStatusFilter.ALL));
-        assertThrows(BusinessRuleException.class,
-                () -> policy.resolvePostStatus("DELETED", PostStatusFilter.ACTIVE));
-    }
-
-    @Test
-    @DisplayName("Should build createdAt-descending pageable and reject out-of-range input")
-    void feedPageable() {
-        // Arrange — setUp
-
-        // Act
-        PageRequest result = policy.feedPageable(2, 25);
-
-        // Assert
-        assertEquals(2, result.getPageNumber());
-        assertEquals(25, result.getPageSize());
-        assertTrue(result.getSort().getOrderFor("createdAt").isDescending());
-
-        assertThrows(BusinessRuleException.class, () -> policy.feedPageable(-1, 20));
-        assertThrows(BusinessRuleException.class, () -> policy.feedPageable(0, 0));
-        assertThrows(BusinessRuleException.class,
-                () -> policy.feedPageable(0, PostAccessPolicy.MAX_FEED_PAGE_SIZE + 1));
     }
 
     @Test

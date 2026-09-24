@@ -1,8 +1,6 @@
 package pl.edu.pk.pkampus.modules.board;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Component;
 import pl.edu.pk.pkampus.common.exception.AccountStatusException;
@@ -16,14 +14,11 @@ import pl.edu.pk.pkampus.modules.user.UserStatus;
 import java.util.UUID;
 
 /**
- * Shared preconditions for board endpoints: authorization guards,
- * feed filter parsing and pagination validation.
+ * Authorization and access guards for community board posts and comments.
  */
 @Component
 @RequiredArgsConstructor
 class PostAccessPolicy {
-
-    public static final int MAX_FEED_PAGE_SIZE = 50;
 
     private final PostRepository postRepository;
 
@@ -88,28 +83,5 @@ class PostAccessPolicy {
         }
         return post;
     }
-
-    public PostStatus resolvePostStatus(String statusFilter, PostStatusFilter defaultIfBlank) {
-        return PostStatusFilter.from(statusFilter, defaultIfBlank).toPostStatus();
-    }
-
-    public PageRequest feedPageable(int page, int size) {
-        if (page < 0) {
-            throw new BusinessRuleException("page must be greater than or equal to 0");
-        }
-        if (size < 1 || size > MAX_FEED_PAGE_SIZE) {
-            throw new BusinessRuleException("size must be between 1 and " + MAX_FEED_PAGE_SIZE);
-        }
-        return PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-    }
-
-    public PageRequest commentPageable(int page, int size) {
-        if (page < 0) {
-            throw new BusinessRuleException("page must be greater than or equal to 0");
-        }
-        if (size < 1 || size > MAX_FEED_PAGE_SIZE) {
-            throw new BusinessRuleException("size must be between 1 and " + MAX_FEED_PAGE_SIZE);
-        }
-        return PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "createdAt"));
-    }
 }
+

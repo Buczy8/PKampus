@@ -53,9 +53,10 @@ class PostModerationServiceTest {
 
     @BeforeEach
     void setUp() {
-        PostMapper postMapper = new PostMapper(roomAssignmentRepository, commentRepository);
+        PostMapper postMapper = new PostMapper();
+        BoardViewService boardViewService = new BoardViewService(roomAssignmentRepository, commentRepository, postMapper);
         PostAccessPolicy accessPolicy = new PostAccessPolicy(postRepository);
-        moderationService = new PostModerationService(postRepository, commentRepository, postMapper, accessPolicy);
+        moderationService = new PostModerationService(postRepository, commentRepository, boardViewService, accessPolicy);
 
         dorm1 = Dormitory.builder()
                 .id(UUID.randomUUID())
