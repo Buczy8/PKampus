@@ -6,8 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
-import pl.edu.pk.pkampus.modules.board.CommentRepository;
-import pl.edu.pk.pkampus.modules.board.PostRepository;
+import pl.edu.pk.pkampus.modules.board.BoardRetentionService;
 import pl.edu.pk.pkampus.modules.issues.IssuePhoto;
 import pl.edu.pk.pkampus.modules.issues.IssuePhotoRepository;
 import pl.edu.pk.pkampus.modules.issues.IssueStatus;
@@ -31,8 +30,7 @@ public class DataRetentionService {
 
     private final MinioStorageService minioStorageService;
     private final IssuePhotoRepository issuePhotoRepository;
-    private final PostRepository postRepository;
-    private final CommentRepository commentRepository;
+    private final BoardRetentionService boardRetentionService;
     private final LaundryBookingRepository laundryBookingRepository;
     private final RoomBookingRepository roomBookingRepository;
     private final UserRepository userRepository;
@@ -109,25 +107,12 @@ public class DataRetentionService {
     private int purgeOldPosts(Instant now) {
         Instant resolvedCutoff = now.minus(postsResolvedDays, ChronoUnit.DAYS);
         Instant deletedCutoff = now.minus(postsDeletedDays, ChronoUnit.DAYS);
-
-        List<UUID> postIds = postRepository.findPostIdsForRetention(resolvedCutoff, deletedCutoff);
-        if (postIds.isEmpty()) {
-            return 0;
-        }
-
-        commentRepository.deleteByPostIdIn(postIds);
-        int removed = postRepository.deleteByIdIn(postIds);
-        log.info("Purged {} old/resolved/deleted board posts", removed);
-        return removed;
+        return boardRetentionService.purgeOldPosts(resolvedCutoff, deletedCutoff);
     }
 
     private int purgeOldComments(Instant now) {
         Instant cutoff = now.minus(commentsDeletedDays, ChronoUnit.DAYS);
-        int removed = commentRepository.deleteOldSoftDeletedComments(cutoff);
-        if (removed > 0) {
-            log.info("Purged {} standalone soft-deleted comments older than {} days", removed, commentsDeletedDays);
-        }
-        return removed;
+        return boardRetentionService.purgeOldComments(cutoff);
     }
 
     private int purgeOldLaundryBookings(Instant now) {

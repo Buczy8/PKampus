@@ -18,7 +18,7 @@ import java.util.UUID;
  * Protects against spamming posts and comments.
  */
 @Service
-public class BoardRateLimiterService {
+class BoardRateLimiterService {
 
     @Getter
     @Value("${app.board.rate-limit.post.capacity:5}")

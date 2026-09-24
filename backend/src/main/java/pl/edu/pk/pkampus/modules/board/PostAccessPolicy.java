@@ -21,7 +21,7 @@ import java.util.UUID;
  */
 @Component
 @RequiredArgsConstructor
-public class PostAccessPolicy {
+class PostAccessPolicy {
 
     public static final int MAX_FEED_PAGE_SIZE = 50;
 

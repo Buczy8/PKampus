@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
  */
 @Component
 @RequiredArgsConstructor
-public class PostMapper {
+class PostMapper {
 
     private final RoomAssignmentRepository roomAssignmentRepository;
     private final CommentRepository commentRepository;

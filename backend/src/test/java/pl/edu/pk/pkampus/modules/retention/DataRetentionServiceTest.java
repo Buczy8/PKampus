@@ -8,8 +8,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
-import pl.edu.pk.pkampus.modules.board.CommentRepository;
-import pl.edu.pk.pkampus.modules.board.PostRepository;
+import pl.edu.pk.pkampus.modules.board.BoardRetentionService;
 import pl.edu.pk.pkampus.modules.issues.IssuePhoto;
 import pl.edu.pk.pkampus.modules.issues.IssuePhotoRepository;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBookingRepository;
@@ -45,10 +44,7 @@ class DataRetentionServiceTest {
     private IssuePhotoRepository issuePhotoRepository;
 
     @Mock
-    private PostRepository postRepository;
-
-    @Mock
-    private CommentRepository commentRepository;
+    private BoardRetentionService boardRetentionService;
 
     @Mock
     private LaundryBookingRepository laundryBookingRepository;
@@ -67,8 +63,8 @@ class DataRetentionServiceTest {
     void runRetentionTasksEmpty() {
         // Arrange
         when(issuePhotoRepository.findPhotosForOldClosedIssues(any(), any())).thenReturn(List.of());
-        when(postRepository.findPostIdsForRetention(any(), any())).thenReturn(List.of());
-        when(commentRepository.deleteOldSoftDeletedComments(any())).thenReturn(0);
+        when(boardRetentionService.purgeOldPosts(any(), any())).thenReturn(0);
+        when(boardRetentionService.purgeOldComments(any())).thenReturn(0);
         when(laundryBookingRepository.deleteOldCompletedOrCancelledBookings(any(), any())).thenReturn(0);
         when(roomBookingRepository.deleteOldCompletedOrCancelledBookings(any(), any())).thenReturn(0);
         when(userRepository.findCheckedOutUsersForAnonymization(any())).thenReturn(List.of());
@@ -104,8 +100,8 @@ class DataRetentionServiceTest {
                 .build();
 
         when(issuePhotoRepository.findPhotosForOldClosedIssues(any(), any())).thenReturn(List.of(photo1, photo2));
-        when(postRepository.findPostIdsForRetention(any(), any())).thenReturn(List.of());
-        when(commentRepository.deleteOldSoftDeletedComments(any())).thenReturn(0);
+        when(boardRetentionService.purgeOldPosts(any(), any())).thenReturn(0);
+        when(boardRetentionService.purgeOldComments(any())).thenReturn(0);
         when(laundryBookingRepository.deleteOldCompletedOrCancelledBookings(any(), any())).thenReturn(0);
         when(roomBookingRepository.deleteOldCompletedOrCancelledBookings(any(), any())).thenReturn(0);
         when(userRepository.findCheckedOutUsersForAnonymization(any())).thenReturn(List.of());
@@ -132,8 +128,8 @@ class DataRetentionServiceTest {
 
         when(issuePhotoRepository.findPhotosForOldClosedIssues(any(), any())).thenReturn(List.of(photo));
         doThrow(new RuntimeException("MinIO error")).when(minioStorageService).removeIssuePhoto("issues/missing.jpg");
-        when(postRepository.findPostIdsForRetention(any(), any())).thenReturn(List.of());
-        when(commentRepository.deleteOldSoftDeletedComments(any())).thenReturn(0);
+        when(boardRetentionService.purgeOldPosts(any(), any())).thenReturn(0);
+        when(boardRetentionService.purgeOldComments(any())).thenReturn(0);
         when(laundryBookingRepository.deleteOldCompletedOrCancelledBookings(any(), any())).thenReturn(0);
         when(roomBookingRepository.deleteOldCompletedOrCancelledBookings(any(), any())).thenReturn(0);
         when(userRepository.findCheckedOutUsersForAnonymization(any())).thenReturn(List.of());
@@ -150,14 +146,9 @@ class DataRetentionServiceTest {
     @DisplayName("runRetentionTasks purges old posts and their comments")
     void runRetentionTasksPurgesPosts() {
         // Arrange
-        UUID postId1 = UUID.randomUUID();
-        UUID postId2 = UUID.randomUUID();
-        List<UUID> postIds = List.of(postId1, postId2);
-
         when(issuePhotoRepository.findPhotosForOldClosedIssues(any(), any())).thenReturn(List.of());
-        when(postRepository.findPostIdsForRetention(any(), any())).thenReturn(postIds);
-        when(postRepository.deleteByIdIn(postIds)).thenReturn(2);
-        when(commentRepository.deleteOldSoftDeletedComments(any())).thenReturn(0);
+        when(boardRetentionService.purgeOldPosts(any(), any())).thenReturn(2);
+        when(boardRetentionService.purgeOldComments(any())).thenReturn(0);
         when(laundryBookingRepository.deleteOldCompletedOrCancelledBookings(any(), any())).thenReturn(0);
         when(roomBookingRepository.deleteOldCompletedOrCancelledBookings(any(), any())).thenReturn(0);
         when(userRepository.findCheckedOutUsersForAnonymization(any())).thenReturn(List.of());
@@ -167,8 +158,7 @@ class DataRetentionServiceTest {
 
         // Assert
         assertEquals(2, report.getPostsRemovedCount());
-        verify(commentRepository).deleteByPostIdIn(postIds);
-        verify(postRepository).deleteByIdIn(postIds);
+        verify(boardRetentionService).purgeOldPosts(any(), any());
     }
 
     @Test
@@ -176,8 +166,8 @@ class DataRetentionServiceTest {
     void runRetentionTasksPurgesBookingsAndComments() {
         // Arrange
         when(issuePhotoRepository.findPhotosForOldClosedIssues(any(), any())).thenReturn(List.of());
-        when(postRepository.findPostIdsForRetention(any(), any())).thenReturn(List.of());
-        when(commentRepository.deleteOldSoftDeletedComments(any())).thenReturn(5);
+        when(boardRetentionService.purgeOldPosts(any(), any())).thenReturn(0);
+        when(boardRetentionService.purgeOldComments(any())).thenReturn(5);
         when(laundryBookingRepository.deleteOldCompletedOrCancelledBookings(any(), any())).thenReturn(8);
         when(roomBookingRepository.deleteOldCompletedOrCancelledBookings(any(), any())).thenReturn(3);
         when(userRepository.findCheckedOutUsersForAnonymization(any())).thenReturn(List.of());
@@ -189,6 +179,7 @@ class DataRetentionServiceTest {
         assertEquals(5, report.getCommentsRemovedCount());
         assertEquals(8, report.getLaundryBookingsPurgedCount());
         assertEquals(3, report.getRoomBookingsPurgedCount());
+        verify(boardRetentionService).purgeOldComments(any());
     }
 
     @Test
@@ -209,8 +200,8 @@ class DataRetentionServiceTest {
                 .build();
 
         when(issuePhotoRepository.findPhotosForOldClosedIssues(any(), any())).thenReturn(List.of());
-        when(postRepository.findPostIdsForRetention(any(), any())).thenReturn(List.of());
-        when(commentRepository.deleteOldSoftDeletedComments(any())).thenReturn(0);
+        when(boardRetentionService.purgeOldPosts(any(), any())).thenReturn(0);
+        when(boardRetentionService.purgeOldComments(any())).thenReturn(0);
         when(laundryBookingRepository.deleteOldCompletedOrCancelledBookings(any(), any())).thenReturn(0);
         when(roomBookingRepository.deleteOldCompletedOrCancelledBookings(any(), any())).thenReturn(0);
         when(userRepository.findCheckedOutUsersForAnonymization(any())).thenReturn(List.of(checkedOutUser));
