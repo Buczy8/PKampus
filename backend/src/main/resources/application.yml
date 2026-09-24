@@ -73,6 +73,14 @@ app:
       refresh:
         capacity: ${REFRESH_RATE_LIMIT_CAPACITY:30}
         duration-minutes: ${REFRESH_RATE_LIMIT_DURATION_MINUTES:1}
+  board:
+    rate-limit:
+      post:
+        capacity: ${BOARD_POST_RATE_LIMIT_CAPACITY:5}
+        duration-minutes: ${BOARD_POST_RATE_LIMIT_DURATION_MINUTES:10}
+      comment:
+        capacity: ${BOARD_COMMENT_RATE_LIMIT_CAPACITY:15}
+        duration-minutes: ${BOARD_COMMENT_RATE_LIMIT_DURATION_MINUTES:1}
   scheduling:
     auto-cancellation:
       enabled: ${BOOKING_AUTO_CANCELLATION_ENABLED:true}

@@ -51,6 +51,9 @@ class PostServiceTest {
     @Mock
     private RoomAssignmentRepository roomAssignmentRepository;
 
+    @Mock
+    private BoardRateLimiterService rateLimiterService;
+
     private PostMapper postMapper;
     private PostAccessPolicy accessPolicy;
     private PostService postService;
@@ -68,7 +71,7 @@ class PostServiceTest {
     void setUp() {
         postMapper = new PostMapper(roomAssignmentRepository, commentRepository);
         accessPolicy = new PostAccessPolicy(postRepository);
-        postService = new PostService(postRepository, commentRepository, postMapper, accessPolicy);
+        postService = new PostService(postRepository, commentRepository, postMapper, accessPolicy, rateLimiterService);
 
         dorm1 = Dormitory.builder()
                 .id(UUID.randomUUID())

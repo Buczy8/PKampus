@@ -77,6 +77,9 @@ class PostIntegrationTest {
     @Autowired
     private JwtService jwtService;
 
+    @Autowired
+    private BoardRateLimiterService boardRateLimiterService;
+
     @jakarta.persistence.PersistenceContext
     private jakarta.persistence.EntityManager entityManager;
 
@@ -130,6 +133,11 @@ class PostIntegrationTest {
                 .build());
 
         resident2OtherDorm = saveResident(dorm2, "101");
+
+        boardRateLimiterService.setPostLimits(50, 10);
+        boardRateLimiterService.setCommentLimits(50, 1);
+        boardRateLimiterService.reset(resident1.getId());
+        boardRateLimiterService.reset(resident2OtherDorm.getId());
     }
 
     @Test
@@ -655,4 +663,80 @@ class PostIntegrationTest {
     private String bearer(User user) {
         return "Bearer " + jwtService.generateToken(user, user.getDeclaredRoomNumber());
     }
+
+    @Test
+    @DisplayName("Should return 429 Too Many Requests when post creation rate limit is exceeded")
+    void createPost_rateLimitExceeded_returns429TooManyRequests() throws Exception {
+        boardRateLimiterService.setPostLimits(1, 10);
+        boardRateLimiterService.reset(resident1.getId());
+
+        mockMvc.perform(post("/api/v1/posts")
+                        .header("Authorization", bearer(resident1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "First post",
+                                  "content": "Content 1",
+                                  "category": "GENERAL",
+                                  "scope": "CAMPUS"
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/v1/posts")
+                        .header("Authorization", bearer(resident1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Spam post",
+                                  "content": "Content 2",
+                                  "category": "GENERAL",
+                                  "scope": "CAMPUS"
+                                }
+                                """))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("You are posting too frequently")));
+    }
+
+    @Test
+    @DisplayName("Should return 429 Too Many Requests when comment creation rate limit is exceeded")
+    void addComment_rateLimitExceeded_returns429TooManyRequests() throws Exception {
+        boardRateLimiterService.setCommentLimits(1, 1);
+        boardRateLimiterService.reset(resident1.getId());
+
+        Post post = postRepository.save(Post.builder()
+                .author(resident1)
+                .dormitory(dorm1)
+                .title("A post to comment")
+                .content("Content")
+                .category(PostCategory.GENERAL)
+                .scope(PostScope.DORMITORY)
+                .status(PostStatus.ACTIVE)
+                .deleted(false)
+                .build());
+
+        mockMvc.perform(post("/api/v1/posts/{id}/comments", post.getId())
+                        .header("Authorization", bearer(resident1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "content": "First comment"
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/v1/posts/{id}/comments", post.getId())
+                        .header("Authorization", bearer(resident1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "content": "Spam comment"
+                                }
+                                """))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("You are commenting too frequently")));
+    }
 }
+

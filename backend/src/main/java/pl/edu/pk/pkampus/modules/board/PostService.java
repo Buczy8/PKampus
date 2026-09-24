@@ -32,6 +32,7 @@ public class PostService {
     private final CommentRepository commentRepository;
     private final PostMapper postMapper;
     private final PostAccessPolicy accessPolicy;
+    private final BoardRateLimiterService rateLimiterService;
 
     @Transactional(readOnly = true)
     public PagedResponse<PostDto> listFeed(
@@ -53,6 +54,7 @@ public class PostService {
     @Transactional
     public PostDto create(User user, CreatePostRequestDto request) {
         Dormitory dorm = accessPolicy.requireActiveResident(user);
+        rateLimiterService.checkPostRateLimit(user.getId());
 
         String title = request.title().trim();
         String content = request.content().trim();
@@ -110,6 +112,7 @@ public class PostService {
     @Transactional
     public CommentDto addComment(User user, UUID postId, CreateCommentRequestDto request) {
         accessPolicy.requireActiveResident(user);
+        rateLimiterService.checkCommentRateLimit(user.getId());
         Post post = accessPolicy.requireVisiblePost(user, postId);
         if (post.getStatus() == PostStatus.REMOVED_MODERATOR) {
             throw new BusinessRuleException("Cannot comment on a removed post");
