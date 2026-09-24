@@ -52,6 +52,15 @@ public class PostController {
         return ResponseEntity.ok(ApiResponse.ok(postService.listFeed(user, category, scope, status, page, size)));
     }
 
+    @GetMapping("/{id}")
+    @Operation(summary = "Get single community board post by ID")
+    public ResponseEntity<ApiResponse<PostDto>> getById(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID id
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(postService.getById(user, id)));
+    }
+
     @PostMapping
     @Operation(summary = "Publish a community board post")
     public ResponseEntity<ApiResponse<PostDto>> create(

@@ -28,6 +28,14 @@ export async function listBoardPosts(
   return data.data
 }
 
+export async function getBoardPost(id: string): Promise<BoardPost> {
+  const { data } = await apiClient.get<ApiResponse<BoardPost>>(`/posts/${id}`)
+  if (!data.success || !data.data) {
+    throw new Error(data.message ?? 'Failed to load post')
+  }
+  return data.data
+}
+
 export async function createBoardPost(
   request: CreateBoardPostRequest,
 ): Promise<BoardPost> {

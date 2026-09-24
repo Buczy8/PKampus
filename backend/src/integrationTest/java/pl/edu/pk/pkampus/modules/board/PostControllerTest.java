@@ -131,6 +131,45 @@ class PostControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/v1/posts/{id} returns single post when found")
+    void getByIdReturnsPost() throws Exception {
+        PostDto postDto = new PostDto(
+                postId,
+                "Pożyczę wiertarkę",
+                "Na weekend",
+                PostCategory.BORROW_HELP,
+                PostScope.DORMITORY,
+                PostStatus.ACTIVE,
+                "Jan Kowalski",
+                "101",
+                "DS1",
+                true,
+                2,
+                OffsetDateTime.now()
+        );
+
+        when(postService.getById(any(), eq(postId))).thenReturn(postDto);
+
+        mockMvc.perform(get("/api/v1/posts/{id}", postId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(postId.toString()))
+                .andExpect(jsonPath("$.data.title").value("Pożyczę wiertarkę"))
+                .andExpect(jsonPath("$.data.commentCount").value(2));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/posts/{id} returns 404 when post not found")
+    void getByIdNotFoundReturns404() throws Exception {
+        when(postService.getById(any(), eq(postId))).thenThrow(new ResourceNotFoundException("Post not found"));
+
+        mockMvc.perform(get("/api/v1/posts/{id}", postId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Post not found"));
+    }
+
+    @Test
     @DisplayName("POST /api/v1/posts returns 201 on valid body")
     void createReturnsCreated() throws Exception {
         CreatePostRequestDto request = new CreatePostRequestDto(

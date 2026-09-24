@@ -738,5 +738,43 @@ class PostIntegrationTest {
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("You are commenting too frequently")));
     }
+
+    @Test
+    @DisplayName("GET /api/v1/posts/{id} returns single post when visible, 404 for foreign dorm")
+    void getByIdIntegration() throws Exception {
+        Post dormPost = postRepository.save(Post.builder()
+                .author(resident1)
+                .dormitory(dorm1)
+                .title("Książka do pożyczenia")
+                .content("Czysty kod")
+                .category(PostCategory.BORROW_HELP)
+                .scope(PostScope.DORMITORY)
+                .status(PostStatus.ACTIVE)
+                .deleted(false)
+                .build());
+
+        // Resident 1 in dorm1 can view it
+        mockMvc.perform(get("/api/v1/posts/{id}", dormPost.getId())
+                        .header("Authorization", bearer(resident1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(dormPost.getId().toString()))
+                .andExpect(jsonPath("$.data.title").value("Książka do pożyczenia"))
+                .andExpect(jsonPath("$.data.authorRoomNumber").value("312"))
+                .andExpect(jsonPath("$.data.mine").value(true));
+
+        // Resident 2 in dorm2 cannot view dorm1-scoped post -> 404
+        mockMvc.perform(get("/api/v1/posts/{id}", dormPost.getId())
+                        .header("Authorization", bearer(resident2OtherDorm)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false));
+
+        // Non-existent ID -> 404
+        mockMvc.perform(get("/api/v1/posts/{id}", UUID.randomUUID())
+                        .header("Authorization", bearer(resident1)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false));
+    }
 }
+
 

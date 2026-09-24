@@ -51,6 +51,13 @@ public class PostService {
         return PagedResponse.of(content, posts.getNumber(), posts.getSize(), posts.getTotalElements());
     }
 
+    @Transactional(readOnly = true)
+    public PostDto getById(User user, UUID postId) {
+        accessPolicy.requireActiveResident(user);
+        Post post = accessPolicy.requireVisiblePost(user, postId);
+        return postMapper.toPostDto(post, user);
+    }
+
     @Transactional
     public PostDto create(User user, CreatePostRequestDto request) {
         Dormitory dorm = accessPolicy.requireActiveResident(user);

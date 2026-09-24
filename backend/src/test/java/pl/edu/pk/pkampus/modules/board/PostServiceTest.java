@@ -261,6 +261,59 @@ class PostServiceTest {
     }
 
     @Nested
+    @DisplayName("getById")
+    class GetById {
+
+        @Test
+        @DisplayName("Should return post by ID when visible to resident")
+        void getByIdSuccess() {
+            // Arrange
+            Room room = Room.builder().roomNumber("201-A").build();
+            RoomAssignment assignment = RoomAssignment.builder()
+                    .user(residentAuthor)
+                    .room(room)
+                    .isActive(true)
+                    .build();
+
+            when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
+            when(commentRepository.countActiveByPostId(postId)).thenReturn(2L);
+            when(roomAssignmentRepository.findActiveByUserIdIn(List.of(residentAuthor.getId())))
+                    .thenReturn(List.of(assignment));
+
+            // Act
+            PostDto result = postService.getById(residentAuthor, postId);
+
+            // Assert
+            assertNotNull(result);
+            assertEquals(postId, result.id());
+            assertEquals("Pożyczę czajnik", result.title());
+            assertEquals("201-A", result.authorRoomNumber());
+            assertEquals(2, result.commentCount());
+            assertTrue(result.mine());
+        }
+
+        @Test
+        @DisplayName("Should throw ResourceNotFoundException when post belongs to another dormitory")
+        void getByIdForeignDormitoryThrows() {
+            // Arrange
+            when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
+
+            // Act & Assert
+            assertThrows(ResourceNotFoundException.class, () -> postService.getById(residentOtherDorm, postId));
+        }
+
+        @Test
+        @DisplayName("Should throw AccountStatusException when user is not active resident")
+        void getByIdInactiveResidentThrows() {
+            // Arrange
+            residentAuthor.setStatus(UserStatus.BLOCKED);
+
+            // Act & Assert
+            assertThrows(AccountStatusException.class, () -> postService.getById(residentAuthor, postId));
+        }
+    }
+
+    @Nested
     @DisplayName("create")
     class CreatePost {
 
