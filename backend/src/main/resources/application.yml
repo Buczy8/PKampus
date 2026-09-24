@@ -33,6 +33,11 @@ spring:
           auth: false
           starttls:
             enable: false
+          # Bounded I/O: without explicit timeouts Jakarta Mail waits forever;
+          # combined with CallerRunsPolicy a dead SMTP server would hang HTTP worker threads
+          connectiontimeout: 5000
+          timeout: 10000
+          writetimeout: 5000
 
 management:
   endpoints:
@@ -58,6 +63,8 @@ jwt:
 app:
   frontend:
     url: ${FRONTEND_URL:http://localhost:5173}
+  mail:
+    from: ${APP_MAIL_FROM:noreply@pkampus.pk.edu.pl}
   security:
     email-token-secret: ${EMAIL_TOKEN_SECRET:pkampus_email_activation_secret_key_dev_min_32_chars_2026!}
     email-token-ttl-hours: 24
