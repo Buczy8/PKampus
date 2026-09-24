@@ -11,7 +11,6 @@ import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
 import pl.edu.pk.pkampus.modules.board.dto.PostDto;
 import pl.edu.pk.pkampus.modules.user.User;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -54,7 +53,7 @@ public class PostModerationService {
     public PostDto removePostAsModerator(User staff, UUID postId) {
         UUID dormitoryId = accessPolicy.requireStaffDormitoryId(staff);
         Post post = accessPolicy.requireStaffModeratablePost(postId, dormitoryId);
-        post.setStatus(PostStatus.REMOVED_MODERATOR);
+        post.removeAsModerator();
         Post saved = postRepository.save(post);
         log.info("Staff {} moderated board post {} to REMOVED_MODERATOR", staff.getEmail(), postId);
         return postMapper.toPostDto(saved, staff);
@@ -78,8 +77,7 @@ public class PostModerationService {
         }
         Post post = comment.getPost();
         accessPolicy.requireStaffModeratablePost(post.getId(), dormitoryId);
-        comment.setDeleted(true);
-        comment.setDeletedAt(Instant.now());
+        comment.softDelete();
         commentRepository.save(comment);
         log.info("Staff {} soft-deleted comment {} on post {}",
                 staff.getEmail(), commentId, post.getId());

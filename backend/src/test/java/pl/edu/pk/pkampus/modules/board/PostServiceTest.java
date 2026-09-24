@@ -274,9 +274,7 @@ class PostServiceTest {
 
             when(postRepository.saveAndFlush(any(Post.class))).thenAnswer(inv -> {
                 Post p = inv.getArgument(0);
-                p.setId(UUID.randomUUID());
-                p.setCreatedAt(Instant.now());
-                return p;
+                return p.toBuilder().id(UUID.randomUUID()).createdAt(Instant.now()).build();
             });
 
             // Act
@@ -312,9 +310,7 @@ class PostServiceTest {
 
             when(postRepository.saveAndFlush(any(Post.class))).thenAnswer(inv -> {
                 Post p = inv.getArgument(0);
-                p.setId(UUID.randomUUID());
-                p.setCreatedAt(Instant.now());
-                return p;
+                return p.toBuilder().id(UUID.randomUUID()).createdAt(Instant.now()).build();
             });
 
             // Act
@@ -380,7 +376,7 @@ class PostServiceTest {
         @DisplayName("Should throw BusinessRuleException when post is already RESOLVED")
         void resolveThrowsWhenAlreadyResolved() {
             // Arrange
-            postDormitory.setStatus(PostStatus.RESOLVED);
+            postDormitory = postDormitory.toBuilder().status(PostStatus.RESOLVED).build();
             when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
 
             // Act & Assert
@@ -423,7 +419,7 @@ class PostServiceTest {
         @DisplayName("Should throw ResourceNotFoundException when post is REMOVED_MODERATOR")
         void resolveThrowsWhenRemovedByModerator() {
             // Arrange
-            postDormitory.setStatus(PostStatus.REMOVED_MODERATOR);
+            postDormitory = postDormitory.toBuilder().status(PostStatus.REMOVED_MODERATOR).build();
             when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
 
             // Act & Assert
@@ -483,9 +479,7 @@ class PostServiceTest {
             when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
             when(commentRepository.saveAndFlush(any(Comment.class))).thenAnswer(inv -> {
                 Comment c = inv.getArgument(0);
-                c.setId(UUID.randomUUID());
-                c.setCreatedAt(Instant.now());
-                return c;
+                return c.toBuilder().id(UUID.randomUUID()).createdAt(Instant.now()).build();
             });
 
             // Act
@@ -525,7 +519,7 @@ class PostServiceTest {
             // Note: requireVisiblePost checks REMOVED_MODERATOR and throws ResourceNotFoundException
             // but addComment also has an explicit check. When requireVisiblePost returns, if status was somehow REMOVED_MODERATOR:
             // Arrange
-            postDormitory.setStatus(PostStatus.REMOVED_MODERATOR);
+            postDormitory = postDormitory.toBuilder().status(PostStatus.REMOVED_MODERATOR).build();
             when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
 
             // Act & Assert

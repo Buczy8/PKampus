@@ -11,13 +11,14 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
 import pl.edu.pk.pkampus.modules.user.User;
 
@@ -27,10 +28,9 @@ import java.util.UUID;
 @Entity
 @Table(name = "posts")
 @Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder(toBuilder = true)
 public class Post {
 
     @Id
@@ -79,4 +79,33 @@ public class Post {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    /**
+     * Marks the post as resolved. Only the author can trigger this via
+     * {@code PostService.resolve}; only ACTIVE posts can transition.
+     */
+    public void markResolved() {
+        if (this.status != PostStatus.ACTIVE) {
+            throw new BusinessRuleException("Only ACTIVE posts can be marked as resolved");
+        }
+        this.status = PostStatus.RESOLVED;
+    }
+
+    /**
+     * Soft-deletes the post. Only the author can trigger this via
+     * {@code PostService.softDelete}.
+     */
+    public void softDelete() {
+        this.deleted = true;
+        this.deletedAt = Instant.now();
+    }
+
+    /**
+     * Hides the post from residents. Only staff can trigger this via
+     * {@code PostModerationService.removePostAsModerator} after the
+     * dormitory/scope checks in {@code PostAccessPolicy}.
+     */
+    public void removeAsModerator() {
+        this.status = PostStatus.REMOVED_MODERATOR;
+    }
 }

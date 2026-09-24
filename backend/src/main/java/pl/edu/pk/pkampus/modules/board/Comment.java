@@ -9,11 +9,11 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import pl.edu.pk.pkampus.modules.user.User;
 
@@ -23,10 +23,9 @@ import java.util.UUID;
 @Entity
 @Table(name = "comments")
 @Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder(toBuilder = true)
 public class Comment {
 
     @Id
@@ -54,4 +53,13 @@ public class Comment {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    /**
+     * Soft-deletes the comment. Only staff can trigger this via
+     * {@code PostModerationService.removeCommentAsModerator}.
+     */
+    public void softDelete() {
+        this.deleted = true;
+        this.deletedAt = Instant.now();
+    }
 }

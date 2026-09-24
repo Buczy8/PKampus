@@ -14,7 +14,6 @@ import pl.edu.pk.pkampus.modules.board.dto.PostDto;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
 import pl.edu.pk.pkampus.modules.user.User;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -82,10 +81,7 @@ public class PostService {
     public PostDto resolve(User user, UUID postId) {
         accessPolicy.requireActiveResident(user);
         Post post = accessPolicy.requireOwnVisiblePost(user, postId);
-        if (post.getStatus() != PostStatus.ACTIVE) {
-            throw new BusinessRuleException("Only ACTIVE posts can be marked as resolved");
-        }
-        post.setStatus(PostStatus.RESOLVED);
+        post.markResolved();
         Post saved = postRepository.save(post);
         return postMapper.toPostDto(saved, user);
     }
@@ -94,8 +90,7 @@ public class PostService {
     public void softDelete(User user, UUID postId) {
         accessPolicy.requireActiveResident(user);
         Post post = accessPolicy.requireOwnVisiblePost(user, postId);
-        post.setDeleted(true);
-        post.setDeletedAt(Instant.now());
+        post.softDelete();
         postRepository.save(post);
         log.info("Resident {} soft-deleted board post {}", user.getEmail(), postId);
     }
