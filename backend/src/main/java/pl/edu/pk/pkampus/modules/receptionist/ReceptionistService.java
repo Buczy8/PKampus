@@ -7,8 +7,8 @@ import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import org.springframework.context.ApplicationEventPublisher;
-import pl.edu.pk.pkampus.mail.ResourceSchedulePage;
 import pl.edu.pk.pkampus.modules.booking.BookingAutoCancelledEvent;
+import pl.edu.pk.pkampus.modules.booking.ResourceKind;
 import pl.edu.pk.pkampus.common.PagedResponse;
 import pl.edu.pk.pkampus.modules.board.PostCategory;
 import pl.edu.pk.pkampus.modules.board.PostModerationService;
@@ -263,7 +263,7 @@ public class ReceptionistService {
                     resident.getFirstName(),
                     "Room " + booking.getRoom().getName(),
                     booking.getStartTime(),
-                    ResourceSchedulePage.ROOMS
+                    ResourceKind.ROOM
             ));
         }
 
@@ -364,7 +364,7 @@ public class ReceptionistService {
                     resident.getFirstName(),
                     "Laundry machine " + booking.getMachine().getMachineIdentifier(),
                     booking.getStartTime(),
-                    ResourceSchedulePage.LAUNDRY
+                    ResourceKind.LAUNDRY
             ));
         }
 

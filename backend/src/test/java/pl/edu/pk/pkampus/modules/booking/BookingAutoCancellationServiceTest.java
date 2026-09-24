@@ -10,7 +10,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
-import pl.edu.pk.pkampus.mail.ResourceSchedulePage;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBooking;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBookingRepository;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBookingStatus;
@@ -110,7 +109,7 @@ class BookingAutoCancellationServiceTest {
                     "Kamil",
                     "Laundry machine PRALKA-01",
                     booking.getStartTime(),
-                    ResourceSchedulePage.LAUNDRY
+                    ResourceKind.LAUNDRY
             )));
         }
 
@@ -164,7 +163,7 @@ class BookingAutoCancellationServiceTest {
                     "Kamil",
                     "Room Salka Muzyczna",
                     booking.getStartTime(),
-                    ResourceSchedulePage.ROOMS
+                    ResourceKind.ROOM
             )));
         }
 

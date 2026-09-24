@@ -13,7 +13,6 @@ import org.springframework.test.context.event.ApplicationEvents;
 import org.springframework.test.context.event.RecordApplicationEvents;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
 import pl.edu.pk.pkampus.mail.EmailService;
-import pl.edu.pk.pkampus.mail.ResourceSchedulePage;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
 import pl.edu.pk.pkampus.modules.dormitory.DormitoryRepository;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBooking;
@@ -179,7 +178,7 @@ class BookingAutoCancellationIntegrationTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Expected BookingAutoCancelledEvent"));
         assertThat(event.resourceName()).isEqualTo("Laundry machine " + machine.getMachineIdentifier());
-        assertThat(event.page()).isEqualTo(ResourceSchedulePage.LAUNDRY);
+        assertThat(event.kind()).isEqualTo(ResourceKind.LAUNDRY);
     }
 
     @Test
@@ -252,7 +251,7 @@ class BookingAutoCancellationIntegrationTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Expected BookingAutoCancelledEvent"));
         assertThat(event.resourceName()).isEqualTo("Room " + room.getName());
-        assertThat(event.page()).isEqualTo(ResourceSchedulePage.ROOMS);
+        assertThat(event.kind()).isEqualTo(ResourceKind.ROOM);
     }
 
     @Test
@@ -302,7 +301,7 @@ class BookingAutoCancellationIntegrationTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Expected BookingAutoCancelledEvent"));
         assertThat(event.resourceName()).isEqualTo("Laundry machine " + machine.getMachineIdentifier());
-        assertThat(event.page()).isEqualTo(ResourceSchedulePage.LAUNDRY);
+        assertThat(event.kind()).isEqualTo(ResourceKind.LAUNDRY);
     }
 
     @Test
@@ -355,7 +354,7 @@ class BookingAutoCancellationIntegrationTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Expected BookingAutoCancelledEvent"));
         assertThat(event.resourceName()).isEqualTo("Room " + room.getName());
-        assertThat(event.page()).isEqualTo(ResourceSchedulePage.ROOMS);
+        assertThat(event.kind()).isEqualTo(ResourceKind.ROOM);
     }
 
     @Test

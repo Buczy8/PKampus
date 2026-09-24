@@ -13,8 +13,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import pl.edu.pk.pkampus.common.PagedResponse;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
-import pl.edu.pk.pkampus.mail.ResourceSchedulePage;
 import pl.edu.pk.pkampus.modules.booking.BookingAutoCancelledEvent;
+import pl.edu.pk.pkampus.modules.booking.ResourceKind;
 import pl.edu.pk.pkampus.modules.board.PostCategory;
 import pl.edu.pk.pkampus.modules.board.PostModerationService;
 import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
@@ -240,7 +240,7 @@ class ReceptionistServiceTest {
             BookingAutoCancelledEvent event = eventCaptor.getValue();
             assertEquals(resident.getEmail(), event.email());
             assertEquals("Laundry machine Pralka P1", event.resourceName());
-            assertEquals(ResourceSchedulePage.LAUNDRY, event.page());
+            assertEquals(ResourceKind.LAUNDRY, event.kind());
         }
 
         @Test
@@ -418,7 +418,7 @@ class ReceptionistServiceTest {
             BookingAutoCancelledEvent event = eventCaptor.getValue();
             assertEquals(resident.getEmail(), event.email());
             assertEquals("Room Salka Cichej Nauki", event.resourceName());
-            assertEquals(ResourceSchedulePage.ROOMS, event.page());
+            assertEquals(ResourceKind.ROOM, event.kind());
         }
 
         @Test

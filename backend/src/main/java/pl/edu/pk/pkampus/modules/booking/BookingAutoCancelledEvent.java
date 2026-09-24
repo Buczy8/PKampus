@@ -1,7 +1,5 @@
 package pl.edu.pk.pkampus.modules.booking;
 
-import pl.edu.pk.pkampus.mail.ResourceSchedulePage;
-
 import java.time.Instant;
 
 /**
@@ -13,6 +11,6 @@ public record BookingAutoCancelledEvent(
         String firstName,
         String resourceName,
         Instant startTime,
-        ResourceSchedulePage page
+        ResourceKind kind
 ) {
 }

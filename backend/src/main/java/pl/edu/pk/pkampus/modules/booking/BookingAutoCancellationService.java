@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import pl.edu.pk.pkampus.mail.ResourceSchedulePage;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBooking;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBookingRepository;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBookingStatus;
@@ -44,7 +43,7 @@ public class BookingAutoCancellationService {
                     resident.getFirstName(),
                     "Laundry machine " + machineLabel,
                     booking.getStartTime(),
-                    ResourceSchedulePage.LAUNDRY
+                    ResourceKind.LAUNDRY
             ));
         }
 
@@ -68,7 +67,7 @@ public class BookingAutoCancellationService {
                     resident.getFirstName(),
                     "Room " + roomLabel,
                     booking.getStartTime(),
-                    ResourceSchedulePage.ROOMS
+                    ResourceKind.ROOM
             ));
         }
 
