@@ -15,6 +15,7 @@ import pl.edu.pk.pkampus.modules.board.dto.PostDto;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
 import pl.edu.pk.pkampus.modules.dormitory.RoomAssignmentRepository;
 import pl.edu.pk.pkampus.modules.user.User;
+import pl.edu.pk.pkampus.modules.user.UserRepository;
 import pl.edu.pk.pkampus.modules.user.UserRole;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
 
@@ -41,6 +42,9 @@ class PostModerationServiceTest {
     @Mock
     private RoomAssignmentRepository roomAssignmentRepository;
 
+    @Mock
+    private UserRepository userRepository;
+
     private PostModerationService moderationService;
 
     private Dormitory dorm1;
@@ -55,7 +59,7 @@ class PostModerationServiceTest {
     void setUp() {
         PostMapper postMapper = new PostMapper();
         BoardViewService boardViewService = new BoardViewService(roomAssignmentRepository, commentRepository, postMapper);
-        PostAccessPolicy accessPolicy = new PostAccessPolicy(postRepository);
+        PostAccessPolicy accessPolicy = new PostAccessPolicy(postRepository, userRepository);
         moderationService = new PostModerationService(postRepository, commentRepository, boardViewService, accessPolicy);
 
         dorm1 = Dormitory.builder()
@@ -115,6 +119,11 @@ class PostModerationServiceTest {
                 .deleted(false)
                 .createdAt(Instant.now())
                 .build();
+
+        lenient().when(userRepository.findById(residentAuthor.getId()))
+                .thenAnswer(inv -> Optional.of(residentAuthor));
+        lenient().when(userRepository.findById(staffDormAdmin.getId()))
+                .thenAnswer(inv -> Optional.of(staffDormAdmin));
     }
 
     @Test
@@ -176,6 +185,7 @@ class PostModerationServiceTest {
                 .status(UserStatus.ACTIVE)
                 .dormitory(dorm1)
                 .build();
+        when(userRepository.findById(resident.getId())).thenReturn(Optional.of(resident));
 
         // Act & Assert
         assertThrows(AccessDeniedException.class,

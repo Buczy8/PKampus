@@ -12,6 +12,7 @@ import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
 import pl.edu.pk.pkampus.modules.user.User;
+import pl.edu.pk.pkampus.modules.user.UserRepository;
 import pl.edu.pk.pkampus.modules.user.UserRole;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
 
@@ -29,6 +30,9 @@ class PostAccessPolicyTest {
     @Mock
     private PostRepository postRepository;
 
+    @Mock
+    private UserRepository userRepository;
+
     private PostAccessPolicy policy;
 
     private Dormitory dorm;
@@ -36,7 +40,7 @@ class PostAccessPolicyTest {
 
     @BeforeEach
     void setUp() {
-        policy = new PostAccessPolicy(postRepository);
+        policy = new PostAccessPolicy(postRepository, userRepository);
 
         dorm = Dormitory.builder()
                 .id(UUID.randomUUID())
@@ -55,10 +59,15 @@ class PostAccessPolicyTest {
                 .build();
     }
 
+    private void givenFresh(User user) {
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+    }
+
     @Test
     @DisplayName("Should accept ACTIVE resident with dormitory")
     void requireActiveResidentSuccess() {
-        // Arrange — setUp
+        // Arrange
+        givenFresh(resident);
 
         // Act
         Dormitory result = policy.requireActiveResident(resident);
@@ -71,9 +80,12 @@ class PostAccessPolicyTest {
     @DisplayName("Should reject non-resident, blocked and dormitory-less accounts")
     void requireActiveResidentRejects() {
         // Arrange
-        User staff = User.builder().role(UserRole.DORM_ADMIN).status(UserStatus.ACTIVE).dormitory(dorm).build();
-        User blocked = User.builder().role(UserRole.RESIDENT).status(UserStatus.BLOCKED).dormitory(dorm).build();
-        User homeless = User.builder().role(UserRole.RESIDENT).status(UserStatus.ACTIVE).dormitory(null).build();
+        User staff = User.builder().id(UUID.randomUUID()).role(UserRole.DORM_ADMIN).status(UserStatus.ACTIVE).dormitory(dorm).build();
+        User blocked = User.builder().id(UUID.randomUUID()).role(UserRole.RESIDENT).status(UserStatus.BLOCKED).dormitory(dorm).build();
+        User homeless = User.builder().id(UUID.randomUUID()).role(UserRole.RESIDENT).status(UserStatus.ACTIVE).dormitory(null).build();
+        givenFresh(staff);
+        givenFresh(blocked);
+        givenFresh(homeless);
 
         // Act & Assert
         assertThrows(AccountStatusException.class, () -> policy.requireActiveResident(staff));
@@ -86,9 +98,14 @@ class PostAccessPolicyTest {
     void requireStaffDormitoryId() {
         // Arrange
         User receptionist = User.builder()
+                .id(UUID.randomUUID())
                 .role(UserRole.RECEPTIONIST).status(UserStatus.ACTIVE).dormitory(dorm).build();
         User staffHomeless = User.builder()
+                .id(UUID.randomUUID())
                 .role(UserRole.DORM_ADMIN).status(UserStatus.ACTIVE).dormitory(null).build();
+        givenFresh(receptionist);
+        givenFresh(staffHomeless);
+        givenFresh(resident);
 
         // Act & Assert
         assertEquals(dorm.getId(), policy.requireStaffDormitoryId(receptionist));
@@ -119,11 +136,37 @@ class PostAccessPolicyTest {
                 .status(UserStatus.ACTIVE)
                 .dormitory(null)
                 .build();
+        // Homeless viewer still resolves (ACTIVE resident check is caller's job);
+        // visibility fails on dormitory mismatch. requireVisiblePost takes an
+        // already-resolved user, so no user reload happens here.
         when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(dormPost));
 
         // Act & Assert
         assertThrows(ResourceNotFoundException.class,
                 () -> policy.requireVisiblePost(homeless, postId));
+    }
+
+    @Test
+    @DisplayName("Should ignore stale principal fields and use reloaded state")
+    void requireActiveResidentUsesReloadedState() {
+        // Arrange
+        User stalePrincipal = User.builder()
+                .id(resident.getId())
+                .role(UserRole.RESIDENT)
+                .status(UserStatus.ACTIVE)
+                .dormitory(dorm)
+                .build();
+        User blockedFresh = User.builder()
+                .id(resident.getId())
+                .role(UserRole.RESIDENT)
+                .status(UserStatus.BLOCKED)
+                .dormitory(dorm)
+                .build();
+        when(userRepository.findById(resident.getId())).thenReturn(Optional.of(blockedFresh));
+
+        // Act & Assert
+        assertThrows(AccountStatusException.class,
+                () -> policy.requireActiveResident(stalePrincipal));
     }
 
     @Test

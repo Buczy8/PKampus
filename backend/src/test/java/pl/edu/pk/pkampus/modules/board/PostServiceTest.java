@@ -26,6 +26,7 @@ import pl.edu.pk.pkampus.modules.dormitory.Room;
 import pl.edu.pk.pkampus.modules.dormitory.RoomAssignment;
 import pl.edu.pk.pkampus.modules.dormitory.RoomAssignmentRepository;
 import pl.edu.pk.pkampus.modules.user.User;
+import pl.edu.pk.pkampus.modules.user.UserRepository;
 import pl.edu.pk.pkampus.modules.user.UserRole;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
 
@@ -54,6 +55,9 @@ class PostServiceTest {
     @Mock
     private BoardRateLimiterService rateLimiterService;
 
+    @Mock
+    private UserRepository userRepository;
+
     private PostMapper postMapper;
     private BoardViewService boardViewService;
     private PostAccessPolicy accessPolicy;
@@ -72,7 +76,7 @@ class PostServiceTest {
     void setUp() {
         postMapper = new PostMapper();
         boardViewService = new BoardViewService(roomAssignmentRepository, commentRepository, postMapper);
-        accessPolicy = new PostAccessPolicy(postRepository);
+        accessPolicy = new PostAccessPolicy(postRepository, userRepository);
         postService = new PostService(postRepository, commentRepository, boardViewService, accessPolicy, rateLimiterService);
 
         dorm1 = Dormitory.builder()
@@ -143,6 +147,13 @@ class PostServiceTest {
                 .deleted(false)
                 .createdAt(Instant.now())
                 .build();
+
+        lenient().when(userRepository.findById(residentAuthor.getId()))
+                .thenAnswer(inv -> Optional.of(residentAuthor));
+        lenient().when(userRepository.findById(residentOtherDorm.getId()))
+                .thenAnswer(inv -> Optional.of(residentOtherDorm));
+        lenient().when(userRepository.findById(staffDormAdmin.getId()))
+                .thenAnswer(inv -> Optional.of(staffDormAdmin));
     }
 
     @Nested
@@ -455,6 +466,7 @@ class PostServiceTest {
                     .dormitory(dorm1)
                     .build();
 
+            when(userRepository.findById(residentSameDorm.getId())).thenReturn(Optional.of(residentSameDorm));
             when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
 
             // Act & Assert
@@ -516,6 +528,7 @@ class PostServiceTest {
                     .dormitory(dorm1)
                     .build();
 
+            when(userRepository.findById(residentSameDorm.getId())).thenReturn(Optional.of(residentSameDorm));
             when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
 
             // Act & Assert
@@ -673,6 +686,7 @@ class PostServiceTest {
                     .dormitory(dorm1)
                     .build();
 
+            when(userRepository.findById(residentSameDorm.getId())).thenReturn(Optional.of(residentSameDorm));
             when(commentRepository.findByIdWithPost(commentId)).thenReturn(Optional.of(comment));
             when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(postDormitory));
 

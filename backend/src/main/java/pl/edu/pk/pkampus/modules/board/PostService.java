@@ -43,25 +43,27 @@ public class PostService {
             int page,
             int size
     ) {
-        Dormitory dorm = accessPolicy.requireActiveResident(user);
+        User current = accessPolicy.requireActiveResidentUser(user);
+        Dormitory dorm = current.getDormitory();
         PostStatus status = PostStatusFilter.from(statusFilter, PostStatusFilter.ACTIVE).toPostStatus();
         Page<Post> posts = postRepository.findFeed(
                 dorm.getId(), category, scope, status, BoardPagination.feedPageable(page, size));
-        List<PostDto> content = boardViewService.toPostDtos(posts.getContent(), user);
+        List<PostDto> content = boardViewService.toPostDtos(posts.getContent(), current);
         return PagedResponse.of(content, posts.getNumber(), posts.getSize(), posts.getTotalElements());
     }
 
     @Transactional(readOnly = true)
     public PostDto getById(User user, UUID postId) {
-        accessPolicy.requireActiveResident(user);
-        Post post = accessPolicy.requireVisiblePost(user, postId);
-        return boardViewService.toPostDto(post, user);
+        User current = accessPolicy.requireActiveResidentUser(user);
+        Post post = accessPolicy.requireVisiblePost(current, postId);
+        return boardViewService.toPostDto(post, current);
     }
 
     @Transactional
     public PostDto create(User user, CreatePostRequestDto request) {
-        Dormitory dorm = accessPolicy.requireActiveResident(user);
-        rateLimiterService.checkPostRateLimit(user.getId());
+        User current = accessPolicy.requireActiveResidentUser(user);
+        Dormitory dorm = current.getDormitory();
+        rateLimiterService.checkPostRateLimit(current.getId());
 
         String title = request.title().trim();
         String content = request.content().trim();
@@ -72,7 +74,7 @@ public class PostService {
         Dormitory postDorm = request.scope() == PostScope.DORMITORY ? dorm : null;
 
         Post post = Post.builder()
-                .author(user)
+                .author(current)
                 .dormitory(postDorm)
                 .title(title)
                 .content(content)
@@ -84,43 +86,43 @@ public class PostService {
 
         Post saved = postRepository.saveAndFlush(post);
         log.info("Resident {} created board post {} ({}/{})",
-                user.getId(), saved.getId(), saved.getCategory(), saved.getScope());
-        return boardViewService.toNewPostDto(saved, user);
+                current.getId(), saved.getId(), saved.getCategory(), saved.getScope());
+        return boardViewService.toNewPostDto(saved, current);
     }
 
     @Transactional
     public PostDto resolve(User user, UUID postId) {
-        accessPolicy.requireActiveResident(user);
-        Post post = accessPolicy.requireOwnVisiblePost(user, postId);
+        User current = accessPolicy.requireActiveResidentUser(user);
+        Post post = accessPolicy.requireOwnVisiblePost(current, postId);
         post.markResolved();
         Post saved = postRepository.save(post);
-        return boardViewService.toPostDto(saved, user);
+        return boardViewService.toPostDto(saved, current);
     }
 
     @Transactional
     public void softDelete(User user, UUID postId) {
-        accessPolicy.requireActiveResident(user);
-        Post post = accessPolicy.requireOwnVisiblePost(user, postId);
+        User current = accessPolicy.requireActiveResidentUser(user);
+        Post post = accessPolicy.requireOwnVisiblePost(current, postId);
         post.softDelete();
         postRepository.save(post);
-        log.info("Resident {} soft-deleted board post {}", user.getId(), postId);
+        log.info("Resident {} soft-deleted board post {}", current.getId(), postId);
     }
 
     @Transactional(readOnly = true)
     public PagedResponse<CommentDto> listComments(User user, UUID postId, int page, int size) {
-        accessPolicy.requireActiveResident(user);
-        Post post = accessPolicy.requireVisiblePost(user, postId);
+        User current = accessPolicy.requireActiveResidentUser(user);
+        Post post = accessPolicy.requireVisiblePost(current, postId);
         Page<Comment> comments = commentRepository.findActiveByPostId(
                 post.getId(), BoardPagination.commentPageable(page, size));
-        List<CommentDto> content = boardViewService.toCommentDtos(post, comments.getContent(), user);
+        List<CommentDto> content = boardViewService.toCommentDtos(post, comments.getContent(), current);
         return PagedResponse.of(content, comments.getNumber(), comments.getSize(), comments.getTotalElements());
     }
 
     @Transactional
     public CommentDto addComment(User user, UUID postId, CreateCommentRequestDto request) {
-        accessPolicy.requireActiveResident(user);
-        rateLimiterService.checkCommentRateLimit(user.getId());
-        Post post = accessPolicy.requireVisiblePost(user, postId);
+        User current = accessPolicy.requireActiveResidentUser(user);
+        rateLimiterService.checkCommentRateLimit(current.getId());
+        Post post = accessPolicy.requireVisiblePost(current, postId);
         if (post.getStatus() == PostStatus.REMOVED_MODERATOR) {
             throw new BusinessRuleException("Cannot comment on a removed post");
         }
@@ -132,29 +134,29 @@ public class PostService {
 
         Comment comment = Comment.builder()
                 .post(post)
-                .author(user)
+                .author(current)
                 .content(content)
                 .deleted(false)
                 .build();
         Comment saved = commentRepository.saveAndFlush(comment);
-        log.info("Resident {} commented on post {}", user.getId(), postId);
-        return boardViewService.toCommentDto(saved, post, user);
+        log.info("Resident {} commented on post {}", current.getId(), postId);
+        return boardViewService.toCommentDto(saved, post, current);
     }
 
     @Transactional
     public void deleteComment(User user, UUID commentId) {
-        accessPolicy.requireActiveResident(user);
+        User current = accessPolicy.requireActiveResidentUser(user);
         Comment comment = commentRepository.findByIdWithPost(commentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
         if (comment.isDeleted()) {
             throw new ResourceNotFoundException("Comment not found");
         }
-        accessPolicy.requireVisiblePost(user, comment.getPost().getId());
-        if (!comment.getAuthor().getId().equals(user.getId())) {
+        accessPolicy.requireVisiblePost(current, comment.getPost().getId());
+        if (!comment.getAuthor().getId().equals(current.getId())) {
             throw new AccessDeniedException("Only the author can delete this comment");
         }
         comment.softDelete();
         commentRepository.save(comment);
-        log.info("Resident {} soft-deleted comment {} on post {}", user.getId(), commentId, comment.getPost().getId());
+        log.info("Resident {} soft-deleted comment {} on post {}", current.getId(), commentId, comment.getPost().getId());
     }
 }
