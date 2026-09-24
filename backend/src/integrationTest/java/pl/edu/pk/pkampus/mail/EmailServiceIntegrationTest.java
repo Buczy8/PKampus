@@ -2,7 +2,6 @@ package pl.edu.pk.pkampus.mail;
 
 import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -28,32 +27,29 @@ class EmailServiceIntegrationTest {
     @MockitoBean
     private JavaMailSender mailSender;
 
-    @BeforeEach
-    void setUp() {
-        reset(mailSender);
-    }
-
     @Test
-    @DisplayName("Should successfully load EmailService bean and synchronously dispatch email using Spring-injected configuration")
+    @DisplayName("Should dispatch an account-activated email through the Spring context with injected configuration")
     void shouldDispatchEmailThroughSpringContext() throws Exception {
         // Arrange
         MimeMessage mimeMessage = new MimeMessage((Session) null);
         when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
 
         // Act
-        emailService.sendHtmlEmail("resident@pk.edu.pl", "Test Subject", "<p>Test Content</p>");
+        emailService.sendAccountActivatedEmail("resident@pk.edu.pl", "Pawel", "101", "DS-1");
 
-        // Assert
+        // Assert: send methods are @Async, hence the timeout-based verification
         ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
-        verify(mailSender).send(captor.capture());
+        verify(mailSender, timeout(3000)).send(captor.capture());
         MimeMessage sent = captor.getValue();
 
-        assertEquals("Test Subject", sent.getSubject());
+        assertEquals("PKampus - Account activated", sent.getSubject());
         assertEquals("resident@pk.edu.pl", sent.getAllRecipients()[0].toString());
+        assertEquals("noreply@pkampus.pk.edu.pl", sent.getFrom()[0].toString());
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         sent.writeTo(baos);
-        assertTrue(baos.toString().contains("Test Content"));
+        assertTrue(baos.toString().contains("Pawel"));
+        assertTrue(baos.toString().contains("http://localhost:5173/login"));
     }
 
     @Test

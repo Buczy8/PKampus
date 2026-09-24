@@ -1,12 +1,8 @@
 package pl.edu.pk.pkampus.mail;
 
-import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.mail.internet.MimeMessage;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -20,15 +16,21 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Best-effort resident notifications and critical authentication emails.
- * All send methods are asynchronous (dispatched onto {@code mailExecutor}).
- * Critical emails return a {@link CompletableFuture} to allow callers to observe failure.
- * Fire-and-forget notification exceptions are routed to {@code AsyncUncaughtExceptionHandler}.
- * Delivery outcomes are tracked using {@code mail.sent} and {@code mail.failed} metrics.
+ * All public send methods are asynchronous (dispatched onto {@code mailExecutor}).
+ *
+ * <p>Critical emails (verification, password reset) return a {@link CompletableFuture}
+ * for programmatic observation and are additionally escalated by this service:
+ * a failed critical delivery is logged as CRITICAL, because the resident has no
+ * recovery path until the mail arrives (there is no resend flow in the MVP).</p>
+ *
+ * <p>Fire-and-forget notification exceptions are routed to {@code AsyncUncaughtExceptionHandler}.
+ * Delivery outcomes are tracked with {@code mail.sent} / {@code mail.failed} counters
+ * tagged with the per-template {@link MailType} tag (never PII).</p>
  *
  * <p>Callers inside a transaction must not send directly — they publish a
  * domain event instead and a {@code @TransactionalEventListener(AFTER_COMMIT)}
  * listener sends the mail, so residents never receive mail about changes that
- * were rolled back.
+ * were rolled back.</p>
  */
 @Slf4j
 @Service
@@ -38,40 +40,27 @@ public class EmailService {
 
     private final JavaMailSender mailSender;
     private final EmailTemplateRenderer templateRenderer;
+    private final MeterRegistry meterRegistry;
     private final String frontendUrl;
     private final String fromEmail;
-    private final Counter mailSentCounter;
-    private final Counter mailFailedCounter;
 
-    @Autowired
     public EmailService(
             JavaMailSender mailSender,
             EmailTemplateRenderer templateRenderer,
-            ObjectProvider<MeterRegistry> meterRegistryProvider,
+            MeterRegistry meterRegistry,
             @Value("${app.frontend.url:http://localhost:5173}") String frontendUrl,
-            @Value("${spring.mail.username:noreply@pkampus.pk.edu.pl}") String fromEmail) {
+            @Value("${app.mail.from:noreply@pkampus.pk.edu.pl}") String fromEmail) {
         this.mailSender = mailSender;
-        this.templateRenderer = templateRenderer != null ? templateRenderer : new EmailTemplateRenderer();
+        this.templateRenderer = templateRenderer;
+        this.meterRegistry = meterRegistry;
         this.frontendUrl = frontendUrl;
         this.fromEmail = fromEmail;
-        MeterRegistry registry = meterRegistryProvider.getIfAvailable(SimpleMeterRegistry::new);
-        this.mailSentCounter = registry.counter("mail.sent");
-        this.mailFailedCounter = registry.counter("mail.failed");
-    }
-
-    public EmailService(JavaMailSender mailSender, MeterRegistry meterRegistry, String frontendUrl, String fromEmail) {
-        this(mailSender, new EmailTemplateRenderer(), ObjectProviderOf.of(meterRegistry != null ? meterRegistry : new SimpleMeterRegistry()), frontendUrl, fromEmail);
-    }
-
-    public EmailService(JavaMailSender mailSender, String frontendUrl, String fromEmail) {
-        this(mailSender, new EmailTemplateRenderer(), ObjectProviderOf.of(new SimpleMeterRegistry()), frontendUrl, fromEmail);
     }
 
     @Async(MAIL_EXECUTOR)
     public CompletableFuture<Void> sendVerificationEmail(String toEmail, String token) {
         try {
-            RenderedEmail email = templateRenderer.renderVerificationEmail(frontendUrl, token);
-            sendHtmlEmail(toEmail, email);
+            dispatch(toEmail, MailType.VERIFICATION, templateRenderer.renderVerificationEmail(frontendUrl, token));
             return CompletableFuture.completedFuture(null);
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
@@ -80,14 +69,14 @@ public class EmailService {
 
     @Async(MAIL_EXECUTOR)
     public void sendAccountActivatedEmail(String toEmail, String firstName, String roomNumber, String dormitoryName) {
-        RenderedEmail email = templateRenderer.renderAccountActivatedEmail(frontendUrl, firstName, roomNumber, dormitoryName);
-        sendHtmlEmail(toEmail, email);
+        dispatch(toEmail, MailType.ACCOUNT_ACTIVATED,
+                templateRenderer.renderAccountActivatedEmail(frontendUrl, firstName, roomNumber, dormitoryName));
     }
 
     @Async(MAIL_EXECUTOR)
     public void sendRegistrationRejectedEmail(String toEmail, String firstName, String reason) {
-        RenderedEmail email = templateRenderer.renderRegistrationRejectedEmail(firstName, reason);
-        sendHtmlEmail(toEmail, email);
+        dispatch(toEmail, MailType.REGISTRATION_REJECTED,
+                templateRenderer.renderRegistrationRejectedEmail(firstName, reason));
     }
 
     @Async(MAIL_EXECUTOR)
@@ -100,15 +89,14 @@ public class EmailService {
         sendLaundryMachineBreakdownEmail(toEmail, firstName, machineIdentifier, templateRenderer.formatStartTime(startTime));
     }
 
-    @Async(MAIL_EXECUTOR)
-    public void sendLaundryMachineBreakdownEmail(
+    void sendLaundryMachineBreakdownEmail(
             String toEmail,
             String firstName,
             String machineIdentifier,
             String startTimeLabel
     ) {
-        RenderedEmail email = templateRenderer.renderLaundryMachineBreakdownEmail(frontendUrl, firstName, machineIdentifier, startTimeLabel);
-        sendHtmlEmail(toEmail, email);
+        dispatch(toEmail, MailType.LAUNDRY_BREAKDOWN,
+                templateRenderer.renderLaundryMachineBreakdownEmail(frontendUrl, firstName, machineIdentifier, startTimeLabel));
     }
 
     @Async(MAIL_EXECUTOR)
@@ -121,15 +109,14 @@ public class EmailService {
         sendRoomMaintenanceEmail(toEmail, firstName, roomName, templateRenderer.formatStartTime(startTime));
     }
 
-    @Async(MAIL_EXECUTOR)
-    public void sendRoomMaintenanceEmail(
+    void sendRoomMaintenanceEmail(
             String toEmail,
             String firstName,
             String roomName,
             String startTimeLabel
     ) {
-        RenderedEmail email = templateRenderer.renderRoomMaintenanceEmail(frontendUrl, firstName, roomName, startTimeLabel);
-        sendHtmlEmail(toEmail, email);
+        dispatch(toEmail, MailType.ROOM_MAINTENANCE,
+                templateRenderer.renderRoomMaintenanceEmail(frontendUrl, firstName, roomName, startTimeLabel));
     }
 
     @Async(MAIL_EXECUTOR)
@@ -139,8 +126,8 @@ public class EmailService {
             String statusLabel,
             String staffNotes
     ) {
-        RenderedEmail email = templateRenderer.renderIssueStatusChangedEmail(frontendUrl, firstName, statusLabel, staffNotes);
-        sendHtmlEmail(toEmail, email);
+        dispatch(toEmail, MailType.ISSUE_STATUS_CHANGED,
+                templateRenderer.renderIssueStatusChangedEmail(frontendUrl, firstName, statusLabel, staffNotes));
     }
 
     @Async(MAIL_EXECUTOR)
@@ -154,23 +141,21 @@ public class EmailService {
         sendBookingAutoCancelled15MinEmail(toEmail, firstName, resourceName, templateRenderer.formatStartTime(startTime), page);
     }
 
-    @Async(MAIL_EXECUTOR)
-    public void sendBookingAutoCancelled15MinEmail(
+    void sendBookingAutoCancelled15MinEmail(
             String toEmail,
             String firstName,
             String resourceName,
             String startTimeLabel,
             ResourceSchedulePage page
     ) {
-        RenderedEmail email = templateRenderer.renderBookingAutoCancelled15MinEmail(frontendUrl, firstName, resourceName, startTimeLabel, page);
-        sendHtmlEmail(toEmail, email);
+        dispatch(toEmail, MailType.BOOKING_AUTO_CANCELLED,
+                templateRenderer.renderBookingAutoCancelled15MinEmail(frontendUrl, firstName, resourceName, startTimeLabel, page));
     }
 
     @Async(MAIL_EXECUTOR)
     public CompletableFuture<Void> sendPasswordResetEmail(String toEmail, String firstName, String rawToken) {
         try {
-            RenderedEmail email = templateRenderer.renderPasswordResetEmail(frontendUrl, firstName, rawToken);
-            sendHtmlEmail(toEmail, email);
+            dispatch(toEmail, MailType.PASSWORD_RESET, templateRenderer.renderPasswordResetEmail(frontendUrl, firstName, rawToken));
             return CompletableFuture.completedFuture(null);
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
@@ -179,76 +164,46 @@ public class EmailService {
 
     @Async(MAIL_EXECUTOR)
     public void sendAccountBlockedEmail(String toEmail, String firstName) {
-        RenderedEmail email = templateRenderer.renderAccountBlockedEmail(firstName);
-        sendHtmlEmail(toEmail, email);
+        dispatch(toEmail, MailType.ACCOUNT_BLOCKED, templateRenderer.renderAccountBlockedEmail(firstName));
     }
 
     @Async(MAIL_EXECUTOR)
     public void sendCheckedOutEmail(String toEmail, String firstName) {
-        RenderedEmail email = templateRenderer.renderCheckedOutEmail(firstName);
-        sendHtmlEmail(toEmail, email);
+        dispatch(toEmail, MailType.CHECKED_OUT, templateRenderer.renderCheckedOutEmail(firstName));
     }
 
     @Async(MAIL_EXECUTOR)
     public void sendRoomBanEmail(String toEmail, String firstName, LocalDate start, LocalDate end, String reason) {
-        RenderedEmail email = templateRenderer.renderRoomBanEmail(firstName, start, end, reason);
-        sendHtmlEmail(toEmail, email);
+        dispatch(toEmail, MailType.ROOM_BAN, templateRenderer.renderRoomBanEmail(firstName, start, end, reason));
     }
 
-    void sendHtmlEmail(String to, RenderedEmail email) {
-        sendHtmlEmail(to, email.subject(), email.htmlBody(), email.plainTextBody());
-    }
-
-    void sendHtmlEmail(String to, String subject, String htmlBody) {
-        sendHtmlEmail(to, subject, htmlBody, EmailTemplateRenderer.toPlainText(htmlBody));
-    }
-
-    void sendHtmlEmail(String to, String subject, String htmlBody, String plainTextBody) {
+    /**
+     * Sends the rendered email and records the delivery outcome.
+     * The recipient address is logged only at DEBUG (success) and ERROR (failure)
+     * level; INFO logs stay free of personally identifiable information.
+     */
+    private void dispatch(String to, MailType type, RenderedEmail email) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
             helper.setFrom(fromEmail);
             helper.setTo(to);
-            helper.setSubject(subject);
-            helper.setText(plainTextBody, htmlBody);
+            helper.setSubject(email.subject());
+            helper.setText(email.plainTextBody(), email.htmlBody());
 
             mailSender.send(message);
-            mailSentCounter.increment();
-            log.info("Email '{}' sent successfully to {}", subject, to);
+            meterRegistry.counter("mail.sent", "type", type.tag()).increment();
+            log.info("Email [type={}] '{}' dispatched", type.tag(), email.subject());
+            log.debug("Email [type={}] '{}' dispatched to {}", type.tag(), email.subject(), to);
         } catch (Exception e) {
-            mailFailedCounter.increment();
-            log.error("Failed to send email '{}' to {}", subject, to, e);
-            throw new MailDeliveryException("Failed to send email '" + subject + "' to " + to, e);
-        }
-    }
-
-    static String esc(String value) {
-        return EmailTemplateRenderer.esc(value);
-    }
-
-    private static class ObjectProviderOf {
-        static <T> ObjectProvider<T> of(T value) {
-            return new ObjectProvider<>() {
-                @Override
-                public T getObject(Object... args) {
-                    return value;
-                }
-
-                @Override
-                public T getIfAvailable() {
-                    return value;
-                }
-
-                @Override
-                public T getIfUnique() {
-                    return value;
-                }
-
-                @Override
-                public T getObject() {
-                    return value;
-                }
-            };
+            meterRegistry.counter("mail.failed", "type", type.tag()).increment();
+            if (type.critical()) {
+                log.error("CRITICAL: [type={}] email '{}' was not delivered to {}; the resident cannot complete "
+                        + "the auth flow until delivery succeeds (FR-AUTH-01)", type.tag(), email.subject(), to, e);
+            } else {
+                log.error("Failed to send email [type={}] '{}' to {}", type.tag(), email.subject(), to, e);
+            }
+            throw new MailDeliveryException("Failed to send email '" + email.subject() + "'", e);
         }
     }
 }

@@ -24,6 +24,9 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class EmailServiceTest {
 
+    private static final String FRONTEND_URL = "http://localhost:5173";
+    private static final String FROM_EMAIL = "noreply@pkampus.pk.edu.pl";
+
     @Mock
     private JavaMailSender mailSender;
 
@@ -33,7 +36,16 @@ class EmailServiceTest {
     @BeforeEach
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
-        emailService = new EmailService(mailSender, meterRegistry, "http://localhost:5173", "noreply@pkampus.pk.edu.pl");
+        emailService = new EmailService(
+                mailSender, new EmailTemplateRenderer(), meterRegistry, FRONTEND_URL, FROM_EMAIL);
+    }
+
+    private static double sent(SimpleMeterRegistry registry, String type) {
+        return registry.counter("mail.sent", "type", type).count();
+    }
+
+    private static double failed(SimpleMeterRegistry registry, String type) {
+        return registry.counter("mail.failed", "type", type).count();
     }
 
     @Test
@@ -55,7 +67,7 @@ class EmailServiceTest {
 
         assertEquals("PKampus - Confirm your registration", sentMessage.getSubject());
         assertEquals(toEmail, sentMessage.getAllRecipients()[0].toString());
-        assertEquals("noreply@pkampus.pk.edu.pl", sentMessage.getFrom()[0].toString());
+        assertEquals(FROM_EMAIL, sentMessage.getFrom()[0].toString());
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         sentMessage.writeTo(baos);
@@ -120,7 +132,7 @@ class EmailServiceTest {
         when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
 
         // Act
-        emailService.sendLaundryMachineBreakdownEmail("student@pk.edu.pl", "Jan", "Pralka #3", "2026-09-23 14:00");
+        emailService.sendLaundryMachineBreakdownEmail("student@pk.edu.pl", "Jan", "Pralka #3", "23.09.2026 14:00");
 
         // Assert
         ArgumentCaptor<MimeMessage> messageCaptor = ArgumentCaptor.forClass(MimeMessage.class);
@@ -134,7 +146,7 @@ class EmailServiceTest {
         String content = baos.toString();
         assertTrue(content.contains("Jan"));
         assertTrue(content.contains("Pralka #3"));
-        assertTrue(content.contains("2026-09-23 14:00"));
+        assertTrue(content.contains("23.09.2026 14:00"));
         assertTrue(content.contains("http://localhost:5173/laundry"));
     }
 
@@ -145,7 +157,7 @@ class EmailServiceTest {
         when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
 
         // Act
-        emailService.sendRoomMaintenanceEmail("student@pk.edu.pl", "Jan", "Salka bilardowa", "2026-09-23 18:00");
+        emailService.sendRoomMaintenanceEmail("student@pk.edu.pl", "Jan", "Salka bilardowa", "23.09.2026 18:00");
 
         // Assert
         ArgumentCaptor<MimeMessage> messageCaptor = ArgumentCaptor.forClass(MimeMessage.class);
@@ -243,7 +255,7 @@ class EmailServiceTest {
                 "student@pk.edu.pl",
                 "Jan",
                 "Pralka #1",
-                "12:00",
+                "24.09.2026 12:00",
                 ResourceSchedulePage.LAUNDRY
         );
 
@@ -303,8 +315,8 @@ class EmailServiceTest {
         assertTrue(future.isCompletedExceptionally());
         ExecutionException ex = assertThrows(ExecutionException.class, future::get);
         assertInstanceOf(MailDeliveryException.class, ex.getCause());
-        assertEquals(1.0, meterRegistry.counter("mail.failed").count());
-        assertEquals(0.0, meterRegistry.counter("mail.sent").count());
+        assertEquals(1.0, failed(meterRegistry, "verification"));
+        assertEquals(0.0, sent(meterRegistry, "verification"));
     }
 
     @Test
@@ -317,7 +329,7 @@ class EmailServiceTest {
 
         // Assert
         assertTrue(future.isCompletedExceptionally());
-        assertEquals(1.0, meterRegistry.counter("mail.failed").count());
+        assertEquals(1.0, failed(meterRegistry, "password-reset"));
         verify(mailSender, never()).send(any(MimeMessage.class));
     }
 
@@ -331,8 +343,8 @@ class EmailServiceTest {
         // Act & Assert (in production Spring @Async catches and invokes AsyncUncaughtExceptionHandler)
         assertThrows(MailDeliveryException.class, () ->
                 emailService.sendRegistrationRejectedEmail("student@pk.edu.pl", "Jan", "Reason"));
-        assertEquals(1.0, meterRegistry.counter("mail.failed").count());
-        assertEquals(0.0, meterRegistry.counter("mail.sent").count());
+        assertEquals(1.0, failed(meterRegistry, "registration-rejected"));
+        assertEquals(0.0, sent(meterRegistry, "registration-rejected"));
     }
 
     @Test
@@ -345,8 +357,24 @@ class EmailServiceTest {
         emailService.sendCheckedOutEmail("student@pk.edu.pl", "Jan");
 
         // Assert
-        assertEquals(1.0, meterRegistry.counter("mail.sent").count());
-        assertEquals(0.0, meterRegistry.counter("mail.failed").count());
+        assertEquals(1.0, sent(meterRegistry, "checked-out"));
+        assertEquals(0.0, failed(meterRegistry, "checked-out"));
+    }
+
+    @Test
+    void shouldTrackCountersSeparatelyPerMailType() {
+        // Arrange
+        MimeMessage mimeMessage = new MimeMessage((Session) null);
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+
+        // Act
+        emailService.sendCheckedOutEmail("student@pk.edu.pl", "Jan");
+        emailService.sendAccountBlockedEmail("student@pk.edu.pl", "Jan");
+
+        // Assert
+        assertEquals(1.0, sent(meterRegistry, "checked-out"));
+        assertEquals(1.0, sent(meterRegistry, "account-blocked"));
+        assertEquals(0.0, failed(meterRegistry, "checked-out"));
     }
 
     @Test
@@ -380,19 +408,6 @@ class EmailServiceTest {
 
     private static String textPartContent(MimeMessage message, String mimeType) throws Exception {
         return textPartContent(message.getContent(), mimeType);
-    }
-
-    private static String dumpMime(Object content) throws Exception {
-        if (content instanceof jakarta.mail.Multipart multipart) {
-            StringBuilder sb = new StringBuilder("MP[" + multipart.getCount() + "]{");
-            for (int i = 0; i < multipart.getCount(); i++) {
-                jakarta.mail.BodyPart part = multipart.getBodyPart(i);
-                sb.append(part.getContentType()).append("=>").append(dumpMime(part.getContent())).append(";");
-            }
-            return sb.append("}").toString();
-        }
-        String s = String.valueOf(content);
-        return "LEAF[" + s.length() + "]:" + s.substring(0, Math.min(80, s.length()));
     }
 
     private static String textPartContent(Object content, String mimeType) throws Exception {
