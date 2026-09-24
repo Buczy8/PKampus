@@ -140,14 +140,18 @@ class PostServiceTest {
         void listFeedSuccess() {
             // Arrange
             Room room = Room.builder().roomNumber("201-A").build();
-            RoomAssignment assignment = RoomAssignment.builder().room(room).isActive(true).build();
+            RoomAssignment assignment = RoomAssignment.builder()
+                    .user(residentAuthor)
+                    .room(room)
+                    .isActive(true)
+                    .build();
 
             when(postRepository.findFeed(dorm1.getId(), PostCategory.BORROW_HELP, PostScope.DORMITORY, "ACTIVE"))
                     .thenReturn(List.of(postDormitory));
             when(commentRepository.countActiveByPostIds(List.of(postId)))
                     .thenReturn(List.<Object[]>of(new Object[]{postId, 3L}));
-            when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(residentAuthor.getId()))
-                    .thenReturn(Optional.of(assignment));
+            when(roomAssignmentRepository.findActiveByUserIdIn(List.of(residentAuthor.getId())))
+                    .thenReturn(List.of(assignment));
 
             // Act
             List<PostDto> result = postService.listFeed(residentAuthor, PostCategory.BORROW_HELP, PostScope.DORMITORY, "active");
@@ -179,7 +183,7 @@ class PostServiceTest {
             assertEquals(1, result.size());
             assertNull(result.getFirst().authorRoomNumber());
             assertEquals("DS Board 1", result.getFirst().authorDormitoryName());
-            verify(roomAssignmentRepository, never()).findByUserIdAndIsActiveTrue(any());
+            verify(roomAssignmentRepository, never()).findActiveByUserIdIn(any());
         }
 
         @Test

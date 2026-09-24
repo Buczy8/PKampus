@@ -20,11 +20,14 @@ import pl.edu.pk.pkampus.modules.user.UserStatus;
 
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -48,8 +51,9 @@ public class PostService {
         String filter = normalizeStatusFilter(statusFilter);
         List<Post> posts = postRepository.findFeed(dorm.getId(), category, scope, filter);
         Map<UUID, Integer> counts = commentCounts(posts.stream().map(Post::getId).toList());
+        Map<UUID, String> rooms = roomNumbersByUserIds(dormitoryAuthorIds(posts));
         return posts.stream()
-                .map(post -> toDto(post, user, counts.getOrDefault(post.getId(), 0)))
+                .map(post -> toDto(post, user, counts.getOrDefault(post.getId(), 0), rooms))
                 .toList();
     }
 
@@ -79,7 +83,7 @@ public class PostService {
         Post saved = postRepository.saveAndFlush(post);
         log.info("Resident {} created board post {} ({}/{})",
                 user.getEmail(), saved.getId(), saved.getCategory(), saved.getScope());
-        return toDto(saved, user, 0);
+        return toDto(saved, user, 0, roomNumbersByUserIds(dormitoryAuthorIds(List.of(saved))));
     }
 
     @Transactional
@@ -92,7 +96,7 @@ public class PostService {
         post.setStatus(PostStatus.RESOLVED);
         Post saved = postRepository.save(post);
         int count = commentRepository.findActiveByPostIdOrderByCreatedAtAsc(saved.getId()).size();
-        return toDto(saved, user, count);
+        return toDto(saved, user, count, roomNumbersByUserIds(dormitoryAuthorIds(List.of(saved))));
     }
 
     @Transactional
@@ -109,8 +113,10 @@ public class PostService {
     public List<CommentDto> listComments(User user, UUID postId) {
         requireActiveResident(user);
         Post post = requireVisiblePost(user, postId);
-        return commentRepository.findActiveByPostIdOrderByCreatedAtAsc(post.getId()).stream()
-                .map(c -> toCommentDto(c, post, user))
+        List<Comment> comments = commentRepository.findActiveByPostIdOrderByCreatedAtAsc(post.getId());
+        Map<UUID, String> rooms = roomNumbersByUserIds(commentAuthorIds(post, comments));
+        return comments.stream()
+                .map(c -> toCommentDto(c, post, user, rooms))
                 .toList();
     }
 
@@ -135,7 +141,7 @@ public class PostService {
                 .build();
         Comment saved = commentRepository.saveAndFlush(comment);
         log.info("Resident {} commented on post {}", user.getEmail(), postId);
-        return toCommentDto(saved, post, user);
+        return toCommentDto(saved, post, user, roomNumbersByUserIds(commentAuthorIds(post, List.of(saved))));
     }
 
     @Transactional(readOnly = true)
@@ -153,8 +159,9 @@ public class PostService {
                 filter
         );
         Map<UUID, Integer> counts = commentCounts(posts.stream().map(Post::getId).toList());
+        Map<UUID, String> rooms = roomNumbersByUserIds(dormitoryAuthorIds(posts));
         return posts.stream()
-                .map(post -> toDto(post, staff, counts.getOrDefault(post.getId(), 0)))
+                .map(post -> toDto(post, staff, counts.getOrDefault(post.getId(), 0), rooms))
                 .toList();
     }
 
@@ -165,15 +172,17 @@ public class PostService {
         post.setStatus(PostStatus.REMOVED_MODERATOR);
         Post saved = postRepository.save(post);
         log.info("Staff {} moderated board post {} to REMOVED_MODERATOR", staff.getEmail(), postId);
-        return toDto(saved, staff, 0);
+        return toDto(saved, staff, 0, roomNumbersByUserIds(dormitoryAuthorIds(List.of(saved))));
     }
 
     @Transactional(readOnly = true)
     public List<CommentDto> listCommentsForStaff(User staff, UUID postId) {
         UUID dormitoryId = requireStaffDormitoryId(staff);
         Post post = requireStaffModeratablePost(postId, dormitoryId);
-        return commentRepository.findActiveByPostIdOrderByCreatedAtAsc(post.getId()).stream()
-                .map(c -> toCommentDto(c, post, staff))
+        List<Comment> comments = commentRepository.findActiveByPostIdOrderByCreatedAtAsc(post.getId());
+        Map<UUID, String> rooms = roomNumbersByUserIds(commentAuthorIds(post, comments));
+        return comments.stream()
+                .map(c -> toCommentDto(c, post, staff, rooms))
                 .toList();
     }
 
@@ -276,19 +285,60 @@ public class PostService {
         return map;
     }
 
-    private PostDto toDto(Post post, User viewer, int commentCount) {
+    private Map<UUID, String> roomNumbersByUserIds(Collection<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        List<UUID> distinctIds = userIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (distinctIds.isEmpty()) {
+            return Map.of();
+        }
+        return roomAssignmentRepository.findActiveByUserIdIn(distinctIds).stream()
+                .filter(ra -> ra.getUser() != null && ra.getUser().getId() != null && ra.getRoom() != null)
+                .collect(Collectors.toMap(
+                        ra -> ra.getUser().getId(),
+                        ra -> ra.getRoom().getRoomNumber(),
+                        (first, second) -> first));
+    }
+
+    private List<UUID> dormitoryAuthorIds(List<Post> posts) {
+        return posts.stream()
+                .filter(post -> post.getScope() == PostScope.DORMITORY && post.getAuthor() != null)
+                .map(post -> post.getAuthor().getId())
+                .distinct()
+                .toList();
+    }
+
+    private List<UUID> commentAuthorIds(Post post, List<Comment> comments) {
+        if (post.getScope() != PostScope.DORMITORY) {
+            return List.of();
+        }
+        return comments.stream()
+                .filter(comment -> comment.getAuthor() != null)
+                .map(comment -> comment.getAuthor().getId())
+                .distinct()
+                .toList();
+    }
+
+    private String resolveRoomNumber(User author, PostScope scope, Map<UUID, String> roomsByUserId) {
+        if (scope != PostScope.DORMITORY) {
+            return null;
+        }
+        String assigned = roomsByUserId.get(author.getId());
+        return assigned != null ? assigned : author.getDeclaredRoomNumber();
+    }
+
+    private PostDto toDto(Post post, User viewer, int commentCount, Map<UUID, String> roomsByUserId) {
         User author = post.getAuthor();
         String displayName = author.getFirstName() + " " + author.getLastName();
         String dormName = author.getDormitory() != null
                 ? author.getDormitory().getName()
                 : (post.getDormitory() != null ? post.getDormitory().getName() : null);
 
-        String roomNumber = null;
-        if (post.getScope() == PostScope.DORMITORY) {
-            roomNumber = roomAssignmentRepository.findByUserIdAndIsActiveTrue(author.getId())
-                    .map(ra -> ra.getRoom().getRoomNumber())
-                    .orElse(author.getDeclaredRoomNumber());
-        }
+        String roomNumber = resolveRoomNumber(author, post.getScope(), roomsByUserId);
 
         return new PostDto(
                 post.getId(),
@@ -306,17 +356,12 @@ public class PostService {
         );
     }
 
-    private CommentDto toCommentDto(Comment comment, Post post, User viewer) {
+    private CommentDto toCommentDto(Comment comment, Post post, User viewer, Map<UUID, String> roomsByUserId) {
         User author = comment.getAuthor();
         String displayName = author.getFirstName() + " " + author.getLastName();
         String dormName = author.getDormitory() != null ? author.getDormitory().getName() : null;
 
-        String roomNumber = null;
-        if (post.getScope() == PostScope.DORMITORY) {
-            roomNumber = roomAssignmentRepository.findByUserIdAndIsActiveTrue(author.getId())
-                    .map(ra -> ra.getRoom().getRoomNumber())
-                    .orElse(author.getDeclaredRoomNumber());
-        }
+        String roomNumber = resolveRoomNumber(author, post.getScope(), roomsByUserId);
 
         return new CommentDto(
                 comment.getId(),
