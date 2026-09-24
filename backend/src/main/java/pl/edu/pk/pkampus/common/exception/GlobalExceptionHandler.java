@@ -113,12 +113,6 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
-    @ExceptionHandler(MailDeliveryException.class)
-    public ResponseEntity<ApiResponse<Void>> handleMailDelivery(MailDeliveryException ex) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error(ex.getMessage()));
-    }
-
     @ExceptionHandler(AccountStatusException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccountStatus(AccountStatusException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
