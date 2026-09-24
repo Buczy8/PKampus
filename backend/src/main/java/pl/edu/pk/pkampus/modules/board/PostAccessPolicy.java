@@ -53,15 +53,37 @@ class PostAccessPolicy {
         return requireActiveResidentUser(principal).getDormitory();
     }
 
-    public UUID requireStaffDormitoryId(User principal) {
+    /**
+     * Moderator scope resolved from a reloaded staff account.
+     *
+     * @param role        role of the reloaded moderator
+     * @param global      {@code true} for SUPER_ADMIN (all dormitories, both scopes)
+     * @param dormitoryId dormitory scoping DORMITORY posts; {@code null} for the
+     *                    global view (SUPER_ADMIN without an assigned dormitory)
+     */
+    public record ModeratorScope(UserRole role, boolean global, UUID dormitoryId) {
+    }
+
+    /**
+     * Resolves the moderation scope for a staff principal (FR-BOARD-06, FR-PORTAL-05).
+     * RECEPTIONIST and DORM_ADMIN are scoped to their assigned dormitory;
+     * SUPER_ADMIN is global and needs no dormitory assignment.
+     */
+    public ModeratorScope requireModeratorScope(User principal) {
         User staff = reload(principal);
-        if (staff.getRole() != UserRole.RECEPTIONIST && staff.getRole() != UserRole.DORM_ADMIN) {
-            throw new AccessDeniedException("Only receptionist or dormitory admin can moderate the board");
-        }
-        if (staff.getDormitory() == null) {
-            throw new BusinessRuleException("Staff account has no dormitory assigned");
-        }
-        return staff.getDormitory().getId();
+        return switch (staff.getRole()) {
+            case RECEPTIONIST, DORM_ADMIN -> {
+                if (staff.getDormitory() == null) {
+                    throw new BusinessRuleException("Staff account has no dormitory assigned");
+                }
+                yield new ModeratorScope(staff.getRole(), false, staff.getDormitory().getId());
+            }
+            case SUPER_ADMIN -> new ModeratorScope(
+                    staff.getRole(),
+                    true,
+                    staff.getDormitory() != null ? staff.getDormitory().getId() : null);
+            default -> throw new AccessDeniedException("Only staff can moderate the board");
+        };
     }
 
     public Post requireOwnVisiblePost(User freshUser, UUID postId) {
@@ -93,15 +115,29 @@ class PostAccessPolicy {
         return post;
     }
 
-    public Post requireStaffModeratablePost(UUID postId, UUID dormitoryId) {
+    /**
+     * Resolves a post for moderation. DORMITORY posts are moderatable within their
+     * dormitory (or globally by SUPER_ADMIN); CAMPUS posts are moderatable by
+     * DORM_ADMIN of any dormitory and by SUPER_ADMIN (FR-BOARD-06). Existence is
+     * hidden with 404 for out-of-scope moderators.
+     */
+    public Post requireModeratablePost(UUID postId, ModeratorScope scope) {
         Post post = postRepository.findByIdAndNotDeleted(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
         if (post.getStatus() == PostStatus.REMOVED_MODERATOR) {
             throw new ResourceNotFoundException("Post not found");
         }
-        if (post.getScope() != PostScope.DORMITORY
-                || post.getDormitory() == null
-                || !post.getDormitory().getId().equals(dormitoryId)) {
+        if (post.getScope() == PostScope.CAMPUS) {
+            if (scope.role() != UserRole.DORM_ADMIN && scope.role() != UserRole.SUPER_ADMIN) {
+                throw new ResourceNotFoundException("Post not found");
+            }
+            return post;
+        }
+        if (scope.global()) {
+            return post;
+        }
+        if (post.getDormitory() == null
+                || !post.getDormitory().getId().equals(scope.dormitoryId())) {
             throw new ResourceNotFoundException("Post not found");
         }
         return post;

@@ -94,23 +94,66 @@ class PostAccessPolicyTest {
     }
 
     @Test
-    @DisplayName("Should accept receptionist and reject resident without dormitory check")
-    void requireStaffDormitoryId() {
+    @DisplayName("Should scope receptionist and dorm admin to their dormitory")
+    void requireModeratorScopeForAssignedStaff() {
         // Arrange
         User receptionist = User.builder()
                 .id(UUID.randomUUID())
                 .role(UserRole.RECEPTIONIST).status(UserStatus.ACTIVE).dormitory(dorm).build();
-        User staffHomeless = User.builder()
+        User dormAdmin = User.builder()
                 .id(UUID.randomUUID())
-                .role(UserRole.DORM_ADMIN).status(UserStatus.ACTIVE).dormitory(null).build();
+                .role(UserRole.DORM_ADMIN).status(UserStatus.ACTIVE).dormitory(dorm).build();
         givenFresh(receptionist);
-        givenFresh(staffHomeless);
+        givenFresh(dormAdmin);
+
+        // Act & Assert
+        assertEquals(new PostAccessPolicy.ModeratorScope(UserRole.RECEPTIONIST, false, dorm.getId()),
+                policy.requireModeratorScope(receptionist));
+        assertEquals(new PostAccessPolicy.ModeratorScope(UserRole.DORM_ADMIN, false, dorm.getId()),
+                policy.requireModeratorScope(dormAdmin));
+    }
+
+    @Test
+    @DisplayName("Should reject residents from staff moderation")
+    void requireModeratorScopeRejectsResident() {
+        // Arrange
         givenFresh(resident);
 
         // Act & Assert
-        assertEquals(dorm.getId(), policy.requireStaffDormitoryId(receptionist));
-        assertThrows(AccessDeniedException.class, () -> policy.requireStaffDormitoryId(resident));
-        assertThrows(BusinessRuleException.class, () -> policy.requireStaffDormitoryId(staffHomeless));
+        assertThrows(AccessDeniedException.class, () -> policy.requireModeratorScope(resident));
+    }
+
+    @Test
+    @DisplayName("Should reject assigned staff without dormitory")
+    void requireModeratorScopeRejectsHomelessStaff() {
+        // Arrange
+        User staffHomeless = User.builder()
+                .id(UUID.randomUUID())
+                .role(UserRole.DORM_ADMIN).status(UserStatus.ACTIVE).dormitory(null).build();
+        givenFresh(staffHomeless);
+
+        // Act & Assert
+        assertThrows(BusinessRuleException.class, () -> policy.requireModeratorScope(staffHomeless));
+    }
+
+    @Test
+    @DisplayName("Should grant SUPER_ADMIN a global scope with or without dormitory")
+    void requireModeratorScopeSuperAdminGlobal() {
+        // Arrange
+        User globalAdmin = User.builder()
+                .id(UUID.randomUUID())
+                .role(UserRole.SUPER_ADMIN).status(UserStatus.ACTIVE).dormitory(null).build();
+        User adminWithDorm = User.builder()
+                .id(UUID.randomUUID())
+                .role(UserRole.SUPER_ADMIN).status(UserStatus.ACTIVE).dormitory(dorm).build();
+        givenFresh(globalAdmin);
+        givenFresh(adminWithDorm);
+
+        // Act & Assert
+        assertEquals(new PostAccessPolicy.ModeratorScope(UserRole.SUPER_ADMIN, true, null),
+                policy.requireModeratorScope(globalAdmin));
+        assertEquals(new PostAccessPolicy.ModeratorScope(UserRole.SUPER_ADMIN, true, dorm.getId()),
+                policy.requireModeratorScope(adminWithDorm));
     }
 
     @Test
@@ -170,8 +213,8 @@ class PostAccessPolicyTest {
     }
 
     @Test
-    @DisplayName("Should hide CAMPUS posts from staff moderation with 404")
-    void requireStaffModeratablePostRejectsCampus() {
+    @DisplayName("Should let DORM_ADMIN and SUPER_ADMIN moderate CAMPUS posts, but not receptionists")
+    void requireModeratablePostCampusMatrix() {
         // Arrange
         UUID postId = UUID.randomUUID();
         Post campus = Post.builder()
@@ -188,8 +231,78 @@ class PostAccessPolicyTest {
                 .build();
         when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(campus));
 
+        PostAccessPolicy.ModeratorScope dormAdmin =
+                new PostAccessPolicy.ModeratorScope(UserRole.DORM_ADMIN, false, dorm.getId());
+        PostAccessPolicy.ModeratorScope superAdmin =
+                new PostAccessPolicy.ModeratorScope(UserRole.SUPER_ADMIN, true, null);
+        PostAccessPolicy.ModeratorScope receptionist =
+                new PostAccessPolicy.ModeratorScope(UserRole.RECEPTIONIST, false, dorm.getId());
+
+        // Act & Assert
+        assertSame(campus, policy.requireModeratablePost(postId, dormAdmin));
+        assertSame(campus, policy.requireModeratablePost(postId, superAdmin));
+        assertThrows(ResourceNotFoundException.class,
+                () -> policy.requireModeratablePost(postId, receptionist));
+    }
+
+    @Test
+    @DisplayName("Should scope DORMITORY moderation to own dormitory except for global SUPER_ADMIN")
+    void requireModeratablePostDormitoryMatrix() {
+        // Arrange
+        Dormitory otherDorm = Dormitory.builder().id(UUID.randomUUID()).name("DS Other").build();
+        UUID postId = UUID.randomUUID();
+        Post dormPost = Post.builder()
+                .id(postId)
+                .author(resident)
+                .dormitory(dorm)
+                .title("Lokalny")
+                .content("Treść")
+                .category(PostCategory.GENERAL)
+                .scope(PostScope.DORMITORY)
+                .status(PostStatus.ACTIVE)
+                .deleted(false)
+                .createdAt(Instant.now())
+                .build();
+        when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(dormPost));
+
+        PostAccessPolicy.ModeratorScope ownDormAdmin =
+                new PostAccessPolicy.ModeratorScope(UserRole.DORM_ADMIN, false, dorm.getId());
+        PostAccessPolicy.ModeratorScope foreignDormAdmin =
+                new PostAccessPolicy.ModeratorScope(UserRole.DORM_ADMIN, false, otherDorm.getId());
+        PostAccessPolicy.ModeratorScope superAdmin =
+                new PostAccessPolicy.ModeratorScope(UserRole.SUPER_ADMIN, true, null);
+
+        // Act & Assert
+        assertSame(dormPost, policy.requireModeratablePost(postId, ownDormAdmin));
+        assertSame(dormPost, policy.requireModeratablePost(postId, superAdmin));
+        assertThrows(ResourceNotFoundException.class,
+                () -> policy.requireModeratablePost(postId, foreignDormAdmin));
+    }
+
+    @Test
+    @DisplayName("Should hide already-removed posts from moderation with 404")
+    void requireModeratablePostRejectsRemoved() {
+        // Arrange
+        UUID postId = UUID.randomUUID();
+        Post removed = Post.builder()
+                .id(postId)
+                .author(resident)
+                .dormitory(dorm)
+                .title("Usunięty")
+                .content("Treść")
+                .category(PostCategory.GENERAL)
+                .scope(PostScope.DORMITORY)
+                .status(PostStatus.REMOVED_MODERATOR)
+                .deleted(false)
+                .createdAt(Instant.now())
+                .build();
+        when(postRepository.findByIdAndNotDeleted(postId)).thenReturn(Optional.of(removed));
+
+        PostAccessPolicy.ModeratorScope superAdmin =
+                new PostAccessPolicy.ModeratorScope(UserRole.SUPER_ADMIN, true, null);
+
         // Act & Assert
         assertThrows(ResourceNotFoundException.class,
-                () -> policy.requireStaffModeratablePost(postId, dorm.getId()));
+                () -> policy.requireModeratablePost(postId, superAdmin));
     }
 }

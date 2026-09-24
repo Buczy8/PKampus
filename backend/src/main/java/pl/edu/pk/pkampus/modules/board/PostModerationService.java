@@ -9,13 +9,14 @@ import pl.edu.pk.pkampus.common.PagedResponse;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
 import pl.edu.pk.pkampus.modules.board.dto.PostDto;
+import pl.edu.pk.pkampus.modules.board.PostAccessPolicy.ModeratorScope;
 import pl.edu.pk.pkampus.modules.user.User;
 
 import java.util.List;
 import java.util.UUID;
 
 /**
- * Staff side of the community board: moderation of dormitory-scoped posts and comments.
+ * Staff side of the community board: moderation of dormitory- and campus-scoped posts and comments.
  * Resident operations live in {@link PostService}.
  */
 @Slf4j
@@ -36,10 +37,10 @@ public class PostModerationService {
             int page,
             int size
     ) {
-        UUID dormitoryId = accessPolicy.requireStaffDormitoryId(staff);
+        ModeratorScope scope = accessPolicy.requireModeratorScope(staff);
         PostStatus status = PostStatusFilter.from(statusFilter, PostStatusFilter.ALL).toPostStatus();
-        Page<Post> posts = postRepository.findStaffDormitoryFeed(
-                dormitoryId,
+        Page<Post> posts = postRepository.findModerationFeed(
+                scope.global() ? null : scope.dormitoryId(),
                 category,
                 status,
                 BoardPagination.feedPageable(page, size)
@@ -50,8 +51,8 @@ public class PostModerationService {
 
     @Transactional
     public PostDto removePostAsModerator(User staff, UUID postId) {
-        UUID dormitoryId = accessPolicy.requireStaffDormitoryId(staff);
-        Post post = accessPolicy.requireStaffModeratablePost(postId, dormitoryId);
+        ModeratorScope scope = accessPolicy.requireModeratorScope(staff);
+        Post post = accessPolicy.requireModeratablePost(postId, scope);
         post.removeAsModerator();
         Post saved = postRepository.save(post);
         log.info("Staff {} moderated board post {} to REMOVED_MODERATOR", staff.getId(), postId);
@@ -60,8 +61,8 @@ public class PostModerationService {
 
     @Transactional(readOnly = true)
     public PagedResponse<CommentDto> listCommentsForStaff(User staff, UUID postId, int page, int size) {
-        UUID dormitoryId = accessPolicy.requireStaffDormitoryId(staff);
-        Post post = accessPolicy.requireStaffModeratablePost(postId, dormitoryId);
+        ModeratorScope scope = accessPolicy.requireModeratorScope(staff);
+        Post post = accessPolicy.requireModeratablePost(postId, scope);
         Page<Comment> comments = commentRepository.findActiveByPostId(
                 post.getId(), BoardPagination.commentPageable(page, size));
         List<CommentDto> content = boardViewService.toCommentDtos(post, comments.getContent(), staff);
@@ -70,14 +71,14 @@ public class PostModerationService {
 
     @Transactional
     public void removeCommentAsModerator(User staff, UUID commentId) {
-        UUID dormitoryId = accessPolicy.requireStaffDormitoryId(staff);
+        ModeratorScope scope = accessPolicy.requireModeratorScope(staff);
         Comment comment = commentRepository.findByIdWithPost(commentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
         if (comment.isDeleted()) {
             throw new ResourceNotFoundException("Comment not found");
         }
         Post post = comment.getPost();
-        accessPolicy.requireStaffModeratablePost(post.getId(), dormitoryId);
+        accessPolicy.requireModeratablePost(post.getId(), scope);
         comment.softDelete();
         commentRepository.save(comment);
         log.info("Staff {} soft-deleted comment {} on post {}",

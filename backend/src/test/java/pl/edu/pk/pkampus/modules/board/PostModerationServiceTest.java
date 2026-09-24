@@ -51,6 +51,8 @@ class PostModerationServiceTest {
     private Dormitory dorm2;
     private User residentAuthor;
     private User staffDormAdmin;
+    private User superAdmin;
+    private User receptionist;
     private Post postDormitory;
     private Post postCampus;
     private UUID postId;
@@ -93,6 +95,26 @@ class PostModerationServiceTest {
                 .dormitory(dorm1)
                 .build();
 
+        superAdmin = User.builder()
+                .id(UUID.randomUUID())
+                .email("aos@pk.edu.pl")
+                .firstName("Kierownik")
+                .lastName("OS")
+                .role(UserRole.SUPER_ADMIN)
+                .status(UserStatus.ACTIVE)
+                .dormitory(null)
+                .build();
+
+        receptionist = User.builder()
+                .id(UUID.randomUUID())
+                .email("desk@pk.edu.pl")
+                .firstName("Portier")
+                .lastName("DS")
+                .role(UserRole.RECEPTIONIST)
+                .status(UserStatus.ACTIVE)
+                .dormitory(dorm1)
+                .build();
+
         postId = UUID.randomUUID();
         postDormitory = Post.builder()
                 .id(postId)
@@ -124,13 +146,17 @@ class PostModerationServiceTest {
                 .thenAnswer(inv -> Optional.of(residentAuthor));
         lenient().when(userRepository.findById(staffDormAdmin.getId()))
                 .thenAnswer(inv -> Optional.of(staffDormAdmin));
+        lenient().when(userRepository.findById(superAdmin.getId()))
+                .thenAnswer(inv -> Optional.of(superAdmin));
+        lenient().when(userRepository.findById(receptionist.getId()))
+                .thenAnswer(inv -> Optional.of(receptionist));
     }
 
     @Test
     @DisplayName("Should list dormitory posts for staff")
     void listForStaffSuccess() {
         // Arrange
-        when(postRepository.findStaffDormitoryFeed(eq(dorm1.getId()), eq(PostCategory.BORROW_HELP), eq(PostStatus.ACTIVE), any(Pageable.class)))
+        when(postRepository.findModerationFeed(eq(dorm1.getId()), eq(PostCategory.BORROW_HELP), eq(PostStatus.ACTIVE), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(postDormitory)));
         when(commentRepository.countActiveByPostIds(List.of(postId)))
                 .thenReturn(List.of());
@@ -142,6 +168,23 @@ class PostModerationServiceTest {
         assertEquals(1, result.content().size());
         assertEquals(1, result.totalElements());
         assertEquals(postId, result.content().getFirst().id());
+    }
+
+    @Test
+    @DisplayName("Should list all scopes for SUPER_ADMIN with a null dormitory filter")
+    void listForStaffSuperAdminGlobal() {
+        // Arrange
+        when(postRepository.findModerationFeed(isNull(), eq(null), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(postDormitory, postCampus)));
+        when(commentRepository.countActiveByPostIds(any()))
+                .thenReturn(List.of());
+
+        // Act
+        PagedResponse<PostDto> result = moderationService.listForStaff(superAdmin, null, "ALL", 0, 20);
+
+        // Assert
+        assertEquals(2, result.content().size());
+        verify(postRepository).findModerationFeed(isNull(), eq(null), isNull(), any(Pageable.class));
     }
 
     @Test
@@ -164,14 +207,82 @@ class PostModerationServiceTest {
     }
 
     @Test
-    @DisplayName("Should not allow staff to moderate CAMPUS scope posts")
-    void removePostAsModeratorThrowsOnCampusScope() {
+    @DisplayName("Should allow DORM_ADMIN to moderate CAMPUS scope posts (FR-BOARD-06)")
+    void removeCampusPostAsDormAdminSuccess() {
+        // Arrange
+        when(postRepository.findByIdAndNotDeleted(postCampus.getId())).thenReturn(Optional.of(postCampus));
+        when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(commentRepository.countActiveByPostId(postCampus.getId())).thenReturn(0L);
+
+        // Act
+        PostDto result = moderationService.removePostAsModerator(staffDormAdmin, postCampus.getId());
+
+        // Assert
+        assertEquals(PostStatus.REMOVED_MODERATOR, result.status());
+        verify(postRepository).save(postCampus);
+    }
+
+    @Test
+    @DisplayName("Should allow SUPER_ADMIN without dormitory to moderate any post")
+    void removePostAsSuperAdminGlobalSuccess() {
+        // Arrange
+        Post foreignPost = Post.builder()
+                .id(UUID.randomUUID())
+                .author(residentAuthor)
+                .dormitory(dorm2)
+                .title("Obcy DS")
+                .content("Treść")
+                .category(PostCategory.GENERAL)
+                .scope(PostScope.DORMITORY)
+                .status(PostStatus.ACTIVE)
+                .deleted(false)
+                .createdAt(Instant.now())
+                .build();
+        when(postRepository.findByIdAndNotDeleted(foreignPost.getId())).thenReturn(Optional.of(foreignPost));
+        when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(commentRepository.countActiveByPostId(foreignPost.getId())).thenReturn(0L);
+
+        // Act
+        PostDto result = moderationService.removePostAsModerator(superAdmin, foreignPost.getId());
+
+        // Assert
+        assertEquals(PostStatus.REMOVED_MODERATOR, result.status());
+        verify(postRepository).save(foreignPost);
+    }
+
+    @Test
+    @DisplayName("Should hide CAMPUS posts from receptionist moderation with 404")
+    void removeCampusPostAsReceptionistThrows() {
         // Arrange
         when(postRepository.findByIdAndNotDeleted(postCampus.getId())).thenReturn(Optional.of(postCampus));
 
         // Act & Assert
         assertThrows(ResourceNotFoundException.class,
-                () -> moderationService.removePostAsModerator(staffDormAdmin, postCampus.getId()));
+                () -> moderationService.removePostAsModerator(receptionist, postCampus.getId()));
+        verify(postRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Should hide foreign dormitory posts from DORM_ADMIN with 404")
+    void removeForeignDormPostAsDormAdminThrows() {
+        // Arrange
+        Post foreignPost = Post.builder()
+                .id(UUID.randomUUID())
+                .author(residentAuthor)
+                .dormitory(dorm2)
+                .title("Obcy DS")
+                .content("Treść")
+                .category(PostCategory.GENERAL)
+                .scope(PostScope.DORMITORY)
+                .status(PostStatus.ACTIVE)
+                .deleted(false)
+                .createdAt(Instant.now())
+                .build();
+        when(postRepository.findByIdAndNotDeleted(foreignPost.getId())).thenReturn(Optional.of(foreignPost));
+
+        // Act & Assert
+        assertThrows(ResourceNotFoundException.class,
+                () -> moderationService.removePostAsModerator(staffDormAdmin, foreignPost.getId()));
         verify(postRepository, never()).save(any());
     }
 

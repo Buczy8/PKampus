@@ -57,6 +57,14 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
             """)
     Optional<Post> findByIdAndNotDeleted(@Param("id") UUID id);
 
+    /**
+     * Moderation feed for staff. Covers both scopes so CAMPUS posts are visible
+     * to moderators (FR-BOARD-06: CAMPUS is moderated by ADS of all dormitories
+     * and by the Superadmin).
+     *
+     * @param dormitoryId dormitory to scope DORMITORY posts to, or {@code null}
+     *                    for the global Superadmin view (all dormitories)
+     */
     @Query(
             value = """
                     SELECT p FROM Post p
@@ -64,22 +72,24 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
                     LEFT JOIN FETCH a.dormitory
                     LEFT JOIN FETCH p.dormitory
                     WHERE p.deleted = FALSE
-                      AND p.scope = pl.edu.pk.pkampus.modules.board.PostScope.DORMITORY
-                      AND p.dormitory.id = :dormitoryId
                       AND p.status <> pl.edu.pk.pkampus.modules.board.PostStatus.REMOVED_MODERATOR
+                      AND (:dormitoryId IS NULL
+                           OR p.scope = pl.edu.pk.pkampus.modules.board.PostScope.CAMPUS
+                           OR p.dormitory.id = :dormitoryId)
                       AND (:category IS NULL OR p.category = :category)
                       AND (:status IS NULL OR p.status = :status)
                     """,
             countQuery = """
                     SELECT COUNT(p) FROM Post p
                     WHERE p.deleted = FALSE
-                      AND p.scope = pl.edu.pk.pkampus.modules.board.PostScope.DORMITORY
-                      AND p.dormitory.id = :dormitoryId
                       AND p.status <> pl.edu.pk.pkampus.modules.board.PostStatus.REMOVED_MODERATOR
+                      AND (:dormitoryId IS NULL
+                           OR p.scope = pl.edu.pk.pkampus.modules.board.PostScope.CAMPUS
+                           OR p.dormitory.id = :dormitoryId)
                       AND (:category IS NULL OR p.category = :category)
                       AND (:status IS NULL OR p.status = :status)
                     """)
-    Page<Post> findStaffDormitoryFeed(
+    Page<Post> findModerationFeed(
             @Param("dormitoryId") UUID dormitoryId,
             @Param("category") PostCategory category,
             @Param("status") PostStatus status,
