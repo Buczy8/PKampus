@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import pl.edu.pk.pkampus.common.exception.AccountStatusException;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
@@ -57,6 +58,7 @@ public class IssueService {
     private final RoomAssignmentRepository roomAssignmentRepository;
     private final MinioStorageService minioStorageService;
     private final EmailService emailService;
+    private final TransactionTemplate transactionTemplate;
 
     @Transactional(readOnly = true)
     public List<IssueDto> listMyIssues(User user) {
@@ -163,7 +165,12 @@ public class IssueService {
         return toStaffDto(saved, true);
     }
 
-    @Transactional
+    /**
+     * Reports an issue without holding a database transaction during MinIO I/O.
+     * The photo (if any) is uploaded first; only the persistence step runs
+     * transactionally, and a persistence failure compensates by removing the
+     * orphaned object (same pattern as {@code RegistrationService}).
+     */
     public IssueDto createIssue(User user, CreateIssueRequestDto request, MultipartFile photo) {
         Dormitory dorm = requireActiveResident(user);
 
@@ -191,35 +198,26 @@ public class IssueService {
         }
 
         String uploadedObject = null;
-        try {
-            Issue issue = Issue.builder()
-                    .reporter(user)
-                    .dormitory(dorm)
-                    .room(room)
-                    .commonAreaName(commonAreaName)
-                    .category(request.category())
-                    .urgency(request.urgency())
-                    .description(description)
-                    .status(IssueStatus.NEW)
-                    .build();
-
-            if (photo != null && !photo.isEmpty()) {
-                uploadedObject = minioStorageService.uploadIssuePhoto(photo);
-                String originalName = photo.getOriginalFilename();
-                if (originalName == null || originalName.isBlank()) {
-                    originalName = uploadedObject;
-                }
-                IssuePhoto issuePhoto = IssuePhoto.builder()
-                        .photoUrl(uploadedObject)
-                        .fileName(originalName.length() > 255 ? originalName.substring(0, 255) : originalName)
-                        .fileSizeBytes((int) Math.min(photo.getSize(), Integer.MAX_VALUE))
-                        .build();
-                issue.addPhoto(issuePhoto);
+        String originalName = null;
+        long photoSize = 0;
+        if (photo != null && !photo.isEmpty()) {
+            uploadedObject = minioStorageService.uploadIssuePhoto(photo);
+            originalName = photo.getOriginalFilename();
+            if (originalName == null || originalName.isBlank()) {
+                originalName = uploadedObject;
             }
+            photoSize = photo.getSize();
+        }
 
-            Issue saved = issueRepository.saveAndFlush(issue);
-            log.info("Resident {} reported issue {} ({})", user.getEmail(), saved.getId(), saved.getCategory());
-            return toDto(saved);
+        final Room resolvedRoom = room;
+        final String resolvedArea = commonAreaName;
+        final String photoKey = uploadedObject;
+        final String photoName = originalName;
+        final long photoBytes = photoSize;
+        try {
+            return transactionTemplate.execute(status -> persistIssue(
+                    user, dorm, resolvedRoom, resolvedArea, description,
+                    request.category(), request.urgency(), photoKey, photoName, photoBytes));
         } catch (RuntimeException ex) {
             if (uploadedObject != null) {
                 try {
@@ -230,6 +228,34 @@ public class IssueService {
             }
             throw ex;
         }
+    }
+
+    private IssueDto persistIssue(User user, Dormitory dorm, Room room, String commonAreaName,
+            String description, IssueCategory category, IssueUrgency urgency,
+            String photoKey, String photoName, long photoBytes) {
+        Issue issue = Issue.builder()
+                .reporter(user)
+                .dormitory(dorm)
+                .room(room)
+                .commonAreaName(commonAreaName)
+                .category(category)
+                .urgency(urgency)
+                .description(description)
+                .status(IssueStatus.NEW)
+                .build();
+
+        if (photoKey != null) {
+            IssuePhoto issuePhoto = IssuePhoto.builder()
+                    .photoUrl(photoKey)
+                    .fileName(photoName.length() > 255 ? photoName.substring(0, 255) : photoName)
+                    .fileSizeBytes((int) Math.min(photoBytes, Integer.MAX_VALUE))
+                    .build();
+            issue.addPhoto(issuePhoto);
+        }
+
+        Issue saved = issueRepository.saveAndFlush(issue);
+        log.info("Resident {} reported issue {} ({})", user.getEmail(), saved.getId(), saved.getCategory());
+        return toDto(saved);
     }
 
     @Transactional(readOnly = true)

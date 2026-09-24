@@ -10,8 +10,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.test.util.ReflectionTestUtils;
 import pl.edu.pk.pkampus.common.exception.InvalidFileException;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,9 +33,7 @@ class MinioStorageServiceTest {
 
     @BeforeEach
     void setUp() {
-        storageService = new MinioStorageService(minioClient);
-        ReflectionTestUtils.setField(storageService, "avatarBucket", "pkampus-avatars");
-        ReflectionTestUtils.setField(storageService, "issuesBucket", "pkampus-issues");
+        storageService = new MinioStorageService(minioClient, "pkampus-avatars", "pkampus-issues");
     }
 
     @Test
@@ -211,8 +215,9 @@ class MinioStorageServiceTest {
 
     @Test
     void shouldDoNothingWhenRemovingNullOrBlankFile() throws Exception {
-        storageService.removeFile("pkampus-avatars", null);
-        storageService.removeFile("pkampus-avatars", "   ");
+        storageService.removeAvatar(null);
+        storageService.removeAvatar("   ");
+        storageService.removeIssuePhoto(null);
 
         verify(minioClient, never()).removeObject(any(RemoveObjectArgs.class));
     }
@@ -265,8 +270,128 @@ class MinioStorageServiceTest {
     }
 
     @Test
-    void shouldReturnBucketNames() {
-        assertEquals("pkampus-avatars", storageService.getAvatarBucket());
-        assertEquals("pkampus-issues", storageService.getIssuesBucket());
+    void shouldRejectUnsupportedMimeInUploadAvatarOverload() {
+        // Arrange
+        byte[] jpegBytes = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0};
+        MockMultipartFile file = new MockMultipartFile(
+                "photo",
+                "avatar.jpg",
+                "image/jpeg",
+                jpegBytes
+        );
+
+        // Act & Assert
+        assertThrows(InvalidFileException.class,
+                () -> storageService.uploadAvatar(file, "image/gif"));
+    }
+
+    @Test
+    void shouldRejectMismatchedMimeHintEvenWhenHintIsAllowlisted() throws Exception {
+        // Arrange: valid JPEG bytes declared as JPEG, but hint claims PNG
+        byte[] jpegBytes = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0};
+        MockMultipartFile file = new MockMultipartFile(
+                "photo",
+                "avatar.jpg",
+                "image/jpeg",
+                jpegBytes
+        );
+
+        // Act & Assert
+        InvalidFileException ex = assertThrows(InvalidFileException.class,
+                () -> storageService.uploadAvatar(file, "image/png"));
+        assertTrue(ex.getMessage().contains("Untrusted MIME hint"));
+        verify(minioClient, never()).putObject(any(PutObjectArgs.class));
+    }
+
+    @Test
+    void shouldRejectNullFileWithClientErrorInsteadOfServerError() {
+        // Act & Assert
+        assertThrows(InvalidFileException.class,
+                () -> storageService.uploadAvatar(null, "image/png"));
+        assertThrows(InvalidFileException.class,
+                () -> storageService.uploadIssuePhoto(null));
+    }
+
+    @Test
+    void shouldRejectPresignedUrlWithInvalidExpiry() {
+        // Arrange
+        String objectName = java.util.UUID.randomUUID() + ".jpg";
+
+        // Act & Assert
+        assertThrows(InvalidFileException.class,
+                () -> storageService.getAvatarPresignedUrl(objectName, 0));
+        assertThrows(InvalidFileException.class,
+                () -> storageService.getAvatarPresignedUrl(objectName, 10081));
+    }
+
+    @Test
+    void shouldRejectPresignedUrlWithTraversalKey() {
+        // Act & Assert
+        assertThrows(InvalidFileException.class,
+                () -> storageService.getAvatarPresignedUrl("../evil.jpg", 30));
+        assertThrows(InvalidFileException.class,
+                () -> storageService.getIssuePresignedUrl("a/b.png", 30));
+    }
+
+    @Test
+    void shouldRejectBlankBucketName() {
+        // Act & Assert
+        assertThrows(InvalidFileException.class,
+                () -> storageService.ensureBucketExists("   "));
+        assertThrows(InvalidFileException.class,
+                () -> storageService.removeAvatar("../evil.jpg"));
+    }
+
+    @Test
+    void shouldSwallowConcurrentBucketCreationRace() throws Exception {
+        // Arrange
+        when(minioClient.bucketExists(any(io.minio.BucketExistsArgs.class))).thenReturn(false);
+        io.minio.messages.ErrorResponse errorResponse = new io.minio.messages.ErrorResponse(
+                "BucketAlreadyOwnedByYou", null, null, null, null, null, null);
+        doThrow(new io.minio.errors.ErrorResponseException(errorResponse, null, ""))
+                .when(minioClient).makeBucket(any(io.minio.MakeBucketArgs.class));
+
+        // Act & Assert (no exception expected)
+        assertDoesNotThrow(() -> storageService.ensureBucketExists("race-bucket"));
+    }
+
+    @Test
+    void shouldRejectMissingBucketConfigurationFailFast() {
+        // Act & Assert
+        assertThrows(NullPointerException.class,
+                () -> new MinioStorageService(null, "a", "b"));
+        assertThrows(IllegalStateException.class,
+                () -> new MinioStorageService(minioClient, "   ", "b"));
+        assertThrows(IllegalStateException.class,
+                () -> new MinioStorageService(minioClient, "a", null));
+    }
+
+    @Test
+    void shouldCreateBucketOnlyOnceUnderConcurrentColdStart() throws Exception {
+        // Arrange: cold start, bucket missing
+        when(minioClient.bucketExists(any(io.minio.BucketExistsArgs.class))).thenReturn(false);
+
+        // Act: 8 threads race the first write
+        int threads = 8;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            List<Future<String>> futures = new ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                byte[] jpegBytes = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0};
+                MockMultipartFile file = new MockMultipartFile(
+                        "photo", "avatar.jpg", "image/jpeg", jpegBytes);
+                futures.add(pool.submit(() -> storageService.uploadAvatar(file)));
+            }
+            for (Future<String> future : futures) {
+                assertNotNull(future.get(10, TimeUnit.SECONDS));
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+
+        // Assert: check-then-create ran exactly once, no write slipped past init
+        verify(minioClient, times(1)).bucketExists(any(io.minio.BucketExistsArgs.class));
+        verify(minioClient, times(1)).makeBucket(any(io.minio.MakeBucketArgs.class));
+        verify(minioClient, times(threads)).putObject(any(PutObjectArgs.class));
     }
 }

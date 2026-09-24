@@ -10,6 +10,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 import pl.edu.pk.pkampus.common.exception.AccountStatusException;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
@@ -54,6 +56,9 @@ class IssueServiceTest {
     @Mock
     private EmailService emailService;
 
+    @Mock
+    private TransactionTemplate transactionTemplate;
+
     @InjectMocks
     private IssueService issueService;
 
@@ -66,6 +71,13 @@ class IssueServiceTest {
 
     @BeforeEach
     void setUp() {
+        // TransactionTemplate runs the persistence callback inline (no Spring proxy in unit tests)
+        lenient().when(transactionTemplate.execute(any(TransactionCallback.class)))
+                .thenAnswer(inv -> {
+                    TransactionCallback<?> callback = inv.getArgument(0);
+                    return callback.doInTransaction(null);
+                });
+
         dorm1 = Dormitory.builder()
                 .id(UUID.randomUUID())
                 .name("DS-1")
