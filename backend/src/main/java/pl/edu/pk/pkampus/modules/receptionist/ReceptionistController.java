@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pl.edu.pk.pkampus.common.ApiResponse;
+import pl.edu.pk.pkampus.common.PagedResponse;
 import pl.edu.pk.pkampus.modules.board.PostCategory;
 import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
 import pl.edu.pk.pkampus.modules.board.dto.PostDto;
@@ -288,13 +289,15 @@ public class ReceptionistController {
 
     @GetMapping("/posts")
     @Operation(summary = "List dormitory-scoped board posts for moderation")
-    public ResponseEntity<ApiResponse<List<PostDto>>> listPosts(
+    public ResponseEntity<ApiResponse<PagedResponse<PostDto>>> listPosts(
             @AuthenticationPrincipal User user,
             @RequestParam(required = false) PostCategory category,
-            @RequestParam(required = false, defaultValue = "ALL") String status
+            @RequestParam(required = false, defaultValue = "ALL") String status,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "20") int size
     ) {
         return ResponseEntity.ok(ApiResponse.ok(
-                receptionistService.listBoardPosts(user, category, status)));
+                receptionistService.listBoardPosts(user, category, status, page, size)));
     }
 
     @PostMapping("/posts/{id}/remove")

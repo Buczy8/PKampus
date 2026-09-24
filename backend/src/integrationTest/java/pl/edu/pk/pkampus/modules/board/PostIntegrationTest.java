@@ -151,8 +151,67 @@ class PostIntegrationTest {
         mockMvc.perform(get("/api/v1/posts")
                         .header("Authorization", bearer(resident1)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data", hasSize(1)))
-                .andExpect(jsonPath("$.data[0].title").value("Pożyczę wiertarkę"));
+                .andExpect(jsonPath("$.data.content", hasSize(1)))
+                .andExpect(jsonPath("$.data.content[0].title").value("Pożyczę wiertarkę"))
+                .andExpect(jsonPath("$.data.totalElements").value(1));
+    }
+
+    @Test
+    @DisplayName("Feed is paginated with page size limit")
+    void feedPagination() throws Exception {
+        for (int i = 0; i < 3; i++) {
+            mockMvc.perform(post("/api/v1/posts")
+                            .header("Authorization", bearer(resident1))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {
+                                      "title": "Post %d",
+                                      "content": "Treść",
+                                      "category": "GENERAL",
+                                      "scope": "DORMITORY"
+                                    }
+                                    """.formatted(i)))
+                    .andExpect(status().isCreated());
+        }
+
+        mockMvc.perform(get("/api/v1/posts")
+                        .param("page", "0")
+                        .param("size", "2")
+                        .header("Authorization", bearer(resident1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(2)))
+                .andExpect(jsonPath("$.data.totalElements").value(3))
+                .andExpect(jsonPath("$.data.totalPages").value(2))
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.last").value(false));
+
+        mockMvc.perform(get("/api/v1/posts")
+                        .param("page", "1")
+                        .param("size", "2")
+                        .header("Authorization", bearer(resident1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(1)))
+                .andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.last").value(true));
+    }
+
+    @Test
+    @DisplayName("Feed rejects negative page and oversized size")
+    void feedPaginationValidation() throws Exception {
+        mockMvc.perform(get("/api/v1/posts")
+                        .param("page", "-1")
+                        .header("Authorization", bearer(resident1)))
+                .andExpect(status().isUnprocessableEntity());
+
+        mockMvc.perform(get("/api/v1/posts")
+                        .param("size", "51")
+                        .header("Authorization", bearer(resident1)))
+                .andExpect(status().isUnprocessableEntity());
+
+        mockMvc.perform(get("/api/v1/posts")
+                        .param("size", "0")
+                        .header("Authorization", bearer(resident1)))
+                .andExpect(status().isUnprocessableEntity());
     }
 
     @Test
@@ -176,8 +235,8 @@ class PostIntegrationTest {
         mockMvc.perform(get("/api/v1/posts")
                         .header("Authorization", bearer(resident2OtherDorm)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data", hasSize(1)))
-                .andExpect(jsonPath("$.data[0].authorRoomNumber").value(nullValue()));
+                .andExpect(jsonPath("$.data.content", hasSize(1)))
+                .andExpect(jsonPath("$.data.content[0].authorRoomNumber").value(nullValue()));
     }
 
     @Test
@@ -199,7 +258,7 @@ class PostIntegrationTest {
         mockMvc.perform(get("/api/v1/posts")
                         .header("Authorization", bearer(resident2OtherDorm)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data", hasSize(0)));
+                .andExpect(jsonPath("$.data.content", hasSize(0)));
     }
 
     @Test
@@ -235,13 +294,13 @@ class PostIntegrationTest {
                         .param("status", "ACTIVE")
                         .header("Authorization", bearer(resident1)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data", hasSize(0)));
+                .andExpect(jsonPath("$.data.content", hasSize(0)));
 
         mockMvc.perform(get("/api/v1/posts")
                         .param("status", "RESOLVED")
                         .header("Authorization", bearer(resident1)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data", hasSize(1)));
+                .andExpect(jsonPath("$.data.content", hasSize(1)));
     }
 
     @Test
@@ -277,7 +336,7 @@ class PostIntegrationTest {
                         .param("status", "ALL")
                         .header("Authorization", bearer(resident1)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data", hasSize(0)));
+                .andExpect(jsonPath("$.data.content", hasSize(0)));
     }
 
     @Test
@@ -319,7 +378,7 @@ class PostIntegrationTest {
         mockMvc.perform(get("/api/v1/posts")
                         .header("Authorization", bearer(resident1)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].commentCount").value(1));
+                .andExpect(jsonPath("$.data.content[0].commentCount").value(1));
     }
 
     @Test
@@ -467,15 +526,15 @@ class PostIntegrationTest {
                         .param("category", "BUY_SELL")
                         .header("Authorization", bearer(resident1)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data", hasSize(1)))
-                .andExpect(jsonPath("$.data[0].title").value("Kupię rower"));
+                .andExpect(jsonPath("$.data.content", hasSize(1)))
+                .andExpect(jsonPath("$.data.content[0].title").value("Kupię rower"));
 
         mockMvc.perform(get("/api/v1/posts")
                         .param("scope", "DORMITORY")
                         .header("Authorization", bearer(resident1)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data", hasSize(1)))
-                .andExpect(jsonPath("$.data[0].title").value("Pożyczę odkurzacz"));
+                .andExpect(jsonPath("$.data.content", hasSize(1)))
+                .andExpect(jsonPath("$.data.content[0].title").value("Pożyczę odkurzacz"));
     }
 
     private User saveResident(Dormitory dorm, String room) {

@@ -5,19 +5,23 @@ import type {
   BoardPost,
   CreateBoardPostRequest,
   ListBoardPostsParams,
+  PagedResponse,
 } from '@/api/types'
 
 export async function listBoardPosts(
   params: ListBoardPostsParams = {},
-): Promise<BoardPost[]> {
+): Promise<PagedResponse<BoardPost>> {
   const query: Record<string, string> = {}
   if (params.category) query.category = params.category
   if (params.scope) query.scope = params.scope
   if (params.status) query.status = params.status
+  if (params.page !== undefined) query.page = String(params.page)
+  if (params.size !== undefined) query.size = String(params.size)
 
-  const { data } = await apiClient.get<ApiResponse<BoardPost[]>>('/posts', {
-    params: query,
-  })
+  const { data } = await apiClient.get<ApiResponse<PagedResponse<BoardPost>>>(
+    '/posts',
+    { params: query },
+  )
   if (!data.success || !data.data) {
     throw new Error(data.message ?? 'Failed to load posts')
   }

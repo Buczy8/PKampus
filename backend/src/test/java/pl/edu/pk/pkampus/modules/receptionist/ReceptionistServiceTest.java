@@ -8,6 +8,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import pl.edu.pk.pkampus.common.PagedResponse;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.mail.EmailService;
@@ -628,18 +629,18 @@ class ReceptionistServiceTest {
             UUID postId = UUID.randomUUID();
             UUID commentId = UUID.randomUUID();
 
-            when(postService.listForStaff(staff, PostCategory.GENERAL, "ALL")).thenReturn(List.of());
+            when(postService.listForStaff(staff, PostCategory.GENERAL, "ALL", 0, 20)).thenReturn(PagedResponse.of(List.of(), 0, 20, 0));
             when(postService.removePostAsModerator(staff, postId)).thenReturn(null);
             when(postService.listCommentsForStaff(staff, postId)).thenReturn(List.of());
 
             // Act
-            service.listBoardPosts(staff, PostCategory.GENERAL, "ALL");
+            service.listBoardPosts(staff, PostCategory.GENERAL, "ALL", 0, 20);
             service.removeBoardPost(staff, postId);
             service.listBoardComments(staff, postId);
             service.removeBoardComment(staff, commentId);
 
             // Assert
-            verify(postService).listForStaff(staff, PostCategory.GENERAL, "ALL");
+            verify(postService).listForStaff(staff, PostCategory.GENERAL, "ALL", 0, 20);
             verify(postService).removePostAsModerator(staff, postId);
             verify(postService).listCommentsForStaff(staff, postId);
             verify(postService).removeCommentAsModerator(staff, commentId);

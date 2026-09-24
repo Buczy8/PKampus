@@ -719,8 +719,9 @@ class ReceptionistIntegrationTest {
         mockMvc.perform(get("/api/v1/receptionist/posts")
                         .header("Authorization", bearer(receptionist)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data", hasSize(1)))
-                .andExpect(jsonPath("$.data[0].title").value("Pożyczę kabel"));
+                .andExpect(jsonPath("$.data.content", hasSize(1)))
+                .andExpect(jsonPath("$.data.content[0].title").value("Pożyczę kabel"))
+                .andExpect(jsonPath("$.data.totalElements").value(1));
 
         mockMvc.perform(post("/api/v1/receptionist/comments/" + comment.getId() + "/remove")
                         .header("Authorization", bearer(receptionist)))

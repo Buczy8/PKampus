@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.mail.EmailService;
+import pl.edu.pk.pkampus.common.PagedResponse;
 import pl.edu.pk.pkampus.modules.board.PostCategory;
 import pl.edu.pk.pkampus.modules.board.PostService;
 import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
@@ -181,8 +182,8 @@ public class ReceptionistService {
     }
 
     @Transactional(readOnly = true)
-    public List<PostDto> listBoardPosts(User actor, PostCategory category, String status) {
-        return postService.listForStaff(actor, category, status);
+    public PagedResponse<PostDto> listBoardPosts(User actor, PostCategory category, String status, int page, int size) {
+        return postService.listForStaff(actor, category, status, page, size);
     }
 
     @Transactional

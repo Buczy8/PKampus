@@ -544,6 +544,15 @@ export type BoardPostStatus = 'ACTIVE' | 'RESOLVED' | 'REMOVED_MODERATOR'
 
 export type BoardPostStatusFilter = 'ACTIVE' | 'RESOLVED' | 'ALL'
 
+export interface PagedResponse<T> {
+  content: T[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+  last: boolean
+}
+
 export interface BoardPost {
   id: string
   title: string
@@ -581,6 +590,8 @@ export interface ListBoardPostsParams {
   category?: BoardPostCategory | ''
   scope?: BoardPostScope | ''
   status?: BoardPostStatusFilter
+  page?: number
+  size?: number
 }
 
 export interface DeskLaundryBooking {

@@ -91,6 +91,8 @@ function commentAuthorLine(comment: BoardComment, postScope: BoardPostScope): st
   return parts.join(" · ")
 }
 
+const FEED_PAGE_SIZE = 20
+
 export function BoardPage() {
   const queryClient = useQueryClient()
 
@@ -99,6 +101,7 @@ export function BoardPage() {
   )
   const [scopeFilter, setScopeFilter] = useState<BoardPostScope | "all">("all")
   const [statusFilter, setStatusFilter] = useState<BoardPostStatusFilter>("ACTIVE")
+  const [page, setPage] = useState(0)
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [title, setTitle] = useState("")
@@ -109,12 +112,14 @@ export function BoardPage() {
   const [actionError, setActionError] = useState<string | null>(null)
 
   const postsQuery = useQuery({
-    queryKey: ["posts", "feed", categoryFilter, scopeFilter, statusFilter],
+    queryKey: ["posts", "feed", categoryFilter, scopeFilter, statusFilter, page],
     queryFn: () =>
       listBoardPosts({
         category: categoryFilter === "all" ? "" : categoryFilter,
         scope: scopeFilter === "all" ? "" : scopeFilter,
         status: statusFilter,
+        page,
+        size: FEED_PAGE_SIZE,
       }),
   })
 
@@ -161,7 +166,9 @@ export function BoardPage() {
     },
   })
 
-  const posts = postsQuery.data ?? []
+  const posts = postsQuery.data?.content ?? []
+  const totalPages = postsQuery.data?.totalPages ?? 0
+  const totalElements = postsQuery.data?.totalElements ?? 0
 
   function resetForm() {
     setTitle("")
@@ -210,7 +217,10 @@ export function BoardPage() {
             <FieldLabel>Kategoria</FieldLabel>
             <Select
               value={categoryFilter}
-              onValueChange={(v) => setCategoryFilter(v as BoardPostCategory | "all")}
+              onValueChange={(v) => {
+                setPage(0)
+                setCategoryFilter(v as BoardPostCategory | "all")
+              }}
             >
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -229,7 +239,10 @@ export function BoardPage() {
             <FieldLabel>Zasięg</FieldLabel>
             <Select
               value={scopeFilter}
-              onValueChange={(v) => setScopeFilter(v as BoardPostScope | "all")}
+              onValueChange={(v) => {
+                setPage(0)
+                setScopeFilter(v as BoardPostScope | "all")
+              }}
             >
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -245,7 +258,10 @@ export function BoardPage() {
             <FieldLabel>Status</FieldLabel>
             <Select
               value={statusFilter}
-              onValueChange={(v) => setStatusFilter(v as BoardPostStatusFilter)}
+              onValueChange={(v) => {
+                setPage(0)
+                setStatusFilter(v as BoardPostStatusFilter)
+              }}
             >
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -286,6 +302,34 @@ export function BoardPage() {
                 onCommentsChanged={() => void invalidatePosts()}
               />
             ))}
+          </div>
+        )}
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              Strona {page + 1} z {totalPages} ({totalElements} postów)
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={page === 0 || postsQuery.isFetching}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+              >
+                Poprzednia
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={page >= totalPages - 1 || postsQuery.isFetching}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Następna
+              </Button>
+            </div>
           </div>
         )}
 

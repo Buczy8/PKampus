@@ -2,9 +2,13 @@ package pl.edu.pk.pkampus.modules.board;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pl.edu.pk.pkampus.common.PagedResponse;
 import pl.edu.pk.pkampus.common.exception.AccountStatusException;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
@@ -36,25 +40,31 @@ public class PostService {
 
     private static final ZoneId WARSAW = ZoneId.of("Europe/Warsaw");
 
+    private static final int MAX_FEED_PAGE_SIZE = 50;
+
     private final PostRepository postRepository;
     private final CommentRepository commentRepository;
     private final RoomAssignmentRepository roomAssignmentRepository;
 
     @Transactional(readOnly = true)
-    public List<PostDto> listFeed(
+    public PagedResponse<PostDto> listFeed(
             User user,
             PostCategory category,
             PostScope scope,
-            String statusFilter
+            String statusFilter,
+            int page,
+            int size
     ) {
         Dormitory dorm = requireActiveResident(user);
         String filter = normalizeStatusFilter(statusFilter);
-        List<Post> posts = postRepository.findFeed(dorm.getId(), category, scope, filter);
+        Page<Post> posts = postRepository.findFeed(
+                dorm.getId(), category, scope, filter, feedPageable(page, size));
         Map<UUID, Integer> counts = commentCounts(posts.stream().map(Post::getId).toList());
-        Map<UUID, String> rooms = roomNumbersByUserIds(dormitoryAuthorIds(posts));
-        return posts.stream()
+        Map<UUID, String> rooms = roomNumbersByUserIds(dormitoryAuthorIds(posts.getContent()));
+        List<PostDto> content = posts.stream()
                 .map(post -> toDto(post, user, counts.getOrDefault(post.getId(), 0), rooms))
                 .toList();
+        return PagedResponse.of(content, posts.getNumber(), posts.getSize(), posts.getTotalElements());
     }
 
     @Transactional
@@ -145,24 +155,28 @@ public class PostService {
     }
 
     @Transactional(readOnly = true)
-    public List<PostDto> listForStaff(
+    public PagedResponse<PostDto> listForStaff(
             User staff,
             PostCategory category,
-            String statusFilter
+            String statusFilter,
+            int page,
+            int size
     ) {
         UUID dormitoryId = requireStaffDormitoryId(staff);
         String filter = normalizeStatusFilter(statusFilter == null ? "ALL" : statusFilter);
-        List<Post> posts = postRepository.findStaffDormitoryFeed(
+        Page<Post> posts = postRepository.findStaffDormitoryFeed(
                 dormitoryId,
                 category == null,
                 category != null ? category : PostCategory.GENERAL,
-                filter
+                filter,
+                feedPageable(page, size)
         );
         Map<UUID, Integer> counts = commentCounts(posts.stream().map(Post::getId).toList());
-        Map<UUID, String> rooms = roomNumbersByUserIds(dormitoryAuthorIds(posts));
-        return posts.stream()
+        Map<UUID, String> rooms = roomNumbersByUserIds(dormitoryAuthorIds(posts.getContent()));
+        List<PostDto> content = posts.stream()
                 .map(post -> toDto(post, staff, counts.getOrDefault(post.getId(), 0), rooms))
                 .toList();
+        return PagedResponse.of(content, posts.getNumber(), posts.getSize(), posts.getTotalElements());
     }
 
     @Transactional
@@ -272,6 +286,16 @@ public class PostService {
             case "ACTIVE", "RESOLVED", "ALL" -> normalized;
             default -> throw new BusinessRuleException("status must be ACTIVE, RESOLVED, or ALL");
         };
+    }
+
+    private PageRequest feedPageable(int page, int size) {
+        if (page < 0) {
+            throw new BusinessRuleException("page must be greater than or equal to 0");
+        }
+        if (size < 1 || size > MAX_FEED_PAGE_SIZE) {
+            throw new BusinessRuleException("size must be between 1 and " + MAX_FEED_PAGE_SIZE);
+        }
+        return PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
     }
 
     private Map<UUID, Integer> commentCounts(List<UUID> postIds) {

@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pl.edu.pk.pkampus.common.ApiResponse;
+import pl.edu.pk.pkampus.common.PagedResponse;
 import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
 import pl.edu.pk.pkampus.modules.board.dto.CreateCommentRequestDto;
 import pl.edu.pk.pkampus.modules.board.dto.CreatePostRequestDto;
@@ -40,13 +41,15 @@ public class PostController {
 
     @GetMapping
     @Operation(summary = "Community board feed with optional filters")
-    public ResponseEntity<ApiResponse<List<PostDto>>> list(
+    public ResponseEntity<ApiResponse<PagedResponse<PostDto>>> list(
             @AuthenticationPrincipal User user,
             @RequestParam(required = false) PostCategory category,
             @RequestParam(required = false) PostScope scope,
-            @RequestParam(required = false, defaultValue = "ACTIVE") String status
+            @RequestParam(required = false, defaultValue = "ACTIVE") String status,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "20") int size
     ) {
-        return ResponseEntity.ok(ApiResponse.ok(postService.listFeed(user, category, scope, status)));
+        return ResponseEntity.ok(ApiResponse.ok(postService.listFeed(user, category, scope, status, page, size)));
     }
 
     @PostMapping

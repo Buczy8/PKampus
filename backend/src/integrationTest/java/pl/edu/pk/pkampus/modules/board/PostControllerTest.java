@@ -14,6 +14,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import pl.edu.pk.pkampus.common.PagedResponse;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.modules.board.dto.CommentDto;
@@ -113,8 +114,8 @@ class PostControllerTest {
                 OffsetDateTime.now()
         );
 
-        when(postService.listFeed(any(), eq(PostCategory.BORROW_HELP), eq(PostScope.DORMITORY), eq("ACTIVE")))
-                .thenReturn(List.of(postDto));
+        when(postService.listFeed(any(), eq(PostCategory.BORROW_HELP), eq(PostScope.DORMITORY), eq("ACTIVE"), eq(0), eq(20)))
+                .thenReturn(PagedResponse.of(List.of(postDto), 0, 20, 1));
 
         mockMvc.perform(get("/api/v1/posts")
                         .param("category", "BORROW_HELP")
@@ -122,9 +123,11 @@ class PostControllerTest {
                         .param("status", "ACTIVE"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data[0].id").value(postId.toString()))
-                .andExpect(jsonPath("$.data[0].title").value("Pożyczę wiertarkę"))
-                .andExpect(jsonPath("$.data[0].commentCount").value(2));
+                .andExpect(jsonPath("$.data.content[0].id").value(postId.toString()))
+                .andExpect(jsonPath("$.data.content[0].title").value("Pożyczę wiertarkę"))
+                .andExpect(jsonPath("$.data.content[0].commentCount").value(2))
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.page").value(0));
     }
 
     @Test

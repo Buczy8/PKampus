@@ -77,12 +77,15 @@ function formatWhen(iso: string): string {
   }
 }
 
+const FEED_PAGE_SIZE = 20
+
 export function ReceptionistBoardPage() {
   const user = useOutletContext<UserProfile>()
   const queryClient = useQueryClient()
 
   const [category, setCategory] = useState<BoardPostCategory | "ALL">("ALL")
   const [status, setStatus] = useState<BoardPostStatusFilter>("ALL")
+  const [page, setPage] = useState(0)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [removePostTarget, setRemovePostTarget] = useState<BoardPost | null>(null)
   const [removeCommentTarget, setRemoveCommentTarget] =
@@ -91,11 +94,13 @@ export function ReceptionistBoardPage() {
   const [actionInfo, setActionInfo] = useState<string | null>(null)
 
   const postsQuery = useQuery({
-    queryKey: ["receptionist", "posts", category, status],
+    queryKey: ["receptionist", "posts", category, status, page],
     queryFn: () =>
       listReceptionistBoardPosts({
         category: category === "ALL" ? undefined : category,
         status,
+        page,
+        size: FEED_PAGE_SIZE,
       }),
   })
 
@@ -143,6 +148,10 @@ export function ReceptionistBoardPage() {
     setExpandedId((cur) => (cur === post.id ? null : post.id))
   }
 
+  const posts = postsQuery.data?.content ?? []
+  const totalPages = postsQuery.data?.totalPages ?? 0
+  const totalElements = postsQuery.data?.totalElements ?? 0
+
   return (
     <div className="space-y-6">
       <div>
@@ -176,7 +185,10 @@ export function ReceptionistBoardPage() {
             <FieldLabel>Kategoria</FieldLabel>
             <Select
               value={category}
-              onValueChange={(v) => setCategory(v as BoardPostCategory | "ALL")}
+              onValueChange={(v) => {
+                setPage(0)
+                setCategory(v as BoardPostCategory | "ALL")
+              }}
             >
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -194,7 +206,10 @@ export function ReceptionistBoardPage() {
             <FieldLabel>Status</FieldLabel>
             <Select
               value={status}
-              onValueChange={(v) => setStatus(v as BoardPostStatusFilter)}
+              onValueChange={(v) => {
+                setPage(0)
+                setStatus(v as BoardPostStatusFilter)
+              }}
             >
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -217,12 +232,12 @@ export function ReceptionistBoardPage() {
           {getApiErrorMessage(postsQuery.error)}
         </p>
       )}
-      {postsQuery.data?.length === 0 && (
+      {postsQuery.isSuccess && posts.length === 0 && (
         <p className="text-sm text-muted-foreground">Brak postów do moderacji.</p>
       )}
 
       <div className="space-y-3">
-        {postsQuery.data?.map((post) => {
+        {posts.map((post) => {
           const open = expandedId === post.id
           return (
             <Card key={post.id} className="border-border/70 shadow-none">
@@ -314,6 +329,34 @@ export function ReceptionistBoardPage() {
           )
         })}
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
+            Strona {page + 1} z {totalPages} ({totalElements} postów)
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={page === 0 || postsQuery.isFetching}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              Poprzednia
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={page >= totalPages - 1 || postsQuery.isFetching}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Następna
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Dialog
         open={removePostTarget != null}

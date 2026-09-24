@@ -14,6 +14,7 @@ import type {
   DormEvent,
   LaundrySchedule,
   MachineBreakdownResult,
+  PagedResponse,
   ReceptionistDesk,
   RoomMaintenanceResult,
   StaffIssue,
@@ -244,8 +245,10 @@ export async function deleteReceptionistEvent(id: string): Promise<void> {
 export async function listReceptionistBoardPosts(params?: {
   category?: BoardPostCategory
   status?: BoardPostStatusFilter
-}): Promise<BoardPost[]> {
-  const { data } = await apiClient.get<ApiResponse<BoardPost[]>>(
+  page?: number
+  size?: number
+}): Promise<PagedResponse<BoardPost>> {
+  const { data } = await apiClient.get<ApiResponse<PagedResponse<BoardPost>>>(
     '/receptionist/posts',
     { params },
   )

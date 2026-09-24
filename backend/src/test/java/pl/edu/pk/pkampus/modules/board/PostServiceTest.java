@@ -9,7 +9,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
+import pl.edu.pk.pkampus.common.PagedResponse;
 import pl.edu.pk.pkampus.common.exception.AccountStatusException;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
@@ -146,19 +150,20 @@ class PostServiceTest {
                     .isActive(true)
                     .build();
 
-            when(postRepository.findFeed(dorm1.getId(), PostCategory.BORROW_HELP, PostScope.DORMITORY, "ACTIVE"))
-                    .thenReturn(List.of(postDormitory));
+            when(postRepository.findFeed(eq(dorm1.getId()), eq(PostCategory.BORROW_HELP), eq(PostScope.DORMITORY), eq("ACTIVE"), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(postDormitory)));
             when(commentRepository.countActiveByPostIds(List.of(postId)))
                     .thenReturn(List.<Object[]>of(new Object[]{postId, 3L}));
             when(roomAssignmentRepository.findActiveByUserIdIn(List.of(residentAuthor.getId())))
                     .thenReturn(List.of(assignment));
 
             // Act
-            List<PostDto> result = postService.listFeed(residentAuthor, PostCategory.BORROW_HELP, PostScope.DORMITORY, "active");
+            PagedResponse<PostDto> result = postService.listFeed(residentAuthor, PostCategory.BORROW_HELP, PostScope.DORMITORY, "active", 0, 20);
 
             // Assert
-            assertEquals(1, result.size());
-            PostDto dto = result.getFirst();
+            assertEquals(1, result.content().size());
+            assertEquals(1, result.totalElements());
+            PostDto dto = result.content().getFirst();
             assertEquals(postId, dto.id());
             assertEquals("Pożyczę czajnik", dto.title());
             assertEquals("Jan Kowalski", dto.authorDisplayName());
@@ -171,18 +176,18 @@ class PostServiceTest {
         @DisplayName("Should hide room number for CAMPUS scope posts")
         void listFeedCampusHidesRoom() {
             // Arrange
-            when(postRepository.findFeed(dorm1.getId(), null, null, "ACTIVE"))
-                    .thenReturn(List.of(postCampus));
+            when(postRepository.findFeed(eq(dorm1.getId()), eq(null), eq(null), eq("ACTIVE"), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(postCampus)));
             when(commentRepository.countActiveByPostIds(List.of(postCampus.getId())))
                     .thenReturn(List.of());
 
             // Act
-            List<PostDto> result = postService.listFeed(residentAuthor, null, null, null);
+            PagedResponse<PostDto> result = postService.listFeed(residentAuthor, null, null, null, 0, 20);
 
             // Assert
-            assertEquals(1, result.size());
-            assertNull(result.getFirst().authorRoomNumber());
-            assertEquals("DS Board 1", result.getFirst().authorDormitoryName());
+            assertEquals(1, result.content().size());
+            assertNull(result.content().getFirst().authorRoomNumber());
+            assertEquals("DS Board 1", result.content().getFirst().authorDormitoryName());
             verify(roomAssignmentRepository, never()).findActiveByUserIdIn(any());
         }
 
@@ -191,7 +196,7 @@ class PostServiceTest {
         void listFeedThrowsOnInvalidStatus() {
             // Arrange & Act & Assert
             assertThrows(BusinessRuleException.class,
-                    () -> postService.listFeed(residentAuthor, null, null, "INVALID"));
+                    () -> postService.listFeed(residentAuthor, null, null, "INVALID", 0, 20));
         }
 
         @Test
@@ -202,7 +207,48 @@ class PostServiceTest {
 
             // Act & Assert
             assertThrows(AccountStatusException.class,
-                    () -> postService.listFeed(residentAuthor, null, null, "ACTIVE"));
+                    () -> postService.listFeed(residentAuthor, null, null, "ACTIVE", 0, 20));
+        }
+
+        @Test
+        @DisplayName("Should throw BusinessRuleException on negative page")
+        void listFeedThrowsOnNegativePage() {
+            // Arrange & Act & Assert
+            assertThrows(BusinessRuleException.class,
+                    () -> postService.listFeed(residentAuthor, null, null, "ACTIVE", -1, 20));
+        }
+
+        @Test
+        @DisplayName("Should throw BusinessRuleException when size exceeds maximum")
+        void listFeedThrowsOnOversizedPage() {
+            // Arrange & Act & Assert
+            assertThrows(BusinessRuleException.class,
+                    () -> postService.listFeed(residentAuthor, null, null, "ACTIVE", 0, 51));
+            assertThrows(BusinessRuleException.class,
+                    () -> postService.listFeed(residentAuthor, null, null, "ACTIVE", 0, 0));
+        }
+
+        @Test
+        @DisplayName("Should pass page and size to repository")
+        void listFeedPassesPagination() {
+            // Arrange
+            when(postRepository.findFeed(eq(dorm1.getId()), eq(null), eq(null), eq("ACTIVE"), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(), PageRequest.of(2, 5), 12));
+
+            // Act
+            PagedResponse<PostDto> result = postService.listFeed(residentAuthor, null, null, "ACTIVE", 2, 5);
+
+            // Assert
+            assertEquals(0, result.content().size());
+            assertEquals(12, result.totalElements());
+            assertEquals(3, result.totalPages());
+            assertEquals(2, result.page());
+            assertTrue(result.last());
+
+            ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+            verify(postRepository).findFeed(eq(dorm1.getId()), eq(null), eq(null), eq("ACTIVE"), captor.capture());
+            assertEquals(2, captor.getValue().getPageNumber());
+            assertEquals(5, captor.getValue().getPageSize());
         }
     }
 
@@ -513,17 +559,18 @@ class PostServiceTest {
         @DisplayName("Should list dormitory posts for staff")
         void listForStaffSuccess() {
             // Arrange
-            when(postRepository.findStaffDormitoryFeed(dorm1.getId(), false, PostCategory.BORROW_HELP, "ACTIVE"))
-                    .thenReturn(List.of(postDormitory));
+            when(postRepository.findStaffDormitoryFeed(eq(dorm1.getId()), eq(false), eq(PostCategory.BORROW_HELP), eq("ACTIVE"), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(postDormitory)));
             when(commentRepository.countActiveByPostIds(List.of(postId)))
                     .thenReturn(List.of());
 
             // Act
-            List<PostDto> result = postService.listForStaff(staffDormAdmin, PostCategory.BORROW_HELP, "ACTIVE");
+            PagedResponse<PostDto> result = postService.listForStaff(staffDormAdmin, PostCategory.BORROW_HELP, "ACTIVE", 0, 20);
 
             // Assert
-            assertEquals(1, result.size());
-            assertEquals(postId, result.getFirst().id());
+            assertEquals(1, result.content().size());
+            assertEquals(1, result.totalElements());
+            assertEquals(postId, result.content().getFirst().id());
         }
 
         @Test
