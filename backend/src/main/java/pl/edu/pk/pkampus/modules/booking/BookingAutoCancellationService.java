@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import pl.edu.pk.pkampus.mail.BookingAutoCancelledEvent;
 import pl.edu.pk.pkampus.mail.ResourceSchedulePage;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBooking;
 import pl.edu.pk.pkampus.modules.laundry.LaundryBookingRepository;
@@ -16,8 +15,6 @@ import pl.edu.pk.pkampus.modules.rooms.RoomBookingStatus;
 import pl.edu.pk.pkampus.modules.user.User;
 
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
@@ -25,10 +22,6 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class BookingAutoCancellationService {
-
-    public static final ZoneId WARSAW = ZoneId.of("Europe/Warsaw");
-    private static final DateTimeFormatter SLOT_LABEL =
-            DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm").withZone(WARSAW);
 
     private final LaundryBookingRepository laundryBookingRepository;
     private final RoomBookingRepository roomBookingRepository;
@@ -50,7 +43,7 @@ public class BookingAutoCancellationService {
                     resident.getEmail(),
                     resident.getFirstName(),
                     "Laundry machine " + machineLabel,
-                    SLOT_LABEL.format(booking.getStartTime()),
+                    booking.getStartTime(),
                     ResourceSchedulePage.LAUNDRY
             ));
         }
@@ -74,7 +67,7 @@ public class BookingAutoCancellationService {
                     resident.getEmail(),
                     resident.getFirstName(),
                     "Room " + roomLabel,
-                    SLOT_LABEL.format(booking.getStartTime()),
+                    booking.getStartTime(),
                     ResourceSchedulePage.ROOMS
             ));
         }

@@ -45,7 +45,7 @@ class EmailServiceIntegrationTest {
 
         // Assert
         ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
-        verify(mailSender, timeout(3000)).send(captor.capture());
+        verify(mailSender).send(captor.capture());
         MimeMessage sent = captor.getValue();
 
         assertEquals("Test Subject", sent.getSubject());

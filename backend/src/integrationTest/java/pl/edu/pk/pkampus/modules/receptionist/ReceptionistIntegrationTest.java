@@ -59,8 +59,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import org.springframework.test.context.event.ApplicationEvents;
 import org.springframework.test.context.event.RecordApplicationEvents;
-import pl.edu.pk.pkampus.mail.LaundryBreakdownNoticeEvent;
-import pl.edu.pk.pkampus.mail.RoomMaintenanceNoticeEvent;
 import pl.edu.pk.pkampus.modules.issues.IssueStatusChangedEvent;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;

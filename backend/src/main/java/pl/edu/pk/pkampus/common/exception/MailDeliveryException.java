@@ -1,4 +1,4 @@
-package pl.edu.pk.pkampus.mail;
+package pl.edu.pk.pkampus.common.exception;
 
 public class MailDeliveryException extends RuntimeException {
 

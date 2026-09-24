@@ -195,6 +195,18 @@ class GlobalExceptionHandlerUnitTest {
     }
 
     @Test
+    @DisplayName("handleMailDelivery should return 500 Internal Server Error")
+    void handleMailDelivery() {
+        MailDeliveryException ex = new MailDeliveryException("SMTP connection failed", new RuntimeException("timeout"));
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleMailDelivery(ex);
+
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertFalse(response.getBody().success());
+        assertEquals("SMTP connection failed", response.getBody().message());
+    }
+
+    @Test
     @DisplayName("handleAccountStatus should return 403 Forbidden")
     void handleAccountStatus() {
         AccountStatusException ex = new AccountStatusException("Account is pending approval");

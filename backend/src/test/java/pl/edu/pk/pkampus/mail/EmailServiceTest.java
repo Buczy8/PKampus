@@ -11,6 +11,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mail.MailSendException;
 import org.springframework.mail.javamail.JavaMailSender;
+import pl.edu.pk.pkampus.common.exception.MailDeliveryException;
 
 import java.io.ByteArrayOutputStream;
 import java.util.concurrent.CompletableFuture;
@@ -222,6 +223,8 @@ class EmailServiceTest {
         verify(mailSender).send(messageCaptor.capture());
         MimeMessage sentMessage = messageCaptor.getValue();
 
+        assertEquals("PKampus - Issue status updated", sentMessage.getSubject());
+
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         sentMessage.writeTo(baos);
         String content = baos.toString();
@@ -354,7 +357,7 @@ class EmailServiceTest {
 
         // Act
         emailService.sendRegistrationRejectedEmail(
-                "student@pk.edu.pl", "<img src=x onerror=alert(1)>", "<script>alert(2)</script>");
+                "student@pk.edu.pl", "<img src='x' onerror=alert(1)>", "<script>alert(2)</script>");
 
         // Assert on the decoded payload (raw MIME may QP-wrap long lines).
         // The plain-text alternative legitimately restores raw characters;
@@ -368,11 +371,11 @@ class EmailServiceTest {
         sentMessage.saveChanges();
         String html = textPartContent(sentMessage, "text/html");
         String plain = textPartContent(sentMessage, "text/plain");
-        assertFalse(html.contains("<img src=x onerror=alert(1)>"));
+        assertFalse(html.contains("<img src='x' onerror=alert(1)>"));
         assertFalse(html.contains("<script>alert(2)</script>"));
-        assertTrue(html.contains("&lt;img src=x onerror=alert(1)&gt;"));
+        assertTrue(html.contains("&lt;img src=&#39;x&#39; onerror=alert(1)&gt;"));
         assertTrue(html.contains("&lt;script&gt;alert(2)&lt;/script&gt;"));
-        assertTrue(plain.contains("<img src=x onerror=alert(1)>"));
+        assertTrue(plain.contains("<img src='x' onerror=alert(1)>"));
     }
 
     private static String textPartContent(MimeMessage message, String mimeType) throws Exception {

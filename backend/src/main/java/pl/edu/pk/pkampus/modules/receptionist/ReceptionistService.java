@@ -7,10 +7,8 @@ import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import org.springframework.context.ApplicationEventPublisher;
-import pl.edu.pk.pkampus.mail.BookingAutoCancelledEvent;
-import pl.edu.pk.pkampus.mail.LaundryBreakdownNoticeEvent;
 import pl.edu.pk.pkampus.mail.ResourceSchedulePage;
-import pl.edu.pk.pkampus.mail.RoomMaintenanceNoticeEvent;
+import pl.edu.pk.pkampus.modules.booking.BookingAutoCancelledEvent;
 import pl.edu.pk.pkampus.common.PagedResponse;
 import pl.edu.pk.pkampus.modules.board.PostCategory;
 import pl.edu.pk.pkampus.modules.board.PostModerationService;
@@ -264,7 +262,7 @@ public class ReceptionistService {
                     resident.getEmail(),
                     resident.getFirstName(),
                     "Room " + booking.getRoom().getName(),
-                    SLOT_LABEL.format(booking.getStartTime()),
+                    booking.getStartTime(),
                     ResourceSchedulePage.ROOMS
             ));
         }
@@ -319,7 +317,7 @@ public class ReceptionistService {
                     resident.getEmail(),
                     resident.getFirstName(),
                     room.getName(),
-                    SLOT_LABEL.format(booking.getStartTime())
+                    booking.getStartTime()
             ));
         }
 
@@ -365,7 +363,7 @@ public class ReceptionistService {
                     resident.getEmail(),
                     resident.getFirstName(),
                     "Laundry machine " + booking.getMachine().getMachineIdentifier(),
-                    SLOT_LABEL.format(booking.getStartTime()),
+                    booking.getStartTime(),
                     ResourceSchedulePage.LAUNDRY
             ));
         }
@@ -421,7 +419,7 @@ public class ReceptionistService {
                     resident.getEmail(),
                     resident.getFirstName(),
                     machine.getMachineIdentifier(),
-                    SLOT_LABEL.format(booking.getStartTime())
+                    booking.getStartTime()
             ));
         }
 
