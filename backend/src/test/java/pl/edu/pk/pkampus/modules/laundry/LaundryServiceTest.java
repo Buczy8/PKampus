@@ -469,6 +469,34 @@ class LaundryServiceTest {
         }
 
         @Test
+        @DisplayName("Should throw BusinessRuleException when DB window trigger rejects the save")
+        void bookSlotThrowsWhenWindowTriggerRejects() {
+            // Arrange
+            LocalDate date = LocalDate.now(WARSAW).plusDays(1);
+            OffsetDateTime start = date.atTime(10, 0).atZone(WARSAW).toOffsetDateTime();
+            OffsetDateTime end = start.plusHours(3);
+            CreateLaundryBookingRequestDto request = new CreateLaundryBookingRequestDto(
+                    machine1.getId(), start, end
+            );
+
+            when(laundryMachineRepository.findByIdAndDormitoryId(machine1.getId(), dorm.getId()))
+                    .thenReturn(Optional.of(machine1));
+            when(laundryBookingRepository.countActiveStartingBetween(eq(resident.getId()), any(), any(), any()))
+                    .thenReturn(0L);
+            when(laundryBookingRepository.existsOverlapping(eq(machine1.getId()), any(), any(), any()))
+                    .thenReturn(false);
+            when(laundryBookingRepository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException(
+                    "ERROR: laundry_booking_window: slot starts before opening hours (07:00:00)"));
+
+            // Act
+            BusinessRuleException ex = assertThrows(BusinessRuleException.class,
+                    () -> laundryService.bookSlot(resident, request));
+
+            // Assert
+            assertTrue(ex.getMessage().contains("laundry_booking_window:"));
+        }
+
+        @Test
         @DisplayName("Should successfully book a valid laundry slot")
         void bookSlotSuccess() {
             // Arrange

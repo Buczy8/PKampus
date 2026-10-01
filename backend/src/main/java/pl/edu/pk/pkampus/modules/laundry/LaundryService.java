@@ -243,6 +243,9 @@ public class LaundryService {
         try {
             booking = laundryBookingRepository.saveAndFlush(booking);
         } catch (DataIntegrityViolationException ex) {
+            if (isBookingWindowViolation(ex)) {
+                throw windowViolation(ex);
+            }
             throw new SlotConflictException("Slot was just taken by another resident");
         }
 
@@ -279,6 +282,24 @@ public class LaundryService {
                     "endTime must equal startTime plus slot duration (" + durationMinutes + " minutes)"
             );
         }
+    }
+
+    /**
+     * Detects last-line DB window-trigger rejections (V12 check_laundry_booking_window,
+     * SQLSTATE P0001 with 'laundry_booking_window:' prefix) so they surface as 422
+     * business-rule errors instead of misleading 409 slot conflicts.
+     */
+    private static boolean isBookingWindowViolation(DataIntegrityViolationException ex) {
+        Throwable cause = ex.getMostSpecificCause() != null ? ex.getMostSpecificCause() : ex;
+        String message = cause.getMessage() != null ? cause.getMessage() : ex.getMessage();
+        return message != null && message.contains("laundry_booking_window:");
+    }
+
+    private static BusinessRuleException windowViolation(DataIntegrityViolationException ex) {
+        Throwable cause = ex.getMostSpecificCause() != null ? ex.getMostSpecificCause() : ex;
+        String raw = cause.getMessage() != null ? cause.getMessage() : ex.getMessage();
+        String firstLine = raw != null ? raw.split("\\R")[0].replaceFirst("^(ERROR:\\s*)", "").trim() : "";
+        return new BusinessRuleException(firstLine.isEmpty() ? "Booking violates opening-hours window" : firstLine);
     }
 
     private Dormitory requireResidentDormitory(User user) {

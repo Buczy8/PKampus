@@ -274,6 +274,36 @@ class RoomBookingServiceTest {
         }
 
         @Test
+        @DisplayName("createBooking throws BusinessRuleException when DB window trigger rejects the save")
+        void createBookingThrowsWhenWindowTriggerRejects() {
+            // Arrange
+            LocalDate date = LocalDate.now(WARSAW).plusDays(1);
+            OffsetDateTime start = date.atTime(10, 0).atZone(WARSAW).toOffsetDateTime();
+            OffsetDateTime end = start.plusHours(2);
+            CreateRoomBookingRequestDto request = new CreateRoomBookingRequestDto(
+                    room.getId(), start, end, 2, "Ćwiczenia", true
+            );
+
+            when(sanctionRepository.findActiveByUserAndType(eq(resident.getId()), eq(SanctionType.ROOM_BAN), any()))
+                    .thenReturn(List.of());
+            when(thematicRoomRepository.findByIdAndDormitoryId(room.getId(), dorm.getId()))
+                    .thenReturn(Optional.of(room));
+            when(roomBookingRepository.existsActiveNotEndedForUserOnDay(eq(resident.getId()), any(), any(), any(), any()))
+                    .thenReturn(false);
+            when(roomBookingRepository.existsOverlapping(eq(room.getId()), any(), any(), any()))
+                    .thenReturn(false);
+            when(roomBookingRepository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException(
+                    "ERROR: room_booking_window: reservation starts before opening hours (08:00:00)"));
+
+            // Act
+            BusinessRuleException ex = assertThrows(BusinessRuleException.class,
+                    () -> roomBookingService.createBooking(resident, request));
+
+            // Assert
+            assertTrue(ex.getMessage().contains("room_booking_window:"));
+        }
+
+        @Test
         @DisplayName("createBooking succeeds for valid future reservation")
         void createBookingSuccess() {
             // Arrange
