@@ -54,6 +54,7 @@ import pl.edu.pk.pkampus.modules.rooms.ThematicRoomRepository;
 import pl.edu.pk.pkampus.modules.rooms.ThematicRoomStatus;
 import pl.edu.pk.pkampus.modules.user.User;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -101,12 +102,13 @@ public class ReceptionistService {
     private final EventService eventService;
     private final PostModerationService postModerationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public ReceptionistDeskDto getDesk(User actor) {
         UUID dormitoryId = requireActorDormitoryId(actor);
 
-        LocalDate today = LocalDate.now(WARSAW);
+        LocalDate today = LocalDate.ofInstant(clock.instant(), WARSAW);
         Instant dayStart = today.atStartOfDay(WARSAW).toInstant();
         Instant dayEnd = today.plusDays(1).atStartOfDay(WARSAW).toInstant();
 
@@ -251,7 +253,7 @@ public class ReceptionistService {
         if (booking.getStatus() != RoomBookingStatus.CONFIRMED) {
             throw new BusinessRuleException("Only CONFIRMED room bookings can be cancelled by staff");
         }
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         boolean lateOrPast = booking.getStartTime().isBefore(now);
         booking.setStatus(lateOrPast ? RoomBookingStatus.AUTO_CANCELLED_15MIN : RoomBookingStatus.CANCELLED_USER);
         RoomBooking saved = roomBookingRepository.save(booking);
@@ -285,7 +287,7 @@ public class ReceptionistService {
             throw new BusinessRuleException("Maintenance reason is required");
         }
 
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         room.setStatus(ThematicRoomStatus.MAINTENANCE);
         thematicRoomRepository.save(room);
 
@@ -352,7 +354,7 @@ public class ReceptionistService {
         if (booking.getStatus() != LaundryBookingStatus.CONFIRMED) {
             throw new BusinessRuleException("Only CONFIRMED laundry bookings can be cancelled by staff");
         }
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         boolean lateOrPast = booking.getStartTime().isBefore(now);
         booking.setStatus(lateOrPast ? LaundryBookingStatus.AUTO_CANCELLED_15MIN : LaundryBookingStatus.CANCELLED_USER);
         LaundryBooking saved = laundryBookingRepository.save(booking);
@@ -386,7 +388,7 @@ public class ReceptionistService {
             throw new BusinessRuleException("Breakdown reason is required");
         }
 
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         machine.setStatus(LaundryMachineStatus.OUT_OF_ORDER);
         machine.setNotes(trimmedReason);
         laundryMachineRepository.save(machine);
@@ -455,7 +457,7 @@ public class ReceptionistService {
         if (booking.getStatus() != LaundryBookingStatus.CONFIRMED) {
             throw new BusinessRuleException("Only CONFIRMED laundry bookings can receive a key");
         }
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         booking.setStatus(LaundryBookingStatus.KEY_ISSUED);
         booking.setKeyIssuedAt(now);
         return toLaundryDto(laundryBookingRepository.save(booking));
@@ -467,7 +469,7 @@ public class ReceptionistService {
         if (booking.getStatus() != LaundryBookingStatus.KEY_ISSUED) {
             throw new BusinessRuleException("Only KEY_ISSUED laundry bookings can return a key");
         }
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         booking.setStatus(LaundryBookingStatus.COMPLETED);
         booking.setKeyReturnedAt(now);
         return toLaundryDto(laundryBookingRepository.save(booking));
@@ -479,7 +481,7 @@ public class ReceptionistService {
         if (booking.getStatus() != RoomBookingStatus.CONFIRMED) {
             throw new BusinessRuleException("Only CONFIRMED room bookings can receive a key");
         }
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         booking.setStatus(RoomBookingStatus.KEY_ISSUED);
         booking.setKeyIssuedAt(now);
         return toRoomDto(roomBookingRepository.save(booking));
@@ -491,7 +493,7 @@ public class ReceptionistService {
         if (booking.getStatus() != RoomBookingStatus.KEY_ISSUED) {
             throw new BusinessRuleException("Only KEY_ISSUED room bookings can return a key");
         }
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         booking.setStatus(RoomBookingStatus.COMPLETED);
         booking.setKeyReturnedAt(now);
         return toRoomDto(roomBookingRepository.save(booking));
