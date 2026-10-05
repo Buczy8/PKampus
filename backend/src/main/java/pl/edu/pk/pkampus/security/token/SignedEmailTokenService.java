@@ -1,6 +1,7 @@
 package pl.edu.pk.pkampus.security.token;
 
 import jakarta.annotation.PostConstruct;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ public class SignedEmailTokenService {
     private String secret;
 
     @Value("${app.security.email-token-ttl-hours:24}")
+    @Getter
     private long ttlHours;
 
     private SecretKeySpec secretKeySpec;
@@ -121,9 +123,5 @@ public class SignedEmailTokenService {
         } catch (NoSuchAlgorithmException | InvalidKeyException e) {
             throw new IllegalStateException("Failed to calculate HMAC-SHA256 signature", e);
         }
-    }
-
-    public long getTtlHours() {
-        return ttlHours;
     }
 }

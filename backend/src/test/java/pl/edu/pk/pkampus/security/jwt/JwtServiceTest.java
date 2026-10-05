@@ -1,5 +1,6 @@
 package pl.edu.pk.pkampus.security.jwt;
 
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,22 +53,20 @@ class JwtServiceTest {
     }
 
     @Test
-    void shouldGenerateAndValidateTokenSuccessfully() {
+    void shouldGenerateTokenWithVerifiableClaims() {
         // Arrange & Act
         String token = jwtService.generateToken(testUser);
 
         // Assert (single parse reused for every assertion below)
-        JwtService.AccessTokenClaims claims = jwtService.parseAccessToken(token);
         assertNotNull(token);
-        assertTrue(jwtService.isTokenValid(token, testUser));
+        JwtService.AccessTokenClaims claims = jwtService.parseAccessToken(token);
         assertEquals(testUser.getId(), claims.userId());
         assertEquals("student@pk.edu.pl", claims.email());
         assertTrue(claims.expiresAt().isAfter(Instant.now()));
-        assertFalse(jwtService.isTokenExpired(token));
     }
 
     @Test
-    void shouldInvalidateTokenWhenUserMismatch() {
+    void shouldCarryDifferentIdentityForDifferentUser() {
         // Arrange
         String token = jwtService.generateToken(testUser);
 
@@ -78,26 +77,21 @@ class JwtServiceTest {
                 .status(UserStatus.ACTIVE)
                 .build();
 
-        // Act & Assert
-        assertFalse(jwtService.isTokenValid(token, otherUser));
+        // Act
+        JwtService.AccessTokenClaims claims = jwtService.parseAccessToken(token);
+
+        // Assert
+        assertNotEquals(otherUser.getId(), claims.userId());
+        assertNotEquals(otherUser.getEmail(), claims.email());
     }
 
     @Test
-    void shouldReturnFalseForIsTokenValidWhenTokenIsMalformedOrTampered() {
+    void shouldRejectMalformedOrTamperedToken() {
         // Arrange
         String malformedToken = "eyJhbGciOiJIUzI1NiJ9.invalid-payload.signature";
 
         // Act & Assert
-        assertFalse(jwtService.isTokenValid(malformedToken, testUser));
-    }
-
-    @Test
-    void shouldReturnTrueForIsTokenExpiredWhenTokenIsMalformed() {
-        // Arrange
-        String malformedToken = "not-a-valid-jwt";
-
-        // Act & Assert
-        assertTrue(jwtService.isTokenExpired(malformedToken));
+        assertThrows(JwtException.class, () -> jwtService.parseAccessToken(malformedToken));
     }
 
     @Test
@@ -113,8 +107,6 @@ class JwtServiceTest {
 
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> jwtService.parseAccessToken(token));
-        assertFalse(jwtService.isTokenValid(token, testUser));
-        assertTrue(jwtService.isTokenExpired(token));
     }
 
     @Test

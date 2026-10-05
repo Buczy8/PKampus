@@ -5,8 +5,8 @@ import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
+import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import pl.edu.pk.pkampus.modules.user.User;
 
@@ -26,6 +26,7 @@ public class JwtService {
     private String secret;
 
     @Value("${jwt.expiration-minutes:15}")
+    @Getter
     private long expirationMinutes;
 
     private SecretKey signingKey;
@@ -40,12 +41,12 @@ public class JwtService {
         Map<String, Object> claims = new HashMap<>();
         claims.put("email", user.getEmail());
 
-        return buildToken(claims, user.getId().toString(), expirationMinutes, ChronoUnit.MINUTES);
+        return buildToken(claims, user.getId().toString(), expirationMinutes);
     }
 
-    private String buildToken(Map<String, Object> extraClaims, String subject, long amountToAdd, ChronoUnit unit) {
+    private String buildToken(Map<String, Object> extraClaims, String subject, long minutesToAdd) {
         Instant now = Instant.now();
-        Instant expiry = now.plus(amountToAdd, unit);
+        Instant expiry = now.plus(minutesToAdd, ChronoUnit.MINUTES);
 
         return Jwts.builder()
                 .claims(extraClaims)
@@ -85,40 +86,5 @@ public class JwtService {
             throw new IllegalArgumentException("Token is missing required claims");
         }
         return new AccessTokenClaims(UUID.fromString(subject), email, expiration.toInstant());
-    }
-
-    public UUID extractUserId(String token) {
-        return parseAccessToken(token).userId();
-    }
-
-    public String extractEmail(String token) {
-        return parseAccessToken(token).email();
-    }
-
-    public Date extractExpiration(String token) {
-        return Date.from(parseAccessToken(token).expiresAt());
-    }
-
-    public boolean isTokenValid(String token, UserDetails userDetails) {
-        try {
-            AccessTokenClaims claims = parseAccessToken(token);
-            return userDetails.getUsername() != null
-                    && userDetails.getUsername().equals(claims.email())
-                    && claims.expiresAt().isAfter(Instant.now());
-        } catch (JwtException | IllegalArgumentException e) {
-            return false;
-        }
-    }
-
-    public boolean isTokenExpired(String token) {
-        try {
-            return parseAccessToken(token).expiresAt().isBefore(Instant.now());
-        } catch (JwtException | IllegalArgumentException e) {
-            return true;
-        }
-    }
-
-    public long getExpirationMinutes() {
-        return expirationMinutes;
     }
 }
