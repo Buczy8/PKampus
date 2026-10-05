@@ -125,9 +125,6 @@ public class PostService {
     public CommentDto addComment(User user, UUID postId, CreateCommentRequestDto request) {
         User current = accessPolicy.requireActiveResidentUser(user);
         Post post = accessPolicy.requireVisiblePost(current, postId);
-        if (post.getStatus() == PostStatus.REMOVED_MODERATOR) {
-            throw new BusinessRuleException("Cannot comment on a removed post");
-        }
 
         String content = request.content().trim();
         if (content.isEmpty()) {
