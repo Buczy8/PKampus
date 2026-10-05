@@ -36,12 +36,25 @@ public class AuthService {
     private final TokenRevocationService tokenRevocationService;
     private final AuthenticatedUserCache authenticatedUserCache;
 
+    /**
+     * Precomputed BCrypt-12 hash used only to equalize login timing: without it
+     * an unknown email returns instantly while an existing one costs a full
+     * BCrypt verification, letting remote callers enumerate accounts by response
+     * time despite the identical error message.
+     */
+    private static final String DUMMY_PASSWORD_HASH =
+            "$2a$12$cz0EQ1YKIOUl9fmbaG9SXuELlsl7.8Voryklj.VAG6kcnNMaA5Yyq";
+
     @Transactional
     public AuthResponseDto login(LoginRequestDto dto) {
         String normalizedEmail = dto.getEmail().trim().toLowerCase();
 
-        User user = userRepository.findByEmail(normalizedEmail)
-                .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
+        User user = userRepository.findByEmail(normalizedEmail).orElse(null);
+
+        if (user == null) {
+            passwordEncoder.matches(dto.getPassword(), DUMMY_PASSWORD_HASH);
+            throw new BadCredentialsException("Invalid email or password");
+        }
 
         if (!passwordEncoder.matches(dto.getPassword(), user.getPasswordHash())) {
             throw new BadCredentialsException("Invalid email or password");

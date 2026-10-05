@@ -177,6 +177,8 @@ class AuthServiceTest {
 
         // Act & Assert
         assertThrows(BadCredentialsException.class, () -> authService.login(loginDto));
+        // Timing equalization: unknown emails cost a hash verification like existing ones
+        verify(passwordEncoder).matches(eq("Password123!"), anyString());
     }
 
     @Test
