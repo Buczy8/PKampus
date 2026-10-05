@@ -20,6 +20,7 @@ import pl.edu.pk.pkampus.modules.user.UserRole;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
 
 import java.time.Duration;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -46,6 +47,7 @@ public class RoomBookingService {
     private final RoomBookingRepository roomBookingRepository;
     private final ThematicRoomRepository thematicRoomRepository;
     private final SanctionRepository sanctionRepository;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public RoomAvailabilityDto availability(User user, UUID roomId, LocalDate from, LocalDate to) {
@@ -94,7 +96,7 @@ public class RoomBookingService {
 
         Instant start = request.startTime().toInstant();
         Instant end = request.endTime().toInstant();
-        Instant now = Instant.now();
+        Instant now = clock.instant();
 
         if (!end.isAfter(start)) {
             throw new BusinessRuleException("endTime must be after startTime");
@@ -158,7 +160,7 @@ public class RoomBookingService {
         if (booking.getStatus() != RoomBookingStatus.CONFIRMED) {
             throw new IllegalArgumentException("Only CONFIRMED bookings can be cancelled by the resident");
         }
-        if (!booking.getStartTime().isAfter(Instant.now())) {
+        if (!booking.getStartTime().isAfter(clock.instant())) {
             throw new IllegalArgumentException("Cannot cancel a booking after it has started");
         }
 
@@ -181,7 +183,7 @@ public class RoomBookingService {
 
     private void rejectIfRoomBanned(User user) {
         var bans = sanctionRepository.findActiveByUserAndType(
-                user.getId(), SanctionType.ROOM_BAN, LocalDate.now(WARSAW));
+                user.getId(), SanctionType.ROOM_BAN, LocalDate.ofInstant(clock.instant(), WARSAW));
         if (!bans.isEmpty()) {
             throw new AccountStatusException(
                     "Active ROOM_BAN until " + bans.getFirst().getEndDate()
@@ -220,7 +222,7 @@ public class RoomBookingService {
         if (to.isBefore(from)) {
             throw new BusinessRuleException("to must be on or after from");
         }
-        LocalDate today = LocalDate.now(WARSAW);
+        LocalDate today = LocalDate.ofInstant(clock.instant(), WARSAW);
         if (from.isBefore(today.minusDays(1))) {
             throw new BusinessRuleException("from is too far in the past");
         }
