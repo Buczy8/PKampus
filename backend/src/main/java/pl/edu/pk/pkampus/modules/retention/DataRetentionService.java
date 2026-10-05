@@ -1,6 +1,5 @@
 package pl.edu.pk.pkampus.modules.retention;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -23,7 +22,6 @@ import java.util.List;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class DataRetentionService {
 
     private final MinioStorageService minioStorageService;
@@ -33,23 +31,39 @@ public class DataRetentionService {
     private final RoomBookingRepository roomBookingRepository;
     private final UserRepository userRepository;
 
-    @Value("${app.scheduling.retention.issue-photos-days:30}")
-    private int issuePhotosDays = 30;
+    private final int issuePhotosDays;
+    private final int postsResolvedDays;
+    private final int postsDeletedDays;
+    private final int commentsDeletedDays;
+    private final int bookingsPurgeDays;
+    private final int checkedOutAnonymizeDays;
 
-    @Value("${app.scheduling.retention.posts-resolved-days:30}")
-    private int postsResolvedDays = 30;
-
-    @Value("${app.scheduling.retention.posts-deleted-days:14}")
-    private int postsDeletedDays = 14;
-
-    @Value("${app.scheduling.retention.comments-deleted-days:14}")
-    private int commentsDeletedDays = 14;
-
-    @Value("${app.scheduling.retention.bookings-purge-days:90}")
-    private int bookingsPurgeDays = 90;
-
-    @Value("${app.scheduling.retention.checked-out-anonymize-days:365}")
-    private int checkedOutAnonymizeDays = 365;
+    public DataRetentionService(
+            MinioStorageService minioStorageService,
+            IssuePhotoRepository issuePhotoRepository,
+            BoardRetentionService boardRetentionService,
+            LaundryBookingRepository laundryBookingRepository,
+            RoomBookingRepository roomBookingRepository,
+            UserRepository userRepository,
+            @Value("${app.scheduling.retention.issue-photos-days:30}") int issuePhotosDays,
+            @Value("${app.scheduling.retention.posts-resolved-days:30}") int postsResolvedDays,
+            @Value("${app.scheduling.retention.posts-deleted-days:14}") int postsDeletedDays,
+            @Value("${app.scheduling.retention.comments-deleted-days:14}") int commentsDeletedDays,
+            @Value("${app.scheduling.retention.bookings-purge-days:90}") int bookingsPurgeDays,
+            @Value("${app.scheduling.retention.checked-out-anonymize-days:365}") int checkedOutAnonymizeDays) {
+        this.minioStorageService = minioStorageService;
+        this.issuePhotoRepository = issuePhotoRepository;
+        this.boardRetentionService = boardRetentionService;
+        this.laundryBookingRepository = laundryBookingRepository;
+        this.roomBookingRepository = roomBookingRepository;
+        this.userRepository = userRepository;
+        this.issuePhotosDays = issuePhotosDays;
+        this.postsResolvedDays = postsResolvedDays;
+        this.postsDeletedDays = postsDeletedDays;
+        this.commentsDeletedDays = commentsDeletedDays;
+        this.bookingsPurgeDays = bookingsPurgeDays;
+        this.checkedOutAnonymizeDays = checkedOutAnonymizeDays;
+    }
 
     /**
      * Runs all retention tasks. Intentionally NOT wrapped in a single transaction:

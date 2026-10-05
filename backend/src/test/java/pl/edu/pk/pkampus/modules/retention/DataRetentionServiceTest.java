@@ -4,7 +4,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import pl.edu.pk.pkampus.common.storage.MinioStorageService;
@@ -55,8 +54,24 @@ class DataRetentionServiceTest {
     @Mock
     private UserRepository userRepository;
 
-    @InjectMocks
     private DataRetentionService dataRetentionService;
+
+    @BeforeEach
+    void setUp() {
+        dataRetentionService = new DataRetentionService(
+                minioStorageService,
+                issuePhotoRepository,
+                boardRetentionService,
+                laundryBookingRepository,
+                roomBookingRepository,
+                userRepository,
+                30,
+                30,
+                14,
+                14,
+                90,
+                365);
+    }
 
     @Test
     @DisplayName("runRetentionTasks returns empty report when no records match retention cutoffs")
