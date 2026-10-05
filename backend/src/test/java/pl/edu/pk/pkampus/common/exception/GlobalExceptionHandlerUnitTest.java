@@ -13,6 +13,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import pl.edu.pk.pkampus.common.ApiResponse;
 import pl.edu.pk.pkampus.modules.board.Post;
 
@@ -54,6 +55,19 @@ class GlobalExceptionHandlerUnitTest {
         assertNotNull(response.getBody().data());
         assertEquals("Email is required", response.getBody().data().get("email"));
         assertEquals("Password must be at least 8 characters", response.getBody().data().get("password"));
+    }
+
+    @Test
+    @DisplayName("handleMissingRequestParameter should return 400 Bad Request with parameter name")
+    void handleMissingRequestParameter() {
+        MissingServletRequestParameterException ex =
+                new MissingServletRequestParameterException("token", "String");
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleMissingRequestParameter(ex);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertFalse(response.getBody().success());
+        assertEquals("Required request parameter 'token' is missing", response.getBody().message());
     }
 
     @Test
