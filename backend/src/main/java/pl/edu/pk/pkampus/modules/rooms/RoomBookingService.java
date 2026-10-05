@@ -110,7 +110,7 @@ public class RoomBookingService {
             throw new BusinessRuleException("participantsCount must be at least 1");
         }
         if (request.participantsCount() > room.getMaxCapacity()) {
-            throw new BusinessRuleException("Przekroczono limit osób w salce");
+            throw new BusinessRuleException("Number of participants exceeds room capacity");
         }
 
         String purpose = request.purpose().trim();
@@ -202,8 +202,8 @@ public class RoomBookingService {
             if (roomBookingRepository.existsActiveNotEndedForUserOnDay(
                     user.getId(), dayStart, dayEnd, now, ACTIVE_STATUSES)) {
                 throw new BusinessRuleException(
-                        "Możesz mieć tylko jedną aktywną rezerwację salki w danym dniu "
-                                + "(kolejna możliwa dopiero po zakończeniu poprzedniej)");
+                        "Only one active room reservation per day is allowed "
+                                + "(the next one is possible after the previous one ends)");
             }
         }
     }

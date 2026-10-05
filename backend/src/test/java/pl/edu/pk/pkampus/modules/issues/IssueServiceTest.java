@@ -231,7 +231,7 @@ class IssueServiceTest {
             // Act & Assert
             BusinessRuleException ex = assertThrows(BusinessRuleException.class,
                     () -> issueService.createIssue(resident, request, null));
-            assertTrue(ex.getMessage().contains("Brak aktywnego meldunku"));
+            assertTrue(ex.getMessage().contains("No active room assignment"));
         }
 
         @Test

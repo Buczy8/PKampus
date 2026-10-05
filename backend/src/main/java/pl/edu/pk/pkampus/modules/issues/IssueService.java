@@ -186,7 +186,7 @@ public class IssueService {
             RoomAssignment assignment = roomAssignmentRepository
                     .findByUserIdAndIsActiveTrue(user.getId())
                     .orElseThrow(() -> new BusinessRuleException(
-                            "Brak aktywnego meldunku — nie można zgłosić usterki w pokoju"));
+                            "No active room assignment - cannot report an issue for your room"));
             room = assignment.getRoom();
             if (!room.getDormitory().getId().equals(dorm.getId())) {
                 throw new BusinessRuleException("Assigned room does not belong to your dormitory");

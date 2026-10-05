@@ -246,7 +246,7 @@ class RoomBookingServiceTest {
             // Act & Assert
             BusinessRuleException ex = assertThrows(BusinessRuleException.class,
                     () -> roomBookingService.createBooking(resident, request));
-            assertTrue(ex.getMessage().contains("Przekroczono limit osób"));
+            assertTrue(ex.getMessage().contains("exceeds room capacity"));
         }
 
         @Test
