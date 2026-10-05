@@ -15,7 +15,7 @@ public class DormitoryService {
 
     @Transactional(readOnly = true)
     public List<DormitoryDto> getAllDormitories() {
-        return dormitoryRepository.findAll().stream()
+        return dormitoryRepository.findAllByOrderByNameAsc().stream()
                 .map(d -> DormitoryDto.builder()
                         .id(d.getId())
                         .name(d.getName())

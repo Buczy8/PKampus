@@ -117,6 +117,24 @@ class DormitoryIntegrationTest {
     }
 
     @Test
+    @DisplayName("Dormitories are returned in alphabetical order by name")
+    void getDormitoriesAlphabeticalOrder() throws Exception {
+        dormitoryRepository.save(Dormitory.builder()
+                .name("AAA First")
+                .code("T0-" + UUID.randomUUID().toString().substring(0, 4))
+                .address("ul. Akademicka 0")
+                .floorsCount(2)
+                .laundryOpeningTime(LocalTime.of(7, 0))
+                .laundryClosingTime(LocalTime.of(22, 0))
+                .laundrySlotDurationMinutes(120)
+                .build());
+
+        mockMvc.perform(get("/api/v1/dormitories"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].name").value("AAA First"));
+    }
+
+    @Test
     @DisplayName("DormitoryRepository findByCode returns matching dormitory")
     void dormitoryRepositoryFindByCode() {
         Optional<Dormitory> found = dormitoryRepository.findByCode(dorm1.getCode());

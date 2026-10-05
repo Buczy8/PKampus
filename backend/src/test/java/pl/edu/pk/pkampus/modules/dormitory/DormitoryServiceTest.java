@@ -53,7 +53,7 @@ class DormitoryServiceTest {
     @DisplayName("Should return mapped list of all dormitories")
     void getAllDormitoriesSuccess() {
         // Arrange
-        when(dormitoryRepository.findAll()).thenReturn(List.of(dorm1, dorm2));
+        when(dormitoryRepository.findAllByOrderByNameAsc()).thenReturn(List.of(dorm1, dorm2));
 
         // Act
         List<DormitoryDto> result = dormitoryService.getAllDormitories();
@@ -73,20 +73,20 @@ class DormitoryServiceTest {
         assertEquals("DS-2", dto2.getName());
         assertEquals("DS2", dto2.getCode());
 
-        verify(dormitoryRepository).findAll();
+        verify(dormitoryRepository).findAllByOrderByNameAsc();
     }
 
     @Test
     @DisplayName("Should return empty list when no dormitories present")
     void getAllDormitoriesEmpty() {
         // Arrange
-        when(dormitoryRepository.findAll()).thenReturn(List.of());
+        when(dormitoryRepository.findAllByOrderByNameAsc()).thenReturn(List.of());
 
         // Act
         List<DormitoryDto> result = dormitoryService.getAllDormitories();
 
         // Assert
         assertTrue(result.isEmpty());
-        verify(dormitoryRepository).findAll();
+        verify(dormitoryRepository).findAllByOrderByNameAsc();
     }
 }
