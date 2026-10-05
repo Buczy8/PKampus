@@ -38,6 +38,14 @@ public class AuthRateLimiterService {
     @Value("${app.security.rate-limit.refresh.duration-minutes:1}")
     private long refreshDurationMinutes;
 
+    @Getter
+    @Value("${app.security.rate-limit.forgot-password.capacity:3}")
+    private long forgotPasswordCapacity;
+
+    @Getter
+    @Value("${app.security.rate-limit.forgot-password.duration-minutes:10}")
+    private long forgotPasswordDurationMinutes;
+
     private final Cache<String, Bucket> buckets = Caffeine.newBuilder()
             .expireAfterAccess(Duration.ofMinutes(30))
             .maximumSize(20_000)
@@ -63,6 +71,10 @@ public class AuthRateLimiterService {
             case REFRESH -> {
                 capacity = refreshCapacity;
                 durationMinutes = refreshDurationMinutes;
+            }
+            case FORGOT_PASSWORD -> {
+                capacity = forgotPasswordCapacity;
+                durationMinutes = forgotPasswordDurationMinutes;
             }
             case LOGIN -> {
                 capacity = loginCapacity;

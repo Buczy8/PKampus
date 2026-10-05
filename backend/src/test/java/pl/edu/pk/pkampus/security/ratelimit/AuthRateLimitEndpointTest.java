@@ -37,6 +37,16 @@ class AuthRateLimitEndpointTest {
     }
 
     @Test
+    void shouldResolveForgotPasswordEndpointFromPostRequest() {
+        // Arrange & Act
+        AuthRateLimitEndpoint endpoint = AuthRateLimitEndpoint.fromRequest("POST", "/api/v1/auth/forgot-password");
+
+        // Assert
+        assertEquals(AuthRateLimitEndpoint.FORGOT_PASSWORD, endpoint);
+        assertEquals("/api/v1/auth/forgot-password", endpoint.getPath());
+    }
+
+    @Test
     void shouldReturnNullForNonPostMethods() {
         // Arrange & Act & Assert
         assertNull(AuthRateLimitEndpoint.fromRequest("GET", "/api/v1/auth/login"));

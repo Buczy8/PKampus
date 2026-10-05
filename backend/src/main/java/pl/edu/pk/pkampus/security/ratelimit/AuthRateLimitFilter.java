@@ -60,6 +60,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
                     case LOGIN -> "Too many login attempts. Please try again in " + secondsToWait + " seconds.";
                     case REGISTER -> "Too many registration attempts. Please try again in " + secondsToWait + " seconds.";
                     case REFRESH -> "Too many token refresh attempts. Please try again in " + secondsToWait + " seconds.";
+                    case FORGOT_PASSWORD -> "Too many password reset requests. Please try again in " + secondsToWait + " seconds.";
                 };
 
                 ApiResponse<Void> apiResponse = ApiResponse.error(message);

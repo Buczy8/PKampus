@@ -20,6 +20,8 @@ class AuthRateLimiterServiceTest {
         ReflectionTestUtils.setField(service, "registerDurationMinutes", 10L);
         ReflectionTestUtils.setField(service, "refreshCapacity", 30L);
         ReflectionTestUtils.setField(service, "refreshDurationMinutes", 1L);
+        ReflectionTestUtils.setField(service, "forgotPasswordCapacity", 3L);
+        ReflectionTestUtils.setField(service, "forgotPasswordDurationMinutes", 10L);
     }
 
     @Test
@@ -37,6 +39,22 @@ class AuthRateLimiterServiceTest {
         ConsumptionProbe sixthProbe = service.tryConsume(AuthRateLimitEndpoint.LOGIN, ip);
         assertFalse(sixthProbe.isConsumed(), "6th request should exceed capacity");
         assertTrue(sixthProbe.getNanosToWaitForRefill() > 0);
+    }
+
+    @Test
+    void shouldThrottleForgotPasswordRequests() {
+        // Arrange
+        String ip = "10.0.0.7";
+
+        // Act & Assert
+        for (int i = 0; i < 3; i++) {
+            ConsumptionProbe probe = service.tryConsume(AuthRateLimitEndpoint.FORGOT_PASSWORD, ip);
+            assertTrue(probe.isConsumed(), "Request " + (i + 1) + " should be permitted");
+        }
+
+        ConsumptionProbe fourthProbe = service.tryConsume(AuthRateLimitEndpoint.FORGOT_PASSWORD, ip);
+        assertFalse(fourthProbe.isConsumed(), "4th forgot-password request should exceed capacity");
+        assertTrue(fourthProbe.getNanosToWaitForRefill() > 0);
     }
 
     @Test

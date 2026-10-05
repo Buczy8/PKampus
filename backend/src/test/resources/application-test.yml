@@ -40,6 +40,9 @@ app:
       refresh:
         capacity: 100
         duration-minutes: 1
+      forgot-password:
+        capacity: 100
+        duration-minutes: 1
     scheduling:
       auto-cancellation:
         enabled: false

@@ -80,6 +80,9 @@ app:
       refresh:
         capacity: ${REFRESH_RATE_LIMIT_CAPACITY:30}
         duration-minutes: ${REFRESH_RATE_LIMIT_DURATION_MINUTES:1}
+      forgot-password:
+        capacity: ${FORGOT_PASSWORD_RATE_LIMIT_CAPACITY:3}
+        duration-minutes: ${FORGOT_PASSWORD_RATE_LIMIT_DURATION_MINUTES:10}
   board:
     rate-limit:
       post:

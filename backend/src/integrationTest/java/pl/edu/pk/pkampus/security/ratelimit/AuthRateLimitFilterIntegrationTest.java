@@ -21,7 +21,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(properties = {
         "app.security.rate-limit.login.capacity=2",
-        "app.security.rate-limit.login.duration-minutes=1"
+        "app.security.rate-limit.login.duration-minutes=1",
+        "app.security.rate-limit.forgot-password.capacity=1",
+        "app.security.rate-limit.forgot-password.duration-minutes=10"
 })
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -71,5 +73,28 @@ class AuthRateLimitFilterIntegrationTest {
                 .andExpect(header().string("X-Rate-Limit-Remaining", "0"))
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Too many login attempts")));
+    }
+
+    @Test
+    @DisplayName("Should throttle forgot-password requests with 429 when bucket limit is exhausted")
+    void shouldThrottleForgotPasswordAfterExceedingCapacity() throws Exception {
+        // Arrange (unknown email still returns the generic 200 — anti-enumeration)
+        String body = objectMapper.writeValueAsString(java.util.Map.of("email", "test@pk.edu.pl"));
+
+        // Act & Assert - Request 1 (allowed, remaining = 0)
+        mockMvc.perform(post("/api/v1/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Rate-Limit-Remaining", "0"));
+
+        // Act & Assert - Request 2 (blocked with 429 Too Many Requests)
+        mockMvc.perform(post("/api/v1/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().exists("Retry-After"))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Too many password reset requests")));
     }
 }
