@@ -14,8 +14,4 @@ public final class AcademicYear {
         int startYear = date.getMonthValue() >= 9 ? date.getYear() : date.getYear() - 1;
         return startYear + "/" + (startYear + 1);
     }
-
-    public static String current() {
-        return current(LocalDate.now());
-    }
 }
