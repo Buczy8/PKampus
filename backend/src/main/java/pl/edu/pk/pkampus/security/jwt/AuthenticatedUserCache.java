@@ -12,6 +12,12 @@ import java.util.function.Function;
 
 /**
  * Short-lived cache of authenticated users keyed by user id to avoid a DB hit on every JWT request.
+ *
+ * <p>Contract: the cached value is a <b>detached, read-only snapshot</b> of the JPA entity.
+ * Lazy associations (e.g. {@code dormitory}) are typically uninitialized — request code must
+ * not traverse them (LazyInitializationException) and must not mutate the snapshot; the
+ * authoritative status/role is always the database, with {@link TokenRevocationService}
+ * invalidating this cache whenever account state changes.</p>
  */
 @Service
 public class AuthenticatedUserCache {

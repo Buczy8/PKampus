@@ -79,7 +79,7 @@ class RefreshTokenServiceTest {
                 .revoked(false)
                 .build();
 
-        when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(existingToken));
+        when(refreshTokenRepository.findByTokenHashForUpdate(anyString())).thenReturn(Optional.of(existingToken));
 
         // Act
         RefreshTokenService.RefreshTokenResult result = refreshTokenService.rotateRefreshToken(rawToken);
@@ -93,9 +93,35 @@ class RefreshTokenServiceTest {
     }
 
     @Test
+    void shouldRejectSecondRotationWithSameTokenAfterFirstRotation() {
+        // Arrange (replay of an already-rotated token must never mint a second successor)
+        when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(refreshTokenRepository.countByUser_IdAndRevokedFalseAndExpiresAtAfter(eq(testUser.getId()), any()))
+                .thenReturn(1L);
+
+        RefreshToken existingToken = RefreshToken.builder()
+                .id(UUID.randomUUID())
+                .user(testUser)
+                .tokenHash("hash")
+                .expiresAt(Instant.now().plus(7, ChronoUnit.DAYS))
+                .revoked(false)
+                .build();
+        when(refreshTokenRepository.findByTokenHashForUpdate(anyString())).thenReturn(Optional.of(existingToken));
+
+        // Act: the first rotation claims and revokes the token
+        refreshTokenService.rotateRefreshToken("raw-token");
+
+        // Assert: replaying the same token is rejected — a concurrent racer sees
+        // revoked=true because the first rotation holds the row lock until commit
+        InvalidTokenException ex = assertThrows(InvalidTokenException.class,
+                () -> refreshTokenService.rotateRefreshToken("raw-token"));
+        assertTrue(ex.getMessage().contains("no longer valid"));
+    }
+
+    @Test
     void shouldRejectRotateWhenTokenNotFound() {
         // Arrange
-        when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.empty());
+        when(refreshTokenRepository.findByTokenHashForUpdate(anyString())).thenReturn(Optional.empty());
 
         // Act & Assert
         assertThrows(InvalidTokenException.class, () -> refreshTokenService.rotateRefreshToken("unknown-token"));
@@ -112,7 +138,7 @@ class RefreshTokenServiceTest {
                 .revoked(true)
                 .build();
 
-        when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(revokedToken));
+        when(refreshTokenRepository.findByTokenHashForUpdate(anyString())).thenReturn(Optional.of(revokedToken));
 
         // Act & Assert
         InvalidTokenException ex = assertThrows(InvalidTokenException.class,
@@ -133,7 +159,7 @@ class RefreshTokenServiceTest {
                 .revoked(false)
                 .build();
 
-        when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(expiredToken));
+        when(refreshTokenRepository.findByTokenHashForUpdate(anyString())).thenReturn(Optional.of(expiredToken));
 
         // Act & Assert
         InvalidTokenException ex = assertThrows(InvalidTokenException.class,
@@ -154,7 +180,7 @@ class RefreshTokenServiceTest {
                 .revoked(false)
                 .build();
 
-        when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(token));
+        when(refreshTokenRepository.findByTokenHashForUpdate(anyString())).thenReturn(Optional.of(token));
 
         // Act & Assert
         assertThrows(AccountStatusException.class, () -> refreshTokenService.rotateRefreshToken("valid-raw-token"));

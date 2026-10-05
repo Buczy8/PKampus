@@ -62,7 +62,11 @@ public class RefreshTokenService {
     public RefreshTokenResult rotateRefreshToken(String rawToken) {
         String tokenHash = hashToken(rawToken);
 
-        RefreshToken existingToken = refreshTokenRepository.findByTokenHash(tokenHash)
+        // SELECT ... FOR UPDATE makes the revoked-check-then-revoke sequence below
+        // atomic: a concurrent refresh with the same token blocks until this
+        // transaction commits and then sees revoked=true (replay must never mint
+        // two successor tokens).
+        RefreshToken existingToken = refreshTokenRepository.findByTokenHashForUpdate(tokenHash)
                 .orElseThrow(() -> new InvalidTokenException("Invalid refresh token"));
 
         if (existingToken.isRevoked()) {
