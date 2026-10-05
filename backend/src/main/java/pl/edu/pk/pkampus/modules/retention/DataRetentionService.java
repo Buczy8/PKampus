@@ -20,7 +20,6 @@ import pl.edu.pk.pkampus.modules.user.UserRepository;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.util.UUID;
 
 @Slf4j
 @Service

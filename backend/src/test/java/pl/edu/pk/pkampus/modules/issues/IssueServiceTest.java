@@ -72,9 +72,10 @@ class IssueServiceTest {
     @BeforeEach
     void setUp() {
         // TransactionTemplate runs the persistence callback inline (no Spring proxy in unit tests)
-        lenient().when(transactionTemplate.execute(any(TransactionCallback.class)))
+        TransactionCallback<IssueDto> anyCallback = any();
+        lenient().when(transactionTemplate.execute(anyCallback))
                 .thenAnswer(inv -> {
-                    TransactionCallback<?> callback = inv.getArgument(0);
+                    TransactionCallback<IssueDto> callback = inv.getArgument(0);
                     return callback.doInTransaction(null);
                 });
 

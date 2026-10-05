@@ -308,7 +308,7 @@ class GlobalExceptionHandlerUnitTest {
         ResponseEntity<ApiResponse<Void>> jakarta = exceptionHandler.handleOptimisticLock(
                 new jakarta.persistence.OptimisticLockException("stale post"));
 
-        for (ResponseEntity<ApiResponse<Void>> response : new ResponseEntity[]{spring, jakarta}) {
+        for (ResponseEntity<ApiResponse<Void>> response : List.of(spring, jakarta)) {
             assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
             assertNotNull(response.getBody());
             assertFalse(response.getBody().success());

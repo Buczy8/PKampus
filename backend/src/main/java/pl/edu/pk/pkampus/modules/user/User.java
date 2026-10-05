@@ -23,6 +23,8 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -36,6 +38,9 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 public class User implements UserDetails {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
