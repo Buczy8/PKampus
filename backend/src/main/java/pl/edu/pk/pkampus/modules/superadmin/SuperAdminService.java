@@ -56,7 +56,7 @@ public class SuperAdminService {
 
     @Transactional(readOnly = true)
     public List<SuperAdminDormitoryDto> listDormitories() {
-        return dormitoryRepository.findAll().stream()
+        return dormitoryRepository.findAllByOrderByNameAsc().stream()
                 .map(this::toDormitoryDto)
                 .toList();
     }

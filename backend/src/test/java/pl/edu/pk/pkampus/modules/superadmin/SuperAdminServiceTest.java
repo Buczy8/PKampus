@@ -86,7 +86,7 @@ class SuperAdminServiceTest {
                     .laundrySlotDurationMinutes(180)
                     .createdAt(Instant.now())
                     .build();
-            when(dormitoryRepository.findAll()).thenReturn(List.of(dorm));
+            when(dormitoryRepository.findAllByOrderByNameAsc()).thenReturn(List.of(dorm));
 
             // Act
             List<SuperAdminDormitoryDto> result = superAdminService.listDormitories();
