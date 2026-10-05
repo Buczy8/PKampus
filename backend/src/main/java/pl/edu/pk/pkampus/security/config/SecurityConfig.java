@@ -2,6 +2,7 @@ package pl.edu.pk.pkampus.security.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -23,6 +24,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import pl.edu.pk.pkampus.modules.user.UserRepository;
+import pl.edu.pk.pkampus.security.ratelimit.AuthRateLimitFilter;
 
 import java.util.Arrays;
 import java.util.List;
@@ -35,7 +37,7 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final MustChangePasswordFilter mustChangePasswordFilter;
-    private final pl.edu.pk.pkampus.security.ratelimit.AuthRateLimitFilter authRateLimitFilter;
+    private final AuthRateLimitFilter authRateLimitFilter;
     private final UserRepository userRepository;
     private final Environment environment;
     private final ObjectMapper objectMapper;
@@ -57,6 +59,37 @@ public class SecurityConfig {
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
+    }
+
+    /**
+     * The security filters below are {@code @Component}s wired explicitly into the
+     * Spring Security chain. Without these registrations Spring Boot would also
+     * auto-register them in the servlet container, executing each of them twice
+     * per request in a real servlet container (e.g. consuming the auth rate-limit
+     * bucket twice and effectively halving the configured login capacity).
+     */
+    @Bean
+    public FilterRegistrationBean<JwtAuthenticationFilter> jwtAuthenticationFilterRegistration(
+            JwtAuthenticationFilter filter) {
+        FilterRegistrationBean<JwtAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
+    public FilterRegistrationBean<MustChangePasswordFilter> mustChangePasswordFilterRegistration(
+            MustChangePasswordFilter filter) {
+        FilterRegistrationBean<MustChangePasswordFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
+    public FilterRegistrationBean<AuthRateLimitFilter> authRateLimitFilterRegistration(
+            AuthRateLimitFilter filter) {
+        FilterRegistrationBean<AuthRateLimitFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean
