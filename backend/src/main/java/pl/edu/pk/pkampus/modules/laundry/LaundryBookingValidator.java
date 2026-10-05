@@ -75,7 +75,7 @@ public final class LaundryBookingValidator {
         }
 
         long minutesFromOpening = Duration.between(opening, startTime).toMinutes();
-        if (minutesFromOpening < 0 || minutesFromOpening % durationMinutes != 0) {
+        if (minutesFromOpening % durationMinutes != 0) {
             throw new BusinessRuleException("Slot start is not aligned to the laundry slot grid");
         }
         if (!slotStarts(opening, closing, durationMinutes).contains(startTime)) {

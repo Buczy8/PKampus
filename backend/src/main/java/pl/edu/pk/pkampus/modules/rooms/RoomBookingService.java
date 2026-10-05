@@ -194,7 +194,8 @@ public class RoomBookingService {
     private void validateOneActivePerDay(User user, Instant start, Instant end, Instant now) {
         LocalDate fromDay = start.atZone(WARSAW).toLocalDate();
         LocalDate toDay = end.atZone(WARSAW).toLocalDate();
-        if (end.atZone(WARSAW).toLocalTime().equals(LocalTime.MIDNIGHT) && end.isAfter(start)) {
+        // createBooking guarantees end > start, so only the midnight edge needs handling here
+        if (end.atZone(WARSAW).toLocalTime().equals(LocalTime.MIDNIGHT)) {
             toDay = toDay.minusDays(1);
         }
 
