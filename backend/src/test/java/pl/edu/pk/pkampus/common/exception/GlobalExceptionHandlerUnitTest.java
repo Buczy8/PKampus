@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -14,11 +15,15 @@ import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import pl.edu.pk.pkampus.common.ApiResponse;
 import pl.edu.pk.pkampus.modules.board.Post;
 
 import java.lang.reflect.Method;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -68,6 +73,42 @@ class GlobalExceptionHandlerUnitTest {
         assertNotNull(response.getBody());
         assertFalse(response.getBody().success());
         assertEquals("Required request parameter 'token' is missing", response.getBody().message());
+    }
+
+    @Test
+    @DisplayName("handleNoResourceFound should return 404 Not Found")
+    void handleNoResourceFound() {
+        NoResourceFoundException ex = new NoResourceFoundException(null, "/api/v1/users/123");
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleNoResourceFound(ex);
+
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertFalse(response.getBody().success());
+        assertEquals("Resource not found", response.getBody().message());
+    }
+
+    @Test
+    @DisplayName("handleMethodNotSupported should return 405 Method Not Allowed")
+    void handleMethodNotSupported() {
+        HttpRequestMethodNotSupportedException ex = new HttpRequestMethodNotSupportedException("DELETE");
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleMethodNotSupported(ex);
+
+        assertEquals(HttpStatus.METHOD_NOT_ALLOWED, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertFalse(response.getBody().success());
+        assertTrue(response.getBody().message().contains("DELETE"));
+    }
+
+    @Test
+    @DisplayName("handleMediaTypeNotSupported should return 415 Unsupported Media Type")
+    void handleMediaTypeNotSupported() {
+        HttpMediaTypeNotSupportedException ex =
+                new HttpMediaTypeNotSupportedException(MediaType.TEXT_PLAIN, List.of(MediaType.APPLICATION_JSON));
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleMediaTypeNotSupported(ex);
+
+        assertEquals(HttpStatus.UNSUPPORTED_MEDIA_TYPE, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertFalse(response.getBody().success());
     }
 
     @Test
