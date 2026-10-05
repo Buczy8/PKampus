@@ -6,6 +6,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.exception.AccountStatusException;
+import pl.edu.pk.pkampus.common.exception.BookingWindowSupport;
 import pl.edu.pk.pkampus.common.exception.BusinessRuleException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.common.exception.SlotConflictException;
@@ -138,8 +139,8 @@ public class RoomBookingService {
         try {
             booking = roomBookingRepository.saveAndFlush(booking);
         } catch (DataIntegrityViolationException ex) {
-            if (isBookingWindowViolation(ex)) {
-                throw windowViolation(ex);
+            if (BookingWindowSupport.isViolation(ex, "room_booking_window:")) {
+                throw BookingWindowSupport.toRuleViolation(ex, "Booking violates opening-hours window");
             }
             throw new SlotConflictException("Room slot overlaps an existing reservation");
         }
@@ -325,23 +326,5 @@ public class RoomBookingService {
                 booking.getStatus(),
                 booking.getCreatedAt().atZone(WARSAW).toOffsetDateTime()
         );
-    }
-
-    /**
-     * Detects last-line DB window-trigger rejections (V12 check_room_booking_window,
-     * SQLSTATE P0001 with 'room_booking_window:' prefix) so they surface as 422
-     * business-rule errors instead of misleading 409 slot conflicts.
-     */
-    private static boolean isBookingWindowViolation(DataIntegrityViolationException ex) {
-        Throwable cause = ex.getMostSpecificCause() != null ? ex.getMostSpecificCause() : ex;
-        String message = cause.getMessage() != null ? cause.getMessage() : ex.getMessage();
-        return message != null && message.contains("room_booking_window:");
-    }
-
-    private static BusinessRuleException windowViolation(DataIntegrityViolationException ex) {
-        Throwable cause = ex.getMostSpecificCause() != null ? ex.getMostSpecificCause() : ex;
-        String raw = cause.getMessage() != null ? cause.getMessage() : ex.getMessage();
-        String firstLine = raw != null ? raw.split("\\R")[0].replaceFirst("^(ERROR:\\s*)", "").trim() : "";
-        return new BusinessRuleException(firstLine.isEmpty() ? "Booking violates opening-hours window" : firstLine);
     }
 }

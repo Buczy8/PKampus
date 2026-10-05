@@ -24,7 +24,6 @@ import org.springframework.security.core.userdetails.UserDetails;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
 
 import java.io.Serial;
-import java.io.Serializable;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;

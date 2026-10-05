@@ -4,7 +4,7 @@ import java.util.List;
 
 /**
  * Framework-agnostic paginated envelope for list endpoints.
- * Keeps Spring Data {@link Page} inside service/repository layers instead of leaking it to the API.
+ * Keeps Spring Data pages inside service/repository layers instead of leaking them to the API.
  */
 public record PagedResponse<T>(
         List<T> content,
