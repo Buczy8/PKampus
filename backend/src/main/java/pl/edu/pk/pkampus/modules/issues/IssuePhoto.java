@@ -40,7 +40,7 @@ public class IssuePhoto {
     @Column(name = "photo_url", length = 500, nullable = false)
     private String photoUrl;
 
-    @Column(name = "file_name", length = 255, nullable = false)
+    @Column(name = "file_name", nullable = false)
     private String fileName;
 
     @Column(name = "file_size_bytes", nullable = false)

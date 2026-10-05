@@ -258,13 +258,13 @@ public class RoomBookingService {
     private void validateWholeHours(Instant start, Instant end) {
         ZonedDateTime startZ = start.atZone(WARSAW);
         ZonedDateTime endZ = end.atZone(WARSAW);
-        if (!isWholeHour(startZ) || !isWholeHour(endZ)) {
+        if (isNotWholeHour(startZ) || isNotWholeHour(endZ)) {
             throw new BusinessRuleException("Reservations must start and end on the hour (HH:00)");
         }
     }
 
-    private static boolean isWholeHour(ZonedDateTime zdt) {
-        return zdt.getMinute() == 0 && zdt.getSecond() == 0 && zdt.getNano() == 0;
+    private static boolean isNotWholeHour(ZonedDateTime zdt) {
+        return zdt.getMinute() != 0 || zdt.getSecond() != 0 || zdt.getNano() != 0;
     }
 
     /**

@@ -52,7 +52,7 @@ public class RoomBooking {
     @Column(name = "participants_count", nullable = false)
     private Integer participantsCount;
 
-    @Column(name = "purpose", length = 255, nullable = false)
+    @Column(name = "purpose", nullable = false)
     private String purpose;
 
     @Builder.Default

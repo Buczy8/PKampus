@@ -44,7 +44,7 @@ public class EmailService {
     private final String frontendUrl;
     private final String fromEmail;
 
-    public EmailService(
+    EmailService(
             JavaMailSender mailSender,
             EmailTemplateRenderer templateRenderer,
             MeterRegistry meterRegistry,

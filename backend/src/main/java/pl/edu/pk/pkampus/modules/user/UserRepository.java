@@ -1,6 +1,7 @@
 package pl.edu.pk.pkampus.modules.user;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
@@ -40,7 +41,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"dormitory"})
     @Override
-    Optional<User> findById(UUID id);
+    @NonNull
+    Optional<User> findById(@NonNull UUID id);
 
     @org.springframework.data.jpa.repository.Query("""
             SELECT u FROM User u

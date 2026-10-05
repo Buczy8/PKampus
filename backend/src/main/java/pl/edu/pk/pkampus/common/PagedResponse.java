@@ -1,7 +1,5 @@
 package pl.edu.pk.pkampus.common;
 
-import org.springframework.data.domain.Page;
-
 import java.util.List;
 
 /**
@@ -20,9 +18,5 @@ public record PagedResponse<T>(
         int totalPages = size <= 0 ? 0 : (int) Math.ceil((double) totalElements / size);
         boolean last = totalPages == 0 || page >= totalPages - 1;
         return new PagedResponse<>(List.copyOf(content), page, size, totalElements, totalPages, last);
-    }
-
-    public static <T> PagedResponse<T> from(Page<T> page) {
-        return of(page.getContent(), page.getNumber(), page.getSize(), page.getTotalElements());
     }
 }

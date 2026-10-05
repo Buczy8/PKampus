@@ -59,7 +59,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -74,8 +73,6 @@ import java.util.UUID;
 public class ReceptionistService {
 
     public static final ZoneId WARSAW = ZoneId.of("Europe/Warsaw");
-    private static final DateTimeFormatter SLOT_LABEL =
-            DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm").withZone(WARSAW);
 
     private static final Set<LaundryBookingStatus> DESK_LAUNDRY_STATUSES =
             EnumSet.of(LaundryBookingStatus.CONFIRMED, LaundryBookingStatus.KEY_ISSUED);

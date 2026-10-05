@@ -41,7 +41,7 @@ public class Dormitory implements Serializable {
     @Column(name = "code", length = 10, nullable = false, unique = true)
     private String code;
 
-    @Column(name = "address", length = 255, nullable = false)
+    @Column(name = "address", nullable = false)
     private String address;
 
     @Column(name = "floors_count", nullable = false)
