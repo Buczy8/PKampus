@@ -268,6 +268,20 @@ class AdminResidentServiceTest {
         }
 
         @Test
+        void derivesAcademicYearFromInjectedClock() {
+            // Arrange (mid-January 2026 belongs to the 2025/2026 academic year)
+            when(clock.instant()).thenReturn(Instant.parse("2026-01-15T12:00:00Z"));
+            stubSuccessfulActivate("101", room);
+
+            // Act
+            ActivateResidentResponseDto response = adminResidentService.activateResident(
+                    dormAdmin, pendingResident.getId(), new ActivateResidentRequestDto());
+
+            // Assert
+            assertEquals("2025/2026", response.getAcademicYear());
+        }
+
+        @Test
         void activatesWithNullRequestBody() {
             stubSuccessfulActivate("101", room);
 

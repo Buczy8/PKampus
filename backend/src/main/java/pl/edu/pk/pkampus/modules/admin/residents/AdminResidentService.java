@@ -72,7 +72,7 @@ public class AdminResidentService {
             throw new AccountStatusException("Resident already has an active room assignment");
         }
 
-        String academicYear = AcademicYear.current();
+        String academicYear = AcademicYear.current(AdminScope.today(clock));
         RoomAssignment savedAssignment = roomAssignmentRepository.save(newAssignment(resident, room, academicYear));
 
         resident.setStatus(UserStatus.ACTIVE);
