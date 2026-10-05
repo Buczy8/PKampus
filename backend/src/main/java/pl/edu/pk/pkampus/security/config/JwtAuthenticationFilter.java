@@ -110,7 +110,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (!"GET".equalsIgnoreCase(request.getMethod())) {
             return false;
         }
-        String path = request.getRequestURI();
-        return path != null && path.endsWith("/api/v1/profile/card");
+        // exact match only: suffix matching in an authentication gate invites
+        // bypasses whenever firewall or routing rules change (defense in depth)
+        return "/api/v1/profile/card".equals(request.getRequestURI());
     }
 }

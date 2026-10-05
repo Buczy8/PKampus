@@ -270,6 +270,28 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
+    void shouldNotAuthenticateBlockedUserForSuffixSpoofedPath() throws Exception {
+        // Arrange (defense in depth: only the exact card path may authenticate blocked users)
+        testUser.setStatus(UserStatus.BLOCKED);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/issues/api/v1/profile/card");
+        request.addHeader("Authorization", "Bearer valid-jwt-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        when(jwtService.isTokenExpired("valid-jwt-token")).thenReturn(false);
+        when(jwtService.extractUserId("valid-jwt-token")).thenReturn(testUserId);
+        when(tokenRevocationService.isRevoked(testUserId)).thenReturn(false);
+        when(authenticatedUserCache.getOrLoad(eq(testUserId), any())).thenReturn(testUser);
+
+        // Act
+        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
+
+        // Assert
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
     void shouldContinueFilterChainWhenExceptionThrownDuringTokenParsing() throws Exception {
         // Arrange
         MockHttpServletRequest request = new MockHttpServletRequest();
