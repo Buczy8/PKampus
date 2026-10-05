@@ -5,6 +5,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -24,6 +25,7 @@ import pl.edu.pk.pkampus.modules.user.UserRole;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
 
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -41,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -396,8 +399,50 @@ class LaundryServiceTest {
         }
 
         @Test
-        @DisplayName("Should throw BusinessRuleException when user reached 2 active bookings in rolling 7-day window")
-        void bookSlotThrowsWhenRollingLimitExceeded() {
+        @DisplayName("Should query the calendar week bounds when checking the weekly limit")
+        void bookSlotQueriesCalendarWeekBounds() {
+            // Arrange: D is always two days ahead, inside the booking horizon
+            LocalDate day = LocalDate.now(WARSAW).plusDays(2);
+            OffsetDateTime start = day.atTime(10, 0).atZone(WARSAW).toOffsetDateTime();
+            OffsetDateTime end = start.plusHours(3);
+            CreateLaundryBookingRequestDto request = new CreateLaundryBookingRequestDto(
+                    machine1.getId(), start, end
+            );
+
+            when(laundryMachineRepository.findByIdAndDormitoryId(machine1.getId(), dorm.getId()))
+                    .thenReturn(Optional.of(machine1));
+            when(laundryBookingRepository.countActiveStartingBetween(eq(resident.getId()), any(), any(), any()))
+                    .thenReturn(0L);
+            when(laundryBookingRepository.existsOverlapping(eq(machine1.getId()), any(), any(), any()))
+                    .thenReturn(false);
+            when(laundryBookingRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            // Act
+            laundryService.bookSlot(resident, request);
+
+            // Assert: the second count spans Monday 00:00 - next Monday 00:00 of D's week,
+            // not a rolling window around D
+            ArgumentCaptor<Instant> fromCaptor = ArgumentCaptor.forClass(Instant.class);
+            ArgumentCaptor<Instant> toCaptor = ArgumentCaptor.forClass(Instant.class);
+            verify(laundryBookingRepository, times(2))
+                    .countActiveStartingBetween(eq(resident.getId()), fromCaptor.capture(), toCaptor.capture(), any());
+
+            LocalDate weekStart = day.with(DayOfWeek.MONDAY);
+            assertEquals(
+                    List.of(
+                            day.atStartOfDay(WARSAW).toInstant(),
+                            weekStart.atStartOfDay(WARSAW).toInstant()),
+                    fromCaptor.getAllValues());
+            assertEquals(
+                    List.of(
+                            day.plusDays(1).atStartOfDay(WARSAW).toInstant(),
+                            weekStart.plusDays(7).atStartOfDay(WARSAW).toInstant()),
+                    toCaptor.getAllValues());
+        }
+
+        @Test
+        @DisplayName("Should throw BusinessRuleException when user reached 2 active bookings in the calendar week")
+        void bookSlotThrowsWhenWeeklyLimitExceeded() {
             // Arrange
             LocalDate date = LocalDate.now(WARSAW).plusDays(1);
             OffsetDateTime start = date.atTime(10, 0).atZone(WARSAW).toOffsetDateTime();
@@ -408,7 +453,7 @@ class LaundryServiceTest {
 
             when(laundryMachineRepository.findByIdAndDormitoryId(machine1.getId(), dorm.getId()))
                     .thenReturn(Optional.of(machine1));
-            // 0 on same day, but 2 in rolling window
+            // 0 on same day, but 2 in the calendar week
             when(laundryBookingRepository.countActiveStartingBetween(eq(resident.getId()), any(), any(), any()))
                     .thenReturn(0L)
                     .thenReturn(2L);

@@ -5,6 +5,7 @@ import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
 
 import java.time.Duration;
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -23,8 +24,7 @@ public final class LaundryBookingValidator {
 
     public static final ZoneId WARSAW = ZoneId.of("Europe/Warsaw");
     public static final int MAX_HORIZON_DAYS = 7;
-    public static final int MAX_ACTIVE_IN_ROLLING_DAYS = 2;
-    public static final int ROLLING_WINDOW_DAYS = 7;
+    public static final int MAX_ACTIVE_PER_CALENDAR_WEEK = 2;
 
     private LaundryBookingValidator() {
     }
@@ -84,11 +84,11 @@ public final class LaundryBookingValidator {
     }
 
     /**
-     * Limits relative to the new reservation date D (Europe/Warsaw):
+     * Limits relative to the new reservation date D (Europe/Warsaw), per BR-01:
      * <ul>
      *   <li>at most one active booking on calendar day D</li>
-     *   <li>at most {@value #MAX_ACTIVE_IN_ROLLING_DAYS} active bookings with start date in
-     *       [{@code D - 6}, {@code D + 6}] (any 7-day span that includes D)</li>
+     *   <li>at most {@value #MAX_ACTIVE_PER_CALENDAR_WEEK} active bookings with start
+     *       date in the calendar week (Monday–Sunday) containing D</li>
      * </ul>
      */
     public static void validateBookingLimits(
@@ -100,8 +100,6 @@ public final class LaundryBookingValidator {
         LocalDate day = start.atZone(WARSAW).toLocalDate();
         Instant dayStart = day.atStartOfDay(WARSAW).toInstant();
         Instant dayEnd = day.plusDays(1).atStartOfDay(WARSAW).toInstant();
-        Instant rollingStart = day.minusDays(ROLLING_WINDOW_DAYS - 1L).atStartOfDay(WARSAW).toInstant();
-        Instant rollingEnd = day.plusDays(ROLLING_WINDOW_DAYS).atStartOfDay(WARSAW).toInstant();
 
         long sameDay = laundryBookingRepository.countActiveStartingBetween(
                 userId, dayStart, dayEnd, activeStatuses);
@@ -111,13 +109,16 @@ public final class LaundryBookingValidator {
             );
         }
 
-        long inRollingWindow = laundryBookingRepository.countActiveStartingBetween(
-                userId, rollingStart, rollingEnd, activeStatuses);
-        if (inRollingWindow >= MAX_ACTIVE_IN_ROLLING_DAYS) {
+        LocalDate weekStart = day.with(DayOfWeek.MONDAY);
+        Instant weekStartInstant = weekStart.atStartOfDay(WARSAW).toInstant();
+        Instant weekEndInstant = weekStart.plusDays(7).atStartOfDay(WARSAW).toInstant();
+
+        long inWeek = laundryBookingRepository.countActiveStartingBetween(
+                userId, weekStartInstant, weekEndInstant, activeStatuses);
+        if (inWeek >= MAX_ACTIVE_PER_CALENDAR_WEEK) {
             throw new BusinessRuleException(
-                    "Limit of " + MAX_ACTIVE_IN_ROLLING_DAYS
-                            + " active laundry bookings within " + ROLLING_WINDOW_DAYS
-                            + " days from the reservation date reached"
+                    "Limit of " + MAX_ACTIVE_PER_CALENDAR_WEEK
+                            + " active laundry bookings in the calendar week reached"
             );
         }
     }

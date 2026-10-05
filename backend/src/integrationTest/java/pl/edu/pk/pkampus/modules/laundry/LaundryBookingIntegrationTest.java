@@ -223,8 +223,8 @@ class LaundryBookingIntegrationTest {
     }
 
     @Test
-    @DisplayName("Third active booking within 7 days from reservation date returns 422")
-    void rollingSevenDayLimitReturns422() throws Exception {
+    @DisplayName("Third active booking in the same calendar week returns 422")
+    void calendarWeekLimitReturns422() throws Exception {
         OffsetDateTime s1 = slotStart(1, LocalTime.of(7, 0));
         OffsetDateTime s2 = slotStart(2, LocalTime.of(7, 0));
         OffsetDateTime s3 = slotStart(3, LocalTime.of(7, 0));
@@ -237,7 +237,7 @@ class LaundryBookingIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(bookingJson(machine1.getId(), s3, s3.plusMinutes(90))))
                 .andExpect(status().isUnprocessableEntity())
-                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("within 7 days")));
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("calendar week")));
     }
 
     @Test
