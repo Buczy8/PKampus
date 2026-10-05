@@ -270,7 +270,7 @@ class AdminResidentDirectoryServiceTest {
             // Act & Assert
             BusinessRuleException ex = assertThrows(BusinessRuleException.class,
                     () -> adminResidentDirectoryService.block(admin, residentId));
-            assertEquals("Resident is already blocked", ex.getMessage());
+            assertEquals("Only ACTIVE residents can be blocked (status=BLOCKED)", ex.getMessage());
             verify(tokenRevocationService, never()).revokeUser(any());
         }
 

@@ -86,7 +86,7 @@ public class AdminResidentDirectoryService {
     public ManagedResidentDto block(User admin, UUID residentId) {
         User resident = loadManageableResident(admin, residentId);
         if (resident.getStatus() != UserStatus.ACTIVE) {
-            throw new BusinessRuleException("Resident is already blocked");
+            throw new BusinessRuleException("Only ACTIVE residents can be blocked (status=" + resident.getStatus() + ")");
         }
         resident.setStatus(UserStatus.BLOCKED);
         userRepository.save(resident);
