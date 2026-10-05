@@ -22,7 +22,7 @@ public class RefreshTokenCleanupJob {
     /**
      * Daily cleanup at 03:15 — removes revoked tokens older than 1 day and tokens expired for over 7 days.
      */
-    @Scheduled(cron = "0 15 3 * * *")
+    @Scheduled(cron = "${app.scheduling.token-cleanup.cron:0 15 3 * * *}")
     @Transactional
     public void cleanupStaleRefreshTokens() {
         Instant revokedBefore = Instant.now().minus(1, ChronoUnit.DAYS);

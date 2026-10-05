@@ -100,25 +100,6 @@ class AuthRateLimiterServiceTest {
     }
 
     @Test
-    void shouldResetBucketForEndpointAndIp() {
-        // Arrange
-        String ip = "172.16.0.1";
-
-        for (int i = 0; i < 5; i++) {
-            service.tryConsume(AuthRateLimitEndpoint.LOGIN, ip);
-        }
-        assertFalse(service.tryConsume(AuthRateLimitEndpoint.LOGIN, ip).isConsumed());
-
-        // Act
-        service.reset(AuthRateLimitEndpoint.LOGIN, ip);
-
-        // Assert
-        ConsumptionProbe probeAfterReset = service.tryConsume(AuthRateLimitEndpoint.LOGIN, ip);
-        assertTrue(probeAfterReset.isConsumed());
-        assertEquals(4, probeAfterReset.getRemainingTokens());
-    }
-
-    @Test
     void shouldReturnConfiguredPropertiesViaGetters() {
         // Arrange & Act & Assert
         assertEquals(5L, service.getLoginCapacity());

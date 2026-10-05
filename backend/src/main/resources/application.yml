@@ -94,6 +94,8 @@ app:
         capacity: ${BOARD_COMMENT_RATE_LIMIT_CAPACITY:15}
         duration-minutes: ${BOARD_COMMENT_RATE_LIMIT_DURATION_MINUTES:1}
   scheduling:
+    token-cleanup:
+      cron: ${TOKEN_CLEANUP_CRON:0 15 3 * * *}
     auto-cancellation:
       enabled: ${BOOKING_AUTO_CANCELLATION_ENABLED:true}
       cron: ${BOOKING_AUTO_CANCELLATION_CRON:0 * * * * *}

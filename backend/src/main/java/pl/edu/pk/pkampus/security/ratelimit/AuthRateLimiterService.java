@@ -56,10 +56,6 @@ public class AuthRateLimiterService {
         return buckets.get(key, k -> createBucket(endpoint)).tryConsumeAndReturnRemaining(1);
     }
 
-    public void reset(AuthRateLimitEndpoint endpoint, String ipAddress) {
-        buckets.invalidate(endpoint.name() + ":" + ipAddress);
-    }
-
     private Bucket createBucket(AuthRateLimitEndpoint endpoint) {
         long capacity;
         long durationMinutes;
