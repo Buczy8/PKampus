@@ -1,6 +1,5 @@
 package pl.edu.pk.pkampus.security.config;
 
-import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -90,8 +89,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     authenticatedUserCache.invalidate(userId);
                 }
             }
-        } catch (JwtException | IllegalArgumentException e) {
-            log.warn("Failed to authenticate JWT token", e);
         } catch (Exception e) {
             log.warn("Failed to authenticate JWT token", e);
         }
