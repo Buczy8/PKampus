@@ -121,7 +121,8 @@ public class AuthController {
     @Operation(
             summary = "Change password",
             description = "Verifies the current password and sets a new one (BCrypt). "
-                    + "If the account is in MUST_CHANGE_PASSWORD, transitions to ACTIVE (FR-AUTH-06)."
+                    + "If the account is in MUST_CHANGE_PASSWORD, transitions to ACTIVE (FR-AUTH-06). "
+                    + "All previously issued sessions are revoked, so the client must re-authenticate afterwards."
     )
     public ResponseEntity<ApiResponse<UserProfileDto>> changePassword(
             @AuthenticationPrincipal User user,

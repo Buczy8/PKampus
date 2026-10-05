@@ -119,6 +119,10 @@ class ChangePasswordIntegrationTest {
         assertThat(refreshed.getStatus()).isEqualTo(UserStatus.ACTIVE);
         assertThat(passwordEncoder.matches("NewPassword1!", refreshed.getPasswordHash())).isTrue();
 
+        // The pre-change access token is revoked: the client must re-authenticate
+        mockMvc.perform(get("/api/v1/auth/me").header("Authorization", token))
+                .andExpect(status().isUnauthorized());
+
         // Cache may still hold old status briefly; re-login to get fresh JWT principal in filter path
         String loginBody = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

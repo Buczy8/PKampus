@@ -383,6 +383,7 @@ class AuthServiceTest {
         assertEquals(UserStatus.ACTIVE, profile.getStatus());
         assertEquals("new-hash", testUser.getPasswordHash());
         verify(authenticatedUserCache).invalidate(testUser.getId());
+        verify(tokenRevocationService).revokeUser(testUser.getId());
     }
 
     @Test
@@ -408,6 +409,7 @@ class AuthServiceTest {
         // Assert
         assertEquals(UserStatus.ACTIVE, testUser.getStatus());
         assertEquals(UserStatus.ACTIVE, profile.getStatus());
+        verify(tokenRevocationService).revokeUser(testUser.getId());
     }
 
     @Test

@@ -158,6 +158,11 @@ public class AuthService {
         user.applyNewPasswordHash(passwordEncoder.encode(dto.getNewPassword()));
         User saved = userRepository.save(user);
         authenticatedUserCache.invalidate(saved.getId());
+        // A password change must kill every previously issued session: a stolen
+        // refresh-token chain would otherwise stay valid (rotation only checks
+        // account status, not the password version). Same policy as resetPassword.
+        // The caller re-authenticates with the new password afterwards.
+        tokenRevocationService.revokeUser(saved.getId());
 
         String roomNumber = resolveRoomNumber(saved);
 
