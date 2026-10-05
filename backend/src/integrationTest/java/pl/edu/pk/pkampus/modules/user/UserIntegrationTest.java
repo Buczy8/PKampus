@@ -125,27 +125,13 @@ class UserIntegrationTest {
     }
 
     @Test
-    @DisplayName("GET /api/v1/users/{id} returns profile by user id")
-    void getUserByIdReturnsProfile() throws Exception {
-        String token = "Bearer " + jwtService.generateToken(resident);
-
-        mockMvc.perform(get("/api/v1/users/{id}", resident.getId())
-                        .header("Authorization", token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.id").value(resident.getId().toString()))
-                .andExpect(jsonPath("$.data.email").value(resident.getEmail()));
-    }
-
-    @Test
-    @DisplayName("GET /api/v1/users/{id} returns 404 when user does not exist")
-    void getUserByIdReturns404WhenNotFound() throws Exception {
+    @DisplayName("GET /api/v1/users/{id} returns 404 because arbitrary profile lookup was removed")
+    void getUserByIdIsNotExposed() throws Exception {
         String token = "Bearer " + jwtService.generateToken(resident);
         UUID randomId = UUID.randomUUID();
 
         mockMvc.perform(get("/api/v1/users/{id}", randomId)
                         .header("Authorization", token))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.success").value(false));
+                .andExpect(status().isNotFound());
     }
 }

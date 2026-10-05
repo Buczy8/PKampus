@@ -1,9 +1,6 @@
 package pl.edu.pk.pkampus.modules.user;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
@@ -14,16 +11,10 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class UserService implements UserDetailsService {
+public class UserService {
 
     private final UserRepository userRepository;
     private final RoomAssignmentRepository roomAssignmentRepository;
-
-    @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        return userRepository.findByEmail(username.trim().toLowerCase())
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + username));
-    }
 
     @Transactional(readOnly = true)
     public UserProfileDto getUserProfile(UUID userId) {
@@ -37,7 +28,7 @@ public class UserService implements UserDetailsService {
         return toProfileDto(user, roomNumber);
     }
 
-    public UserProfileDto toProfileDto(User user, String roomNumber) {
+    private UserProfileDto toProfileDto(User user, String roomNumber) {
         return UserProfileDto.from(user, roomNumber);
     }
 }

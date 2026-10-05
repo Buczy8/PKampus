@@ -7,8 +7,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.modules.dormitory.Room;
 import pl.edu.pk.pkampus.modules.dormitory.Dormitory;
@@ -37,47 +35,6 @@ class UserServiceTest {
 
     @InjectMocks
     private UserService userService;
-
-    @Nested
-    @DisplayName("loadUserByUsername")
-    class LoadUserByUsernameTests {
-
-        @Test
-        @DisplayName("Throws UsernameNotFoundException when user is not found")
-        void throwsExceptionWhenNotFound() {
-            // Arrange
-            String email = "missing@pk.edu.pl";
-            when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
-
-            // Act & Assert
-            assertThatThrownBy(() -> userService.loadUserByUsername(email))
-                    .isInstanceOf(UsernameNotFoundException.class)
-                    .hasMessageContaining("User not found with email: " + email);
-        }
-
-        @Test
-        @DisplayName("Finds user by trimmed and lowercased email")
-        void findsUserByNormalizedEmail() {
-            // Arrange
-            String inputEmail = "  Jan.KOWALSKI@PK.EDU.PL  ";
-            String normalizedEmail = "jan.kowalski@pk.edu.pl";
-            User user = User.builder()
-                    .email(normalizedEmail)
-                    .role(UserRole.RESIDENT)
-                    .status(UserStatus.ACTIVE)
-                    .build();
-
-            when(userRepository.findByEmail(normalizedEmail)).thenReturn(Optional.of(user));
-
-            // Act
-            UserDetails result = userService.loadUserByUsername(inputEmail);
-
-            // Assert
-            assertThat(result).isNotNull();
-            assertThat(result.getUsername()).isEqualTo(normalizedEmail);
-            verify(userRepository).findByEmail(normalizedEmail);
-        }
-    }
 
     @Nested
     @DisplayName("getUserProfile")

@@ -12,7 +12,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import pl.edu.pk.pkampus.common.exception.ResourceNotFoundException;
 import pl.edu.pk.pkampus.modules.user.dto.UserProfileDto;
 import pl.edu.pk.pkampus.security.config.JwtAuthenticationFilter;
 import pl.edu.pk.pkampus.security.config.MustChangePasswordFilter;
@@ -23,6 +22,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -120,45 +120,16 @@ class UserControllerTest {
     class GetUserByIdTests {
 
         @Test
-        @DisplayName("Returns 200 with UserProfileDto when user exists")
-        void getUserByIdReturns200() throws Exception {
+        @DisplayName("Returns 404 because arbitrary profile lookup is not exposed")
+        void getUserByIdIsNotExposed() throws Exception {
             // Arrange
             UUID userId = UUID.randomUUID();
-            UserProfileDto profileDto = UserProfileDto.builder()
-                    .id(userId)
-                    .email("other@pk.edu.pl")
-                    .firstName("Ewa")
-                    .lastName("Kowalska")
-                    .role(UserRole.DORM_ADMIN)
-                    .status(UserStatus.ACTIVE)
-                    .build();
 
-            when(userService.getUserProfile(userId)).thenReturn(profileDto);
-
-            // Act & Assert
+            // Act & Assert (no mapping exists; the service is never consulted)
             mockMvc.perform(get("/api/v1/users/{id}", userId))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.success").value(true))
-                    .andExpect(jsonPath("$.data.id").value(userId.toString()))
-                    .andExpect(jsonPath("$.data.email").value("other@pk.edu.pl"));
+                    .andExpect(status().isNotFound());
 
-            verify(userService).getUserProfile(userId);
-        }
-
-        @Test
-        @DisplayName("Returns 404 when user is not found")
-        void getUserByIdReturns404WhenNotFound() throws Exception {
-            // Arrange
-            UUID userId = UUID.randomUUID();
-            when(userService.getUserProfile(userId))
-                    .thenThrow(new ResourceNotFoundException("User not found with ID: " + userId));
-
-            // Act & Assert
-            mockMvc.perform(get("/api/v1/users/{id}", userId))
-                    .andExpect(status().isNotFound())
-                    .andExpect(jsonPath("$.success").value(false));
-
-            verify(userService).getUserProfile(userId);
+            verifyNoInteractions(userService);
         }
     }
 }
