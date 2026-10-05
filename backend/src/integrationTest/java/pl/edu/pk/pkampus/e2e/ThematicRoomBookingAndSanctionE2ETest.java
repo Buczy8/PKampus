@@ -174,9 +174,9 @@ class ThematicRoomBookingAndSanctionE2ETest {
     @Test
     @DisplayName("Complete Room Booking & Sanctions Flow: Book -> Issue Key -> Return Key -> Impose Ban -> Booking Rejected -> Revoke Ban -> Booking Allowed")
     void completeRoomBookingAndSanctionsFlow() throws Exception {
-        String residentBearer = "Bearer " + jwtService.generateToken(resident, "110");
-        String receptionistBearer = "Bearer " + jwtService.generateToken(receptionist, null);
-        String adminBearer = "Bearer " + jwtService.generateToken(dormAdmin, null);
+        String residentBearer = "Bearer " + jwtService.generateToken(resident);
+        String receptionistBearer = "Bearer " + jwtService.generateToken(receptionist);
+        String adminBearer = "Bearer " + jwtService.generateToken(dormAdmin);
 
         LocalDate tomorrow = LocalDate.now(WARSAW).plusDays(1);
         OffsetDateTime start1 = tomorrow.atTime(10, 0).atZone(WARSAW).toOffsetDateTime();

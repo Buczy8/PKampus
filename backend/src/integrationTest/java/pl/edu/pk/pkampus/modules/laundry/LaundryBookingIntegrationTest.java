@@ -374,7 +374,7 @@ class LaundryBookingIntegrationTest {
     }
 
     private String bearer(User user) {
-        return "Bearer " + jwtService.generateToken(user, user.getDeclaredRoomNumber());
+        return "Bearer " + jwtService.generateToken(user);
     }
 
     private static OffsetDateTime slotStart(int daysAhead, LocalTime time) {

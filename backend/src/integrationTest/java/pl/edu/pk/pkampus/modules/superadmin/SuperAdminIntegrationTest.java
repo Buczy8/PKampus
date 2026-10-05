@@ -266,6 +266,6 @@ class SuperAdminIntegrationTest {
 
     private String bearer(User user) {
         String room = user.getDeclaredRoomNumber() != null ? user.getDeclaredRoomNumber() : null;
-        return "Bearer " + jwtService.generateToken(user, room);
+        return "Bearer " + jwtService.generateToken(user);
     }
 }

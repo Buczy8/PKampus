@@ -1,5 +1,6 @@
 package pl.edu.pk.pkampus.security.config;
 
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,6 +21,7 @@ import pl.edu.pk.pkampus.security.jwt.JwtService;
 import pl.edu.pk.pkampus.security.jwt.TokenRevocationService;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.UUID;
 
 @Slf4j
@@ -49,12 +51,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         final String token = authHeader.substring(7);
 
         try {
-            if (jwtService.isTokenExpired(token)) {
+            // Single signature verification per request: parse once and reuse
+            // the claims for expiry, identity, revocation and validity checks.
+            JwtService.AccessTokenClaims claims = jwtService.parseAccessToken(token);
+
+            if (claims.expiresAt().isBefore(Instant.now())) {
                 filterChain.doFilter(request, response);
                 return;
             }
 
-            final UUID userId = jwtService.extractUserId(token);
+            final UUID userId = claims.userId();
 
             if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
@@ -70,7 +76,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 if (user != null
                         && isAuthenticationEligible(request, user.getStatus())
-                        && jwtService.isTokenValid(token, user)) {
+                        && user.getUsername() != null
+                        && user.getUsername().equals(claims.email())) {
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             user,
                             null,
@@ -83,8 +90,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     authenticatedUserCache.invalidate(userId);
                 }
             }
+        } catch (JwtException | IllegalArgumentException e) {
+            log.warn("Failed to authenticate JWT token", e);
         } catch (Exception e) {
-            log.warn("Failed to authenticate JWT token: {}", e.getMessage());
+            log.warn("Failed to authenticate JWT token", e);
         }
 
         filterChain.doFilter(request, response);

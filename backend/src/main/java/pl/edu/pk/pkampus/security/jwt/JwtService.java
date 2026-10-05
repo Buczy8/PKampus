@@ -18,7 +18,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.Function;
 
 @Service
 public class JwtService {
@@ -37,18 +36,11 @@ public class JwtService {
         this.signingKey = Keys.hmacShaKeyFor(keyBytes);
     }
 
-    public String generateToken(User user, String roomNumber) {
+    public String generateToken(User user) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("email", user.getEmail());
-        claims.put("role", user.getRole().name());
-        claims.put("dormitory_id", user.getDormitory() != null ? user.getDormitory().getId().toString() : null);
-        claims.put("room_number", roomNumber);
 
         return buildToken(claims, user.getId().toString(), expirationMinutes, ChronoUnit.MINUTES);
-    }
-
-    public String generateToken(User user) {
-        return generateToken(user, null);
     }
 
     private String buildToken(Map<String, Object> extraClaims, String subject, long amountToAdd, ChronoUnit unit) {
@@ -64,49 +56,55 @@ public class JwtService {
                 .compact();
     }
 
-    public UUID extractUserId(String token) {
-        String sub = extractClaim(token, Claims::getSubject);
-        return sub != null ? UUID.fromString(sub) : null;
+    /**
+     * Minimal verified view of an access token. Parsed exactly once per call —
+     * callers must reuse the returned value instead of invoking the individual
+     * extractors repeatedly (each of which would re-verify the signature).
+     */
+    public record AccessTokenClaims(UUID userId, String email, Instant expiresAt) {
     }
 
-    public String extractEmail(String token) {
-        return extractClaim(token, claims -> claims.get("email", String.class));
-    }
-
-    public String extractRole(String token) {
-        return extractClaim(token, claims -> claims.get("role", String.class));
-    }
-
-    public UUID extractDormitoryId(String token) {
-        String dormId = extractClaim(token, claims -> claims.get("dormitory_id", String.class));
-        return dormId != null ? UUID.fromString(dormId) : null;
-    }
-
-    public String extractRoomNumber(String token) {
-        return extractClaim(token, claims -> claims.get("room_number", String.class));
-    }
-
-    public Date extractExpiration(String token) {
-        return extractClaim(token, Claims::getExpiration);
-    }
-
-    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
-        final Claims claims = extractAllClaims(token);
-        return claimsResolver.apply(claims);
-    }
-
-    public Claims extractAllClaims(String token) {
-        return Jwts.parser()
+    /**
+     * Parses and verifies the token signature exactly once and returns the
+     * claims required for authentication.
+     *
+     * @throws JwtException if the signature is invalid or the token is malformed/expired
+     * @throws IllegalArgumentException if a required claim is missing
+     */
+    public AccessTokenClaims parseAccessToken(String token) {
+        Claims claims = Jwts.parser()
                 .verifyWith(signingKey)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+
+        String subject = claims.getSubject();
+        String email = claims.get("email", String.class);
+        Date expiration = claims.getExpiration();
+        if (subject == null || email == null || expiration == null) {
+            throw new IllegalArgumentException("Token is missing required claims");
+        }
+        return new AccessTokenClaims(UUID.fromString(subject), email, expiration.toInstant());
+    }
+
+    public UUID extractUserId(String token) {
+        return parseAccessToken(token).userId();
+    }
+
+    public String extractEmail(String token) {
+        return parseAccessToken(token).email();
+    }
+
+    public Date extractExpiration(String token) {
+        return Date.from(parseAccessToken(token).expiresAt());
     }
 
     public boolean isTokenValid(String token, UserDetails userDetails) {
         try {
-            final String email = extractEmail(token);
-            return (email.equals(userDetails.getUsername())) && !isTokenExpired(token);
+            AccessTokenClaims claims = parseAccessToken(token);
+            return userDetails.getUsername() != null
+                    && userDetails.getUsername().equals(claims.email())
+                    && claims.expiresAt().isAfter(Instant.now());
         } catch (JwtException | IllegalArgumentException e) {
             return false;
         }
@@ -114,7 +112,7 @@ public class JwtService {
 
     public boolean isTokenExpired(String token) {
         try {
-            return extractExpiration(token).before(new Date());
+            return parseAccessToken(token).expiresAt().isBefore(Instant.now());
         } catch (JwtException | IllegalArgumentException e) {
             return true;
         }

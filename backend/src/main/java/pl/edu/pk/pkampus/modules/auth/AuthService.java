@@ -68,7 +68,7 @@ public class AuthService {
 
         String roomNumber = resolveRoomNumber(user);
 
-        String jwt = jwtService.generateToken(user, roomNumber);
+        String jwt = jwtService.generateToken(user);
         String refreshToken = refreshTokenService.createRefreshToken(user);
         UserProfileDto profile = buildUserProfileDto(user, roomNumber);
 
@@ -91,7 +91,7 @@ public class AuthService {
 
         String roomNumber = resolveRoomNumber(user);
 
-        String newJwt = jwtService.generateToken(user, roomNumber);
+        String newJwt = jwtService.generateToken(user);
         UserProfileDto profile = buildUserProfileDto(user, roomNumber);
 
         return AuthResponseDto.builder()

@@ -209,6 +209,6 @@ class AdminDormRoomIntegrationTest {
     }
 
     private String bearer(User user) {
-        return "Bearer " + jwtService.generateToken(user, user.getDeclaredRoomNumber());
+        return "Bearer " + jwtService.generateToken(user);
     }
 }

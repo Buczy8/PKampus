@@ -195,7 +195,7 @@ class ResidentLifecycleE2ETest {
         // -------------------------------------------------------------
         // KROK 4: Administrator DS przegląda oczekujące wnioski i aktywuje meldunek (UC-ADM-01)
         // -------------------------------------------------------------
-        String adminToken = "Bearer " + jwtService.generateToken(dormAdmin, null);
+        String adminToken = "Bearer " + jwtService.generateToken(dormAdmin);
 
         mockMvc.perform(get("/api/v1/admin/residents/pending")
                         .header("Authorization", adminToken))

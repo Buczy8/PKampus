@@ -154,8 +154,8 @@ class IssueReportingAndResolutionE2ETest {
     @Test
     @DisplayName("Complete Issue Lifecycle: Report Issue -> Receptionist Reviews -> In Progress -> Resolved -> Resident Verifies")
     void completeIssueLifecycle() throws Exception {
-        String residentBearer = "Bearer " + jwtService.generateToken(resident, "204");
-        String receptionistBearer = "Bearer " + jwtService.generateToken(receptionist, null);
+        String residentBearer = "Bearer " + jwtService.generateToken(resident);
+        String receptionistBearer = "Bearer " + jwtService.generateToken(receptionist);
 
         // -------------------------------------------------------------
         // KROK 1: Mieszkaniec zgłasza usterkę hydrauliczną ze zdjęciem (UC-ISS-01)

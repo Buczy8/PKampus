@@ -174,8 +174,8 @@ class LaundryAndKeyDeskE2ETest {
     @Test
     @DisplayName("Complete Laundry Workflow: Browse -> Book 1 & 2 -> Limit 3 blocked -> Key Issued & Returned -> 15min Auto-cancellation")
     void completeLaundryWorkflow() throws Exception {
-        String residentBearer = "Bearer " + jwtService.generateToken(resident, "101");
-        String receptionistBearer = "Bearer " + jwtService.generateToken(receptionist, null);
+        String residentBearer = "Bearer " + jwtService.generateToken(resident);
+        String receptionistBearer = "Bearer " + jwtService.generateToken(receptionist);
 
         // Dni w obrębie dozwolonego horyzontu (do 7 dni naprzód) oraz tego samego okna kroczącego 7 dni
         LocalDate day1 = LocalDate.now(WARSAW).plusDays(1);

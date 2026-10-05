@@ -102,7 +102,7 @@ class AuthServiceTest {
         when(userRepository.findByEmail("student@pk.edu.pl")).thenReturn(Optional.of(testUser));
         when(passwordEncoder.matches("Password123!", testUser.getPasswordHash())).thenReturn(true);
         when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(testUser.getId())).thenReturn(Optional.empty());
-        when(jwtService.generateToken(testUser, "101")).thenReturn("valid-jwt-token");
+        when(jwtService.generateToken(testUser)).thenReturn("valid-jwt-token");
         when(jwtService.getExpirationMinutes()).thenReturn(15L);
         when(refreshTokenService.createRefreshToken(testUser)).thenReturn("valid-refresh-token");
         when(refreshTokenService.getRefreshExpirationSeconds()).thenReturn(604800L);
@@ -131,7 +131,7 @@ class AuthServiceTest {
         when(userRepository.findByEmail("student@pk.edu.pl")).thenReturn(Optional.of(testUser));
         when(passwordEncoder.matches("Password123!", testUser.getPasswordHash())).thenReturn(true);
         when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(testUser.getId())).thenReturn(Optional.empty());
-        when(jwtService.generateToken(testUser, "101")).thenReturn("valid-jwt-token");
+        when(jwtService.generateToken(testUser)).thenReturn("valid-jwt-token");
         when(jwtService.getExpirationMinutes()).thenReturn(15L);
         when(refreshTokenService.createRefreshToken(testUser)).thenReturn("valid-refresh-token");
         when(refreshTokenService.getRefreshExpirationSeconds()).thenReturn(604800L);
@@ -155,7 +155,7 @@ class AuthServiceTest {
         when(userRepository.findByEmail("student@pk.edu.pl")).thenReturn(Optional.of(testUser));
         when(passwordEncoder.matches("Password123!", testUser.getPasswordHash())).thenReturn(true);
         when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(testUser.getId())).thenReturn(Optional.of(assignment));
-        when(jwtService.generateToken(testUser, "205")).thenReturn("valid-jwt-token");
+        when(jwtService.generateToken(testUser)).thenReturn("valid-jwt-token");
         when(jwtService.getExpirationMinutes()).thenReturn(15L);
         when(refreshTokenService.createRefreshToken(testUser)).thenReturn("valid-refresh-token");
         when(refreshTokenService.getRefreshExpirationSeconds()).thenReturn(604800L);
@@ -166,7 +166,7 @@ class AuthServiceTest {
         // Assert
         assertNotNull(response);
         assertEquals("205", response.getUser().getRoomNumber());
-        verify(jwtService).generateToken(testUser, "205");
+        verify(jwtService).generateToken(testUser);
     }
 
     @Test
@@ -253,7 +253,7 @@ class AuthServiceTest {
         when(refreshTokenService.rotateRefreshToken("raw-refresh-token"))
                 .thenReturn(new RefreshTokenService.RefreshTokenResult("new-raw-token", testUser));
         when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(testUser.getId())).thenReturn(Optional.empty());
-        when(jwtService.generateToken(testUser, "101")).thenReturn("new-jwt-token");
+        when(jwtService.generateToken(testUser)).thenReturn("new-jwt-token");
         when(jwtService.getExpirationMinutes()).thenReturn(15L);
         when(refreshTokenService.getRefreshExpirationSeconds()).thenReturn(604800L);
 

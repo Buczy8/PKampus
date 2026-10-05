@@ -1,5 +1,6 @@
 package pl.edu.pk.pkampus.security.jwt;
 
+import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -8,6 +9,11 @@ import pl.edu.pk.pkampus.modules.user.User;
 import pl.edu.pk.pkampus.modules.user.UserRole;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
 
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Date;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -48,56 +54,22 @@ class JwtServiceTest {
     @Test
     void shouldGenerateAndValidateTokenSuccessfully() {
         // Arrange & Act
-        String token = jwtService.generateToken(testUser, "204");
-
-        // Assert
-        assertNotNull(token);
-        assertTrue(jwtService.isTokenValid(token, testUser));
-        assertEquals(testUser.getId(), jwtService.extractUserId(token));
-        assertEquals("student@pk.edu.pl", jwtService.extractEmail(token));
-        assertEquals("RESIDENT", jwtService.extractRole(token));
-        assertEquals(testDormitory.getId(), jwtService.extractDormitoryId(token));
-        assertEquals("204", jwtService.extractRoomNumber(token));
-        assertNotNull(jwtService.extractExpiration(token));
-        assertFalse(jwtService.isTokenExpired(token));
-    }
-
-    @Test
-    void shouldGenerateTokenWithoutRoomNumber() {
-        // Arrange & Act
         String token = jwtService.generateToken(testUser);
 
-        // Assert
+        // Assert (single parse reused for every assertion below)
+        JwtService.AccessTokenClaims claims = jwtService.parseAccessToken(token);
         assertNotNull(token);
         assertTrue(jwtService.isTokenValid(token, testUser));
-        assertNull(jwtService.extractRoomNumber(token));
-    }
-
-    @Test
-    void shouldGenerateTokenWhenUserHasNoDormitory() {
-        // Arrange
-        User userWithoutDorm = User.builder()
-                .id(UUID.randomUUID())
-                .email("admin@pk.edu.pl")
-                .role(UserRole.SUPER_ADMIN)
-                .status(UserStatus.ACTIVE)
-                .dormitory(null)
-                .build();
-
-        // Act
-        String token = jwtService.generateToken(userWithoutDorm);
-
-        // Assert
-        assertNotNull(token);
-        assertTrue(jwtService.isTokenValid(token, userWithoutDorm));
-        assertNull(jwtService.extractDormitoryId(token));
-        assertEquals("SUPER_ADMIN", jwtService.extractRole(token));
+        assertEquals(testUser.getId(), claims.userId());
+        assertEquals("student@pk.edu.pl", claims.email());
+        assertTrue(claims.expiresAt().isAfter(Instant.now()));
+        assertFalse(jwtService.isTokenExpired(token));
     }
 
     @Test
     void shouldInvalidateTokenWhenUserMismatch() {
         // Arrange
-        String token = jwtService.generateToken(testUser, "204");
+        String token = jwtService.generateToken(testUser);
 
         User otherUser = User.builder()
                 .id(UUID.randomUUID())
@@ -126,6 +98,23 @@ class JwtServiceTest {
 
         // Act & Assert
         assertTrue(jwtService.isTokenExpired(malformedToken));
+    }
+
+    @Test
+    void shouldRejectTokenMissingEmailClaim() {
+        // Arrange: token signed with the same key but without the email claim
+        SecretKeySpec key = new SecretKeySpec(
+                "0123456789012345678901234567890123456789".getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+        String token = Jwts.builder()
+                .subject(testUser.getId().toString())
+                .expiration(Date.from(Instant.now().plus(15, ChronoUnit.MINUTES)))
+                .signWith(key)
+                .compact();
+
+        // Act & Assert
+        assertThrows(IllegalArgumentException.class, () -> jwtService.parseAccessToken(token));
+        assertFalse(jwtService.isTokenValid(token, testUser));
+        assertTrue(jwtService.isTokenExpired(token));
     }
 
     @Test

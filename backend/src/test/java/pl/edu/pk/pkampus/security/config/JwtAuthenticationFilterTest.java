@@ -1,5 +1,6 @@
 package pl.edu.pk.pkampus.security.config;
 
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +20,8 @@ import pl.edu.pk.pkampus.security.jwt.AuthenticatedUserCache;
 import pl.edu.pk.pkampus.security.jwt.JwtService;
 import pl.edu.pk.pkampus.security.jwt.TokenRevocationService;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -49,6 +52,7 @@ class JwtAuthenticationFilterTest {
 
     private User testUser;
     private final UUID testUserId = UUID.randomUUID();
+    private JwtService.AccessTokenClaims validClaims;
 
     @BeforeEach
     void setUp() {
@@ -60,6 +64,9 @@ class JwtAuthenticationFilterTest {
                 .role(UserRole.RESIDENT)
                 .status(UserStatus.ACTIVE)
                 .build();
+
+        validClaims = new JwtService.AccessTokenClaims(
+                testUserId, "student@pk.edu.pl", Instant.now().plus(15, ChronoUnit.MINUTES));
     }
 
     @AfterEach
@@ -103,11 +110,9 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer valid-jwt-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        when(jwtService.isTokenExpired("valid-jwt-token")).thenReturn(false);
-        when(jwtService.extractUserId("valid-jwt-token")).thenReturn(testUserId);
+        when(jwtService.parseAccessToken("valid-jwt-token")).thenReturn(validClaims);
         when(tokenRevocationService.isRevoked(testUserId)).thenReturn(false);
         when(authenticatedUserCache.getOrLoad(eq(testUserId), any())).thenReturn(testUser);
-        when(jwtService.isTokenValid("valid-jwt-token", testUser)).thenReturn(true);
 
         // Act
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
@@ -128,11 +133,9 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer valid-jwt-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        when(jwtService.isTokenExpired("valid-jwt-token")).thenReturn(false);
-        when(jwtService.extractUserId("valid-jwt-token")).thenReturn(testUserId);
+        when(jwtService.parseAccessToken("valid-jwt-token")).thenReturn(validClaims);
         when(tokenRevocationService.isRevoked(testUserId)).thenReturn(false);
         when(authenticatedUserCache.getOrLoad(eq(testUserId), any())).thenReturn(testUser);
-        when(jwtService.isTokenValid("valid-jwt-token", testUser)).thenReturn(true);
 
         // Act
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
@@ -149,15 +152,17 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer expired-jwt-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        when(jwtService.isTokenExpired("expired-jwt-token")).thenReturn(true);
+        JwtService.AccessTokenClaims expiredClaims = new JwtService.AccessTokenClaims(
+                testUserId, "student@pk.edu.pl", Instant.now().minus(1, ChronoUnit.MINUTES));
+        when(jwtService.parseAccessToken("expired-jwt-token")).thenReturn(expiredClaims);
 
         // Act
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
 
         // Assert
         assertNull(SecurityContextHolder.getContext().getAuthentication());
+        verify(authenticatedUserCache, never()).getOrLoad(any(), any());
         verify(filterChain).doFilter(request, response);
-        verify(jwtService, never()).extractUserId(any());
     }
 
     @Test
@@ -167,8 +172,7 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer revoked-jwt-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        when(jwtService.isTokenExpired("revoked-jwt-token")).thenReturn(false);
-        when(jwtService.extractUserId("revoked-jwt-token")).thenReturn(testUserId);
+        when(jwtService.parseAccessToken("revoked-jwt-token")).thenReturn(validClaims);
         when(tokenRevocationService.isRevoked(testUserId)).thenReturn(true);
 
         // Act
@@ -189,8 +193,28 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer blocked-jwt-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        when(jwtService.isTokenExpired("blocked-jwt-token")).thenReturn(false);
-        when(jwtService.extractUserId("blocked-jwt-token")).thenReturn(testUserId);
+        when(jwtService.parseAccessToken("blocked-jwt-token")).thenReturn(validClaims);
+        when(tokenRevocationService.isRevoked(testUserId)).thenReturn(false);
+        when(authenticatedUserCache.getOrLoad(eq(testUserId), any())).thenReturn(testUser);
+
+        // Act
+        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
+
+        // Assert
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    void shouldRejectWhenTokenEmailDoesNotMatchUser() throws Exception {
+        // Arrange (stale token after an email change must not authenticate)
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer mismatched-jwt-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        JwtService.AccessTokenClaims mismatchedClaims = new JwtService.AccessTokenClaims(
+                testUserId, "other@pk.edu.pl", Instant.now().plus(15, ChronoUnit.MINUTES));
+        when(jwtService.parseAccessToken("mismatched-jwt-token")).thenReturn(mismatchedClaims);
         when(tokenRevocationService.isRevoked(testUserId)).thenReturn(false);
         when(authenticatedUserCache.getOrLoad(eq(testUserId), any())).thenReturn(testUser);
 
@@ -211,11 +235,9 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer valid-jwt-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        when(jwtService.isTokenExpired("valid-jwt-token")).thenReturn(false);
-        when(jwtService.extractUserId("valid-jwt-token")).thenReturn(testUserId);
+        when(jwtService.parseAccessToken("valid-jwt-token")).thenReturn(validClaims);
         when(tokenRevocationService.isRevoked(testUserId)).thenReturn(false);
         when(authenticatedUserCache.getOrLoad(eq(testUserId), any())).thenReturn(testUser);
-        when(jwtService.isTokenValid("valid-jwt-token", testUser)).thenReturn(true);
 
         // Act
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
@@ -234,11 +256,9 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer valid-jwt-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        when(jwtService.isTokenExpired("valid-jwt-token")).thenReturn(false);
-        when(jwtService.extractUserId("valid-jwt-token")).thenReturn(testUserId);
+        when(jwtService.parseAccessToken("valid-jwt-token")).thenReturn(validClaims);
         when(tokenRevocationService.isRevoked(testUserId)).thenReturn(false);
         when(authenticatedUserCache.getOrLoad(eq(testUserId), any())).thenReturn(testUser);
-        when(jwtService.isTokenValid("valid-jwt-token", testUser)).thenReturn(true);
 
         // Act
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
@@ -249,14 +269,34 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
+    void shouldNotAuthenticateBlockedUserForSuffixSpoofedPath() throws Exception {
+        // Arrange (defense in depth: only the exact card path may authenticate blocked users)
+        testUser.setStatus(UserStatus.BLOCKED);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/issues/api/v1/profile/card");
+        request.addHeader("Authorization", "Bearer valid-jwt-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        when(jwtService.parseAccessToken("valid-jwt-token")).thenReturn(validClaims);
+        when(tokenRevocationService.isRevoked(testUserId)).thenReturn(false);
+        when(authenticatedUserCache.getOrLoad(eq(testUserId), any())).thenReturn(testUser);
+
+        // Act
+        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
+
+        // Assert
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
     void shouldInvalidateCacheAndNotAuthenticateWhenUserIsNull() throws Exception {
         // Arrange
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer valid-jwt-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        when(jwtService.isTokenExpired("valid-jwt-token")).thenReturn(false);
-        when(jwtService.extractUserId("valid-jwt-token")).thenReturn(testUserId);
+        when(jwtService.parseAccessToken("valid-jwt-token")).thenReturn(validClaims);
         when(tokenRevocationService.isRevoked(testUserId)).thenReturn(false);
         when(authenticatedUserCache.getOrLoad(eq(testUserId), any())).thenReturn(null);
 
@@ -270,35 +310,13 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    void shouldNotAuthenticateBlockedUserForSuffixSpoofedPath() throws Exception {
-        // Arrange (defense in depth: only the exact card path may authenticate blocked users)
-        testUser.setStatus(UserStatus.BLOCKED);
-
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/issues/api/v1/profile/card");
-        request.addHeader("Authorization", "Bearer valid-jwt-token");
-        MockHttpServletResponse response = new MockHttpServletResponse();
-
-        when(jwtService.isTokenExpired("valid-jwt-token")).thenReturn(false);
-        when(jwtService.extractUserId("valid-jwt-token")).thenReturn(testUserId);
-        when(tokenRevocationService.isRevoked(testUserId)).thenReturn(false);
-        when(authenticatedUserCache.getOrLoad(eq(testUserId), any())).thenReturn(testUser);
-
-        // Act
-        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
-
-        // Assert
-        assertNull(SecurityContextHolder.getContext().getAuthentication());
-        verify(filterChain).doFilter(request, response);
-    }
-
-    @Test
     void shouldContinueFilterChainWhenExceptionThrownDuringTokenParsing() throws Exception {
         // Arrange
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer malformed-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        when(jwtService.isTokenExpired("malformed-token")).thenThrow(new RuntimeException("Malformed JWT"));
+        when(jwtService.parseAccessToken("malformed-token")).thenThrow(new JwtException("Malformed JWT"));
 
         // Act
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);

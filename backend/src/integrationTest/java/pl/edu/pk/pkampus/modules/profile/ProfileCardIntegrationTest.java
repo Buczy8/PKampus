@@ -117,7 +117,7 @@ class ProfileCardIntegrationTest {
     @Test
     @DisplayName("ACTIVE resident receives card with day code matching porter strip")
     void activeResidentGetsCard() throws Exception {
-        String token = jwtService.generateToken(resident, "312");
+        String token = jwtService.generateToken(resident);
         CardDayToken expected = cardVerificationService.todaysToken();
 
         mockMvc.perform(get("/api/v1/profile/card")
@@ -134,7 +134,7 @@ class ProfileCardIntegrationTest {
                 .andExpect(jsonPath("$.data.serverTime").isNotEmpty());
 
         mockMvc.perform(get("/api/v1/receptionist/card-day")
-                        .header("Authorization", "Bearer " + jwtService.generateToken(receptionist, null)))
+                        .header("Authorization", "Bearer " + jwtService.generateToken(receptionist)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.dayCode").value(expected.dayCode()))
                 .andExpect(jsonPath("$.data.dayColorHex").value(expected.dayColorHex()));
@@ -144,7 +144,7 @@ class ProfileCardIntegrationTest {
     @DisplayName("BLOCKED resident gets 403 ACCOUNT_BLOCKED")
     void blockedResidentForbidden() throws Exception {
         // Issue JWT while still ACTIVE (login would reject BLOCKED), then flip status.
-        String token = jwtService.generateToken(resident, "312");
+        String token = jwtService.generateToken(resident);
         resident.setStatus(UserStatus.BLOCKED);
         userRepository.saveAndFlush(resident);
         authenticatedUserCache.invalidate(resident.getId());
@@ -159,7 +159,7 @@ class ProfileCardIntegrationTest {
     @Test
     @DisplayName("CHECKED_OUT resident gets 403 ACCOUNT_CHECKED_OUT")
     void checkedOutResidentForbidden() throws Exception {
-        String token = jwtService.generateToken(resident, "312");
+        String token = jwtService.generateToken(resident);
         resident.setStatus(UserStatus.CHECKED_OUT);
         userRepository.saveAndFlush(resident);
         authenticatedUserCache.invalidate(resident.getId());
@@ -174,7 +174,7 @@ class ProfileCardIntegrationTest {
     @Test
     @DisplayName("Non-resident (e.g. RECEPTIONIST) gets 403 Forbidden")
     void receptionistForbidden() throws Exception {
-        String token = jwtService.generateToken(receptionist, null);
+        String token = jwtService.generateToken(receptionist);
 
         mockMvc.perform(get("/api/v1/profile/card")
                         .header("Authorization", "Bearer " + token))
@@ -206,7 +206,7 @@ class ProfileCardIntegrationTest {
                 .checkInDate(LocalDate.now())
                 .build());
 
-        String token = jwtService.generateToken(resident, "312");
+        String token = jwtService.generateToken(resident);
 
         mockMvc.perform(get("/api/v1/profile/card")
                         .header("Authorization", "Bearer " + token))

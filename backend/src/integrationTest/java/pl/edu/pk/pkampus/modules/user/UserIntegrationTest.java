@@ -110,7 +110,7 @@ class UserIntegrationTest {
     @Test
     @DisplayName("GET /api/v1/users/me returns authenticated resident profile with assigned room")
     void getMeReturnsAuthenticatedProfile() throws Exception {
-        String token = "Bearer " + jwtService.generateToken(resident, "105");
+        String token = "Bearer " + jwtService.generateToken(resident);
 
         mockMvc.perform(get("/api/v1/users/me")
                         .header("Authorization", token))
@@ -127,7 +127,7 @@ class UserIntegrationTest {
     @Test
     @DisplayName("GET /api/v1/users/{id} returns profile by user id")
     void getUserByIdReturnsProfile() throws Exception {
-        String token = "Bearer " + jwtService.generateToken(resident, "105");
+        String token = "Bearer " + jwtService.generateToken(resident);
 
         mockMvc.perform(get("/api/v1/users/{id}", resident.getId())
                         .header("Authorization", token))
@@ -140,7 +140,7 @@ class UserIntegrationTest {
     @Test
     @DisplayName("GET /api/v1/users/{id} returns 404 when user does not exist")
     void getUserByIdReturns404WhenNotFound() throws Exception {
-        String token = "Bearer " + jwtService.generateToken(resident, "105");
+        String token = "Bearer " + jwtService.generateToken(resident);
         UUID randomId = UUID.randomUUID();
 
         mockMvc.perform(get("/api/v1/users/{id}", randomId)
