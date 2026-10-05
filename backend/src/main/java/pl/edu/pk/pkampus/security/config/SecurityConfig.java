@@ -62,13 +62,27 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:5173", "http://localhost:3000", "http://localhost", "http://127.0.0.1"));
+        configuration.setAllowedOrigins(resolveAllowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
+    }
+
+    private List<String> resolveAllowedOrigins() {
+        String configured = environment.getProperty("app.security.cors.allowed-origins");
+        if (configured != null && !configured.isBlank()) {
+            List<String> origins = Arrays.stream(configured.split(","))
+                    .map(String::trim)
+                    .filter(origin -> !origin.isEmpty())
+                    .toList();
+            if (!origins.isEmpty()) {
+                return origins;
+            }
+        }
+        return List.of("http://localhost:5173", "http://localhost:3000", "http://localhost", "http://127.0.0.1");
     }
 
     @Bean

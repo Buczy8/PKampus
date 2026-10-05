@@ -21,6 +21,7 @@ import pl.edu.pk.pkampus.modules.user.UserRepository;
 import pl.edu.pk.pkampus.modules.user.UserRole;
 import pl.edu.pk.pkampus.modules.user.UserStatus;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -122,6 +123,22 @@ class SecurityConfigUnitTest {
         assertTrue(config.getAllowedMethods().contains("GET"));
         assertTrue(config.getAllowedMethods().contains("POST"));
         assertTrue(config.getAllowCredentials());
+    }
+
+    @Test
+    void shouldUseConfiguredCorsOriginsWhenPropertyIsSet() {
+        // Arrange
+        when(environment.getProperty("app.security.cors.allowed-origins"))
+                .thenReturn("https://kampus.pk.edu.pl, https://app.kampus.pk.edu.pl");
+
+        // Act
+        CorsConfigurationSource source = securityConfig.corsConfigurationSource();
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/health");
+        CorsConfiguration config = source.getCorsConfiguration(request);
+
+        // Assert
+        assertNotNull(config);
+        assertEquals(List.of("https://kampus.pk.edu.pl", "https://app.kampus.pk.edu.pl"), config.getAllowedOrigins());
     }
 
     @Test
