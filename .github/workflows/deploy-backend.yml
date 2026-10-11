@@ -1,0 +1,66 @@
+# ==============================================================================
+# PKampus backend CD: push to master -> redeploy on Oracle A1 via SSH
+# ==============================================================================
+# Free, no registry, no third-party actions: stock Ubuntu runner + OpenSSH.
+# Triggers only on backend/prod-infra changes so frontend-only pushes don't
+# bounce the API. Frontend deploys itself via the Vercel GitHub integration.
+#
+# Required GitHub Secrets (repo -> Settings -> Secrets and variables -> Actions):
+#   SSH_HOST  - Oracle VM reserved public IP (stabler than hostname for SSH)
+#   SSH_USER  - e.g. ubuntu
+#   SSH_KEY   - PRIVATE part of a dedicated deploy keypair (see below)
+#
+# One-time VM setup (run as SSH_USER):
+#   ssh-keygen -t ed25519 -f ~/.ssh/pkampus-deploy -N ""   # on YOUR laptop
+#   ssh-copy-id -i ~/.ssh/pkampus-deploy.pub ubuntu@<VM>   # or paste into
+#                                                          # ~/.ssh/authorized_keys
+#   # then paste ~/.ssh/pkampus-deploy (private) into the SSH_KEY secret.
+# First deploy on the VM is manual (clone + /etc/pkampus/.env + compose up);
+# this workflow only pulls + rebuilds from then on.
+# ==============================================================================
+
+name: deploy-backend
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'backend/**'
+      - 'docker-compose.prod.yml'
+      - 'infra/caddy/**'
+      - '.github/workflows/deploy-backend.yml'
+
+concurrency:
+  group: prod-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: pull + rebuild on Oracle A1
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=20 \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            'set -euo pipefail; \
+             cd ~/PKampus; \
+             git fetch origin && git reset --hard origin/master; \
+             docker compose -f docker-compose.prod.yml --env-file /etc/pkampus/.env up -d --build; \
+             DOMAIN="$(grep -E "^DOMAIN=" /etc/pkampus/.env | cut -d= -f2-)"; \
+             echo "Waiting for backend health..."; \
+             for i in $(seq 1 12); do \
+               if curl -fsS "https://${DOMAIN}/actuator/health" | grep -q "\"status\":\"UP\""; then \
+                 echo "DEPLOY_OK https://${DOMAIN}/actuator/health"; exit 0; \
+               fi; \
+               sleep 10; \
+             done; \
+             echo "Backend did not become healthy in 120s"; \
+             docker compose -f docker-compose.prod.yml --env-file /etc/pkampus/.env logs --tail=50 pkampus-backend; \
+             exit 1'

@@ -8,7 +8,12 @@ import {
 } from '@/lib/auth-storage'
 import type { ApiResponse, AuthResponse } from '@/api/types'
 
-const API_BASE_URL = '/api/v1'
+/**
+ * Production (Vercel -> Oracle with own domain) injects the absolute API
+ * origin via VITE_API_URL, e.g. https://api.pkampus.me/api/v1.
+ * Local dev falls back to the relative path proxied by Vite (vite.config.ts).
+ */
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 const REFRESH_LOCK_NAME = 'pkampus-token-refresh'
 
 type RetriableConfig = InternalAxiosRequestConfig & {

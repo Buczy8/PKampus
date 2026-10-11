@@ -1,0 +1,80 @@
+# ==============================================================================
+# PKampus prod provisioning (Oracle A1). Idempotent: safe to re-run.
+# Run AFTER: terraform apply + DNS A record api.<domain> -> reserved IP.
+# Only ansible-core modules (no Galaxy collections needed).
+# ==============================================================================
+- name: Provision PKampus API host
+  hosts: prod
+  become: true
+
+  vars_files:
+    - vars/prod.yml
+
+  tasks:
+    # --- Base packages (Docker engine + compose plugin) ---
+    - name: Install base packages
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose-plugin
+          - git
+          - curl
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Ensure docker daemon is running
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Add ubuntu to docker group
+      ansible.builtin.user:
+        name: ubuntu
+        groups: docker
+        append: true
+
+    # --- App source (pull on re-runs = deploy) ---
+    - name: Clone or update repo
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ repo_dest }}"
+        version: master
+        update: true
+      become_user: ubuntu
+      become: false
+
+    # --- Prod secrets (0600, never in git) ---
+    - name: Create prod env dir
+      ansible.builtin.file:
+        path: /etc/pkampus
+        state: directory
+        mode: '0700'
+
+    - name: Render prod env file
+      ansible.builtin.copy:
+        dest: /etc/pkampus/.env
+        mode: '0600'
+        content: |
+          {% for key, value in pkampus_env.items() -%}
+          {{ key }}={{ value }}
+          {% endfor %}
+
+    # --- Stack (root runs compose: socket access without relogin issues) ---
+    - name: Build and start prod stack
+      ansible.builtin.command:
+        cmd: docker compose -f docker-compose.prod.yml --env-file /etc/pkampus/.env up -d --build
+        chdir: "{{ repo_dest }}"
+      register: compose_up
+      changed_when: "'Started' in compose_up.stdout or 'Created' in compose_up.stdout"
+
+    # --- Gate: backend healthy behind Caddy TLS (needs DNS A in place) ---
+    - name: Wait for backend health via Caddy
+      ansible.builtin.uri:
+        url: "https://{{ api_host }}/actuator/health"
+        return_content: true
+      register: health
+      until: health.json.status is defined and health.json.status == "UP"
+      retries: 12
+      delay: 10

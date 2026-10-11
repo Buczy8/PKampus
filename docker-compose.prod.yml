@@ -1,0 +1,144 @@
+# ==============================================================================
+# PKampus - Production Compose for Oracle A1 (Always Free, 2 OCPU / 12 GB)
+# ==============================================================================
+# Topology: Vercel (frontend SPA) -> Caddy (TLS, own domain) -> backend (JAR)
+#         -> Supabase Postgres (direct 5432 + SSL) + MinIO on this VM (files)
+#         + Resend SMTP (mail). No local pg / mailpit here.
+#
+# Usage on the VM:
+#   cp .env.prod.example /etc/pkampus/.env   # fill secrets, chmod 600
+#   DOMAIN=api.pkampus.me docker compose -f docker-compose.prod.yml --env-file /etc/pkampus/.env up -d --build
+#
+# Notes:
+# - DOMAIN is used by Caddyfile ({$DOMAIN}). With a reserved public IP + own
+#   domain no dynamic-DNS cron is needed.
+# - BACKEND_IMAGE defaults to local build (backend/Dockerfile). No registry
+#   needed on free tier.
+# - MinIO ports are NOT published: files flow only via backend (private
+#   buckets, NFR-SEC-03). Publish 9001 on 127.0.0.1 temporarily for admin.
+# ==============================================================================
+
+networks:
+  pkampus-net:
+    driver: bridge
+
+volumes:
+  minio_data:
+    driver: local
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+
+services:
+  # ----------------------------------------------------------------------------
+  # API (Spring Boot, prod profile)
+  # ----------------------------------------------------------------------------
+  pkampus-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ${BACKEND_IMAGE:-pkampus-backend:latest}
+    container_name: pkampus-backend
+    restart: unless-stopped
+    env_file:
+      - path: /etc/pkampus/.env
+        required: false
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      # Internal wiring (overrides / complements the env file):
+      - MINIO_ENDPOINT=http://pkampus-minio:9000
+      - TRUST_FORWARDED_HEADERS=true
+    networks:
+      - pkampus-net
+    depends_on:
+      pkampus-minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    # No ports published: public traffic enters via Caddy :80/:443 only.
+
+  # ----------------------------------------------------------------------------
+  # Object storage (MinIO S3, private buckets, data on block volume)
+  # ----------------------------------------------------------------------------
+  pkampus-minio:
+    image: quay.io/minio/minio:latest
+    container_name: pkampus-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    env_file:
+      - path: /etc/pkampus/.env
+        required: false
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?MINIO_ROOT_USER required}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD required}
+    volumes:
+      - minio_data:/data
+    networks:
+      - pkampus-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # One-shot bucket + app-user bootstrap (Least Privilege, same as dev)
+  pkampus-minio-init:
+    image: quay.io/minio/mc:latest
+    container_name: pkampus-minio-init
+    depends_on:
+      pkampus-minio:
+        condition: service_healthy
+    env_file:
+      - path: /etc/pkampus/.env
+        required: false
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?MINIO_ROOT_USER required}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD required}
+      - MINIO_APP_USER=${MINIO_APP_USER:-pkampus_app}
+      - MINIO_APP_PASSWORD=${MINIO_APP_PASSWORD:?MINIO_APP_PASSWORD required}
+      - MINIO_BUCKET_ISSUES=${MINIO_BUCKET_ISSUES:-pkampus-issues}
+      - MINIO_BUCKET_AVATARS=${MINIO_BUCKET_AVATARS:-pkampus-avatars}
+    networks:
+      - pkampus-net
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://pkampus-minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
+      /usr/bin/mc mb --ignore-existing myminio/$$MINIO_BUCKET_ISSUES;
+      /usr/bin/mc mb --ignore-existing myminio/$$MINIO_BUCKET_AVATARS;
+      /usr/bin/mc admin user add myminio $$MINIO_APP_USER $$MINIO_APP_PASSWORD || true;
+      /usr/bin/mc admin policy attach myminio readwrite --user $$MINIO_APP_USER;
+      exit 0;
+      "
+
+  # ----------------------------------------------------------------------------
+  # Edge proxy (Caddy, auto TLS for the own domain)
+  # ----------------------------------------------------------------------------
+  pkampus-caddy:
+    image: caddy:2-alpine
+    container_name: pkampus-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:?DOMAIN required, e.g. api.pkampus.me}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - pkampus-net
+    depends_on:
+      pkampus-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

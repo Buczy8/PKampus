@@ -1,0 +1,15 @@
+# Build outputs
+build/
+.gradle/
+out/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+
+# Local env (prod secrets come from /etc/pkampus/.env on the VM, never the image)
+.env

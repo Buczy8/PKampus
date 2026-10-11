@@ -1,0 +1,45 @@
+# ==============================================================================
+# PKampus - Caddy reverse proxy for Oracle A1 (own domain, e.g. pkampus.me)
+# Domain is injected via {$DOMAIN}, e.g. api.pkampus.me.
+# Caddy terminates TLS (Let's Encrypt, auto-renew) and proxies /api + actuator
+# health to the backend. Frontend is hosted on Vercel (*.vercel.app), so Caddy
+# serves API only — no static SPA here.
+# ==============================================================================
+
+{$DOMAIN} {
+	# ACME challenge + auto HTTPS (no extra config needed).
+	# The reserved public IP + static A record keep DNS stable — no DDNS needed.
+
+	# Security headers (mirrors Docs/Diagram_Wdrozenia.md §4.3, Nginx variant)
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options "SAMEORIGIN"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Connect-src must allow the Vercel frontend origin calling /api.
+		# Backend CORS (app.security.cors.allowed-origins) is the enforcer;
+		# this CSP only hardens non-API responses (e.g. actuator 404s).
+		Content-Security-Policy "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+	}
+
+	# Backend REST API (frontend calls https://{$DOMAIN}/api/v1/...)
+	handle /api/* {
+		reverse_proxy pkampus-backend:8080
+	}
+
+	# Actuator health for Oracle health checks / uptime monitors.
+	# Prod profile exposes only /actuator/health (application-prod.yml).
+	handle /actuator/health* {
+		reverse_proxy pkampus-backend:8080
+	}
+
+	# Everything else: explicit 404 (no SPA fallback here — SPA lives on Vercel)
+	handle {
+		respond "PKampus API — frontend lives on Vercel." 404
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

@@ -32,6 +32,7 @@ Desktop.ini
 .env
 .env.*
 !.env.example
+!.env.prod.example
 *.pem
 *.p12
 *.jks
@@ -112,6 +113,25 @@ postgres-data/
 minio-data/
 mailpit-data/
 *.sql.gz
+
+# --- Terraform (stan i cache; OCID/klucze nigdy do repo) ---
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+!*.tfvars.example
+terraform.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# --- Ansible (sekrety prod + retry) ---
+infra/ansible/vars/prod.yml
+infra/ansible/*.retry
+.vault-pass
 
 # Wolumeny i overlay Dockera (gdyby trafiły do repo)
 *.sock

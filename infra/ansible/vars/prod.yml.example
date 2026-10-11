@@ -1,0 +1,37 @@
+# ==============================================================================
+# PKampus prod vars TEMPLATE. Copy to prod.yml (gitignored) and fill secrets:
+#   cp vars/prod.yml.example vars/prod.yml && chmod 600 vars/prod.yml
+# Optional at the end: ansible-vault encrypt vars/prod.yml (then run the
+# playbook with --ask-vault-pass). Plain gitignored file is fine for a thesis
+# as long as it never lands in git.
+# ==============================================================================
+repo_url: "https://github.com/CHANGEME/PKampus.git"
+repo_dest: "/home/ubuntu/PKampus"
+api_host: "api.pkampus.me"
+
+# Rendered verbatim to /etc/pkampus/.env (0600) on the VM. Keys mirror
+# .env.prod.example; values here are the real prod secrets.
+pkampus_env:
+  DOMAIN: "api.pkampus.me"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://aws-0-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require"
+  SPRING_DATASOURCE_USERNAME: "postgres.CHANGEME"
+  SPRING_DATASOURCE_PASSWORD: "CHANGEME"
+  MINIO_ROOT_USER: "minioadmin"
+  MINIO_ROOT_PASSWORD: "CHANGEME-min-32-chars"
+  MINIO_APP_USER: "pkampus_app"
+  MINIO_APP_PASSWORD: "CHANGEME-min-32-chars"
+  MINIO_BUCKET_ISSUES: "pkampus-issues"
+  MINIO_BUCKET_AVATARS: "pkampus-avatars"
+  SPRING_MAIL_HOST: "smtp.resend.com"
+  SPRING_MAIL_PORT: "587"
+  SPRING_MAIL_USERNAME: "resend"
+  SPRING_MAIL_PASSWORD: "re_CHANGEME"
+  SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: "true"
+  SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: "true"
+  APP_MAIL_FROM: "noreply@pkampus.me"
+  FRONTEND_URL: "https://CHANGEME.vercel.app"
+  CORS_ALLOWED_ORIGINS: "https://CHANGEME.vercel.app"
+  JWT_SECRET: "CHANGEME-min-32-chars"
+  EMAIL_TOKEN_SECRET: "CHANGEME-min-32-chars"
+  MAX_ACTIVE_REFRESH_TOKENS: "5"
+  TRUST_FORWARDED_HEADERS: "true"
