@@ -90,6 +90,7 @@ dependency-reduced-pom.xml
 .gradle/
 build/
 !gradle/wrapper/gradle-wrapper.jar
+!backend/gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
 

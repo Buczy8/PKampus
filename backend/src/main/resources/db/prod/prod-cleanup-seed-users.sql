@@ -14,8 +14,12 @@
 #   \i backend/src/main/resources/db/prod/prod-cleanup-seed-users.sql
 #
 # What stays: dormitories DS-1..DS-4, rooms, laundry machines, thematic rooms
-# (real catalogue data from V2/V4/V5). What goes: known seed users + their
-# room assignments (CASCADE) listed below.
+# (catalogue from V2/V4/V5). What goes: known seed users + their room
+# assignments (CASCADE) listed below.
+#
+# NOTE: Flyway V13 re-seeds presentation accounts (password: pkampus).
+# Run this cleanup ONLY if you want an empty user table before opening
+# real registration — and do NOT apply V13 afterwards on that environment.
 # ==============================================================================
 
 BEGIN;

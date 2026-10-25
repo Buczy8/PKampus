@@ -44,7 +44,8 @@ services:
   # 2. Object Storage (MinIO S3)
   # ----------------------------------------------------------------------------
   pkampus-minio:
-    image: quay.io/minio/minio:latest
+    # MinIO closed anonymous quay/Docker Hub pulls (2026-09); Silo is API-compatible.
+    image: pgsty/silo:latest
     container_name: pkampus-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -66,7 +67,7 @@ services:
 
   # Initialization job to create buckets and app user
   pkampus-minio-init:
-    image: quay.io/minio/mc:latest
+    image: pgsty/mc:latest
     container_name: pkampus-minio-init
     depends_on:
       pkampus-minio:

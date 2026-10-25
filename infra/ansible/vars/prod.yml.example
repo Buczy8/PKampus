@@ -1,27 +1,34 @@
 # ==============================================================================
 # PKampus prod vars TEMPLATE. Copy to prod.yml (gitignored) and fill secrets:
 #   cp vars/prod.yml.example vars/prod.yml && chmod 600 vars/prod.yml
-# Optional at the end: ansible-vault encrypt vars/prod.yml (then run the
-# playbook with --ask-vault-pass). Plain gitignored file is fine for a thesis
-# as long as it never lands in git.
+# Replace every CHANGEME below (sources in comments). Optional at the end:
+#   ansible-vault encrypt vars/prod.yml   # then --ask-vault-pass on runs
+# Plain gitignored file is fine for a thesis as long as it never lands in git.
 # ==============================================================================
+# Your GitHub repo (HTTPS; VM needs no deploy key for a public repo).
 repo_url: "https://github.com/CHANGEME/PKampus.git"
 repo_dest: "/home/ubuntu/PKampus"
+# Must match DOMAIN below (without https://) — health gate calls this host.
 api_host: "api.pkampus.me"
 
 # Rendered verbatim to /etc/pkampus/.env (0600) on the VM. Keys mirror
 # .env.prod.example; values here are the real prod secrets.
 pkampus_env:
   DOMAIN: "api.pkampus.me"
-  SPRING_DATASOURCE_URL: "jdbc:postgresql://aws-0-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require"
-  SPRING_DATASOURCE_USERNAME: "postgres.CHANGEME"
-  SPRING_DATASOURCE_PASSWORD: "CHANGEME"
+  # Supabase Dashboard -> Connect -> Session mode (port 5432, NOT 6543).
+  # Paste the exact pooler host; direct db.<ref> is IPv6-only (no route from
+  # home networks and the Oracle VCN).
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://CHANGEME-pooler-host:5432/postgres?sslmode=require"
+  SPRING_DATASOURCE_USERNAME: "postgres.CHANGEME-ref"
+  SPRING_DATASOURCE_PASSWORD: "CHANGEME-supabase-db-password"
+  # MinIO on the VM. Generate fresh (openssl rand -base64 48), min 32 chars.
   MINIO_ROOT_USER: "minioadmin"
-  MINIO_ROOT_PASSWORD: "CHANGEME-min-32-chars"
+  MINIO_ROOT_PASSWORD: "CHANGEME"
   MINIO_APP_USER: "pkampus_app"
-  MINIO_APP_PASSWORD: "CHANGEME-min-32-chars"
+  MINIO_APP_PASSWORD: "CHANGEME"
   MINIO_BUCKET_ISSUES: "pkampus-issues"
   MINIO_BUCKET_AVATARS: "pkampus-avatars"
+  # Resend: Domains Verified + API key with Sending access. User is "resend".
   SPRING_MAIL_HOST: "smtp.resend.com"
   SPRING_MAIL_PORT: "587"
   SPRING_MAIL_USERNAME: "resend"
@@ -29,9 +36,12 @@ pkampus_env:
   SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: "true"
   SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: "true"
   APP_MAIL_FROM: "noreply@pkampus.me"
-  FRONTEND_URL: "https://CHANGEME.vercel.app"
-  CORS_ALLOWED_ORIGINS: "https://CHANGEME.vercel.app"
-  JWT_SECRET: "CHANGEME-min-32-chars"
-  EMAIL_TOKEN_SECRET: "CHANGEME-min-32-chars"
+  # Frontend origin — must match the browser URL exactly (no trailing /).
+  FRONTEND_URL: "https://app.pkampus.me"
+  CORS_ALLOWED_ORIGINS: "https://app.pkampus.me"
+  # Auth secrets. Generate fresh (openssl rand -base64 48), min 32 chars,
+  # NEVER reuse dev values from .env.example.
+  JWT_SECRET: "CHANGEME"
+  EMAIL_TOKEN_SECRET: "CHANGEME"
   MAX_ACTIVE_REFRESH_TOKENS: "5"
   TRUST_FORWARDED_HEADERS: "true"

@@ -11,14 +11,13 @@
 FROM gradle:8.10-jdk21-alpine AS builder
 WORKDIR /app
 
-# Dependency layer first (better Docker cache)
-COPY gradle gradle
-COPY gradlew settings.gradle.kts gradle.properties build.gradle.kts ./
-RUN chmod +x gradlew && ./gradlew dependencies --no-daemon || true
+# Use the image's Gradle binary (wrapper JAR is gitignored via *.jar).
+COPY settings.gradle.kts gradle.properties build.gradle.kts ./
+RUN gradle dependencies --no-daemon || true
 
 # Sources + Flyway migrations (V1..V12, part of the JAR)
 COPY src src
-RUN ./gradlew bootJar -x test --no-daemon
+RUN gradle bootJar -x test --no-daemon
 
 # ------------------------------------------------------------------------------
 # Stage 2: runtime (prod profile, Supabase + MinIO on VM + Resend SMTP)
