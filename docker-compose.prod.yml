@@ -48,6 +48,9 @@ services:
       - SPRING_PROFILES_ACTIVE=prod
       # Internal wiring (overrides / complements the env file):
       - MINIO_ENDPOINT=http://pkampus-minio:9000
+      # application.yml expects ACCESS/SECRET; ansible/env ships APP_USER/PASSWORD
+      - MINIO_ACCESS_KEY=${MINIO_APP_USER:-pkampus_app}
+      - MINIO_SECRET_KEY=${MINIO_APP_PASSWORD:?MINIO_APP_PASSWORD required}
       - TRUST_FORWARDED_HEADERS=true
     networks:
       - pkampus-net

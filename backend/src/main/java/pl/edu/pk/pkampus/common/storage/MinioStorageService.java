@@ -1,11 +1,14 @@
 package pl.edu.pk.pkampus.common.storage;
 
 import io.minio.BucketExistsArgs;
+import io.minio.GetObjectArgs;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
+import io.minio.StatObjectArgs;
+import io.minio.StatObjectResponse;
 import io.minio.http.Method;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -350,6 +353,43 @@ public class MinioStorageService {
             return null;
         }
         return getPresignedUrl(avatarBucket, objectName, expiryMinutes);
+    }
+
+    /**
+     * Opens a blocking stream of a private avatar object for authenticated API proxying.
+     * Caller must close the returned stream. Prefer this over browser-facing presigned URLs
+     * when MinIO is not publicly reachable (prod compose).
+     */
+    public AvatarObject openAvatar(String objectName) {
+        if (objectName == null || objectName.isBlank()) {
+            throw new InvalidFileException("Invalid file reference");
+        }
+        requireSafeObjectKey(objectName);
+        try {
+            StatObjectResponse stat = minioClient.statObject(
+                    StatObjectArgs.builder()
+                            .bucket(avatarBucket)
+                            .object(objectName)
+                            .build()
+            );
+            InputStream stream = minioClient.getObject(
+                    GetObjectArgs.builder()
+                            .bucket(avatarBucket)
+                            .object(objectName)
+                            .build()
+            );
+            String contentType = stat.contentType() != null && !stat.contentType().isBlank()
+                    ? stat.contentType()
+                    : "application/octet-stream";
+            return new AvatarObject(stream, contentType, stat.size());
+        } catch (InvalidFileException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new FileStorageException("Failed to read avatar " + objectName, e);
+        }
+    }
+
+    public record AvatarObject(InputStream stream, String contentType, long size) {
     }
 
     /**

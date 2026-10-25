@@ -36,3 +36,11 @@ export async function getResidentCard(): Promise<ResidentCard> {
     throw error
   }
 }
+
+/** Authenticated avatar bytes (MinIO is private; img src cannot send Bearer JWT). */
+export async function getResidentCardAvatarObjectUrl(): Promise<string> {
+  const { data } = await apiClient.get<Blob>('/profile/card/avatar', {
+    responseType: 'blob',
+  })
+  return URL.createObjectURL(data)
+}

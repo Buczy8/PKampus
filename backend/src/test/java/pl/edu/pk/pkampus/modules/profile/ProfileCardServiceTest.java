@@ -32,7 +32,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
@@ -209,34 +208,30 @@ class ProfileCardServiceTest {
     }
 
     @Test
-    @DisplayName("getResidentCard presigns avatar URL when avatar is present")
+    @DisplayName("getResidentCard returns API avatar path when avatar object key is present")
     void getResidentCardWithAvatar() {
         // Arrange
-        resident.setAvatarUrl("avatars/user-123.jpg");
+        resident.setAvatarUrl("demo-wisniewski.jpg");
         when(userRepository.findById(resident.getId())).thenReturn(Optional.of(resident));
         when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(resident.getId())).thenReturn(Optional.empty());
         when(cardVerificationService.todaysToken()).thenReturn(dayToken);
-        when(minioStorageService.getAvatarPresignedUrl("avatars/user-123.jpg", 30))
-                .thenReturn("https://minio.pkampus.pl/avatars/user-123.jpg?token=abc");
 
         // Act
         ResidentCardDto card = profileCardService.getResidentCard(resident);
 
         // Assert
         assertNotNull(card);
-        assertEquals("https://minio.pkampus.pl/avatars/user-123.jpg?token=abc", card.getAvatarUrl());
+        assertEquals("/api/v1/profile/card/avatar", card.getAvatarUrl());
     }
 
     @Test
-    @DisplayName("getResidentCard handles avatar presign exception gracefully")
-    void getResidentCardHandlesPresignException() {
+    @DisplayName("getResidentCard leaves avatarUrl null when resident has no photo")
+    void getResidentCardWithoutAvatar() {
         // Arrange
-        resident.setAvatarUrl("avatars/corrupted.jpg");
+        resident.setAvatarUrl(null);
         when(userRepository.findById(resident.getId())).thenReturn(Optional.of(resident));
         when(roomAssignmentRepository.findByUserIdAndIsActiveTrue(resident.getId())).thenReturn(Optional.empty());
         when(cardVerificationService.todaysToken()).thenReturn(dayToken);
-        when(minioStorageService.getAvatarPresignedUrl(eq("avatars/corrupted.jpg"), anyInt()))
-                .thenThrow(new RuntimeException("MinIO unavailable"));
 
         // Act
         ResidentCardDto card = profileCardService.getResidentCard(resident);

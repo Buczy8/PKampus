@@ -12,7 +12,11 @@ import {
 } from "lucide-react"
 
 import { getApiErrorMessage } from "@/api/errors"
-import { CardAccountError, getResidentCard } from "@/api/profile"
+import {
+  CardAccountError,
+  getResidentCard,
+  getResidentCardAvatarObjectUrl,
+} from "@/api/profile"
 import type { ResidentCard } from "@/api/types"
 import { PkLogo } from "@/components/brand/PkLogo"
 import { Button } from "@/components/ui/button"
@@ -291,6 +295,32 @@ function ActiveCard({
 
   const theme = getDormitoryTheme(card.dormitoryCode, card.dormitoryName)
 
+  const [avatarSrc, setAvatarSrc] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    if (!card.avatarUrl) {
+      setAvatarSrc(null)
+      return
+    }
+    let revoked: string | null = null
+    let cancelled = false
+    getResidentCardAvatarObjectUrl()
+      .then((url) => {
+        if (cancelled) {
+          URL.revokeObjectURL(url)
+          return
+        }
+        revoked = url
+        setAvatarSrc(url)
+      })
+      .catch(() => {
+        if (!cancelled) setAvatarSrc(null)
+      })
+    return () => {
+      cancelled = true
+      if (revoked) URL.revokeObjectURL(revoked)
+    }
+  }, [card.avatarUrl])
+
   return (
     <div
       onClick={onPointer}
@@ -362,9 +392,9 @@ function ActiveCard({
           {/* Ramka ze zdjęciem mieszkańca w formacie paszportowym (3:4) */}
           <div className="relative shrink-0 flex flex-col items-center">
             <div className="relative size-28 sm:size-32 rounded-xl overflow-hidden border-2 border-border/80 shadow-md bg-muted/30">
-              {card.avatarUrl ? (
+              {avatarSrc ? (
                 <img
-                  src={card.avatarUrl}
+                  src={avatarSrc}
                   alt={`${card.firstName} ${card.lastName}`}
                   className="size-full object-cover object-top"
                 />

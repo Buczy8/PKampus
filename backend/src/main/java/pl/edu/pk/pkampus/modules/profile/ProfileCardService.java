@@ -26,8 +26,6 @@ import java.time.LocalDate;
 @Slf4j
 public class ProfileCardService {
 
-    private static final int AVATAR_PRESIGN_MINUTES = 30;
-
     private final UserRepository userRepository;
     private final RoomAssignmentRepository roomAssignmentRepository;
     private final CardVerificationService cardVerificationService;
@@ -57,14 +55,11 @@ public class ProfileCardService {
                 .map(ra -> ra.getRoom().getRoomNumber())
                 .orElse(user.getDeclaredRoomNumber());
 
-        String avatarPresigned = null;
+        // Browser cannot reach private MinIO (pkampus-minio:9000). Card clients load
+        // the photo via authenticated GET /api/v1/profile/card/avatar (blob URL).
+        String avatarUrl = null;
         if (user.getAvatarUrl() != null && !user.getAvatarUrl().isBlank()) {
-            try {
-                avatarPresigned = minioStorageService.getAvatarPresignedUrl(
-                        user.getAvatarUrl(), AVATAR_PRESIGN_MINUTES);
-            } catch (Exception e) {
-                log.warn("Failed to presign avatar for card of user {}", user.getId(), e);
-            }
+            avatarUrl = "/api/v1/profile/card/avatar";
         }
 
         CardDayToken day = cardVerificationService.todaysToken();
@@ -80,13 +75,30 @@ public class ProfileCardService {
                 .dormitoryCode(dormitoryCode)
                 .roomNumber(roomNumber)
                 .academicYear(AcademicYear.current(LocalDate.now(clock.withZone(CardVerificationService.WARSAW))))
-                .avatarUrl(avatarPresigned)
+                .avatarUrl(avatarUrl)
                 .status(user.getStatus().name())
                 .dayCode(day.dayCode())
                 .dayColorHex(day.dayColorHex())
                 .dayColorName(day.dayColorName())
                 .serverTime(now)
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public MinioStorageService.AvatarObject openOwnAvatar(User principal) {
+        User user = userRepository.findById(principal.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (user.getRole() != UserRole.RESIDENT) {
+            throw new BusinessRuleException("Resident card is only available to residents");
+        }
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new AccountStatusException("ACCOUNT_NOT_ACTIVE");
+        }
+        if (user.getAvatarUrl() == null || user.getAvatarUrl().isBlank()) {
+            throw new ResourceNotFoundException("Avatar not found");
+        }
+        return minioStorageService.openAvatar(user.getAvatarUrl());
     }
 
     public CardDayDto getCardDay() {
